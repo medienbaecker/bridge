@@ -340,12 +340,18 @@ How a piece of code works, shown by running it and letting the user move it:
 - Run the real code: import the project's module directly, by a path
   relative to the page or an absolute file path, as below. For a look, embed
   the real site in a frame instead.
-- One step per heading, one line that starts with a verb, then a big visual.
-- Let them drag, pull or scrub it; that is how it is understood.
+- One step per heading: a heading that states the point, one line that
+  starts with a verb, then a big visual.
+- The page makes its point before anyone touches it; controls are for going
+  deeper.
+- Give each control a question: let them set where they think it lands
+  ("Where is it at 0.5 s?"), then reveal what the real code does.
+- Next to a slider, show key states at once: a row of small multiples, such
+  as the trace at three stiffnesses.
 - Slow down what is too fast to see: record one cycle, then a step button
-  and a scrubber over it.
-- Numbers are readouts next to what they measure, axes are labelled.
-- One control drives everything on the page.
+  and a scrubber over it, not autoplay.
+- Labels and readouts sit next to what they describe, axes are labelled.
+- For tuning, one control drives everything on the page.
 - Silent by default; any sound starts only after a click.
 
 A module whose own imports are bare package names (`from 'three'`) needs

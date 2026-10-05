@@ -23,37 +23,52 @@ before they see the page. Warnings exit 0; read them.
 
 ## Pages are for eyes
 
-The user wants to see the thing itself, not read about it. Words on a page
-only name what they look at or tell them what to do; the meaning is in what
-they see and touch.
+You read thousands of lines of code, logs and data in seconds; the user sees
+patterns, proportions, outliers and what feels wrong at a glance. A page turns
+what you read into something they can see, and their clicks and pins come
+back to you as data. A wall of text hands them your job.
 
 Every page:
 
 - Show the thing, not a description of it: the mockup, the real screenshot,
   a swatch, a diff, a chart (pages.md "Screenshots", "Swatches", "Evidence:
   code, diffs, bars").
-- Numbers live in the picture: bars, labelled axes, a readout next to what it
-  measures. Not in sentences.
-- More than one part: numbered steps, each a heading, one line that starts
-  with a verb ("Drag the pins", "Pick one"), then the visual.
+- Every label, number and explaining word sits on or next to what it
+  describes, or their eyes jump between terminal and window. Long prose
+  belongs in your reply.
+- Quantities as position or length on one shared scale, like bars (Cleveland
+  and McGill); exact lookups as a table.
+- Mark the one thing to look at with a single unique feature: the only
+  accent, the only outline. Several highlights cancel out.
+- Cut what is interesting but not needed for the answer, decorative motion
+  included. Plain styling is fine.
+- A heading that states the point, one line that starts with a verb ("Drag
+  the pins", "Pick one"), then the visual. More than one part: numbered steps
+  they advance, one idea each.
+- It makes its point with no interaction at all; controls are for going
+  deeper.
 - Give it five seconds before presenting: could they answer without reading
-  a paragraph? A page that is mostly prose belongs in your reply or a `.md`.
+  a paragraph?
 - Look at it before you tell them it is there: `bridge --shot /tmp/…/window.png`
   writes a picture of the app's window; then read the image.
 
 When it fits:
 
-- Explaining how something works: run the real code on the page, let them
-  drag, pull or scrub it, and slow down what is too fast to see (one frame,
-  one cycle). Whenever the page re-implements anything instead of importing
-  it, show a check that re-runs the real code on the same input and says
-  whether the result matches; a convincing wrong explanation is worse than
-  none (pages.md "Explorable").
-- "Still text" or too wordy: raise the fidelity (static picture, then
-  interactive, then the real thing running) instead of rewording the same
-  content.
-- Choosing: options side by side at the same scale, one short line each, the
-  rest of the card is evidence (pages.md "Decision").
+- Explaining how something works: run the real code, at the lowest fidelity
+  that shows the mechanism. Give each control a question: let them set where
+  they think it lands, then reveal what the real code does. Next to the
+  control, show key states at once (small multiples). Step frames or a
+  scrubber over autoplay; animate only when motion is the content. Whenever
+  the page re-implements anything instead of importing it, show a check that
+  re-runs the real code on the same input and says whether the result
+  matches; a convincing wrong explanation is worse than none (pages.md
+  "Explorable").
+- Code they know: drop text the picture already shows. Name the parts up
+  front only on unfamiliar ground.
+- Choosing: options side by side at the same scale when they differ a lot;
+  for subtle differences overlay them, toggle in place, or draw the
+  difference. One short line each, the rest of the card is evidence (pages.md
+  "Decision").
 - Tuning: one control drives everything on the page, the real site in a
   frame included (pages.md "Controls that drive the preview").
 
@@ -87,7 +102,7 @@ it on the same page.
 | Read a PDF | `spec.pdf` | Scrollable. No pins. |
 | See a diagram | `diagram.svg` | Rendered inline as a document that scales; they can pin its elements. |
 | Look at several things | `bridge a.html b.png c.txt` | All arrive in their list, the first is selected. |
-| Understand how some code works | An explorable `.html` that runs the real code | They drag, scrub and step through it. A diagram of boxes with labels is still text. See pages.md "Explorable". |
+| Understand how some code works | An explorable `.html` that runs the real code | Each control asks a question: they predict, then see what the code does. See pages.md "Explorable". |
 | Choose between things | `decision.html` with option cards | Each option carries evidence. See pages.md "Decision". |
 | Tune values | `.jsx` with Mantine controls, or `.html` with inputs | Read the numbers back with `--read`. |
 | Just look at a site | Nothing: the URL in your reply | The user has a browser. |
