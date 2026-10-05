@@ -235,6 +235,35 @@ private let kitOfShapes = ".options { } .draft { } .bars { } .bar { }"
     #expect(Lint(kitCSS: kitOfShapes).run(html: short).isEmpty)
 }
 
+@Test func lintLeavesTextDrawnInAMockupAlone() {
+    let hero = "<div class=\"hero\"><h3>Find your quiet place in the mountains</h3><p>Cabins in the Alps, booked in minutes, with breakfast and a sauna and a view of the lake from every window</p><span class=\"cta\">See cabins</span><nav>Home Cabins Prices About Contact</nav></div>"
+    let style = "<style>.hero { aspect-ratio: 16 / 9; position: relative } .cta { background: var(--bridge-accent) }</style>"
+    let page = "<body>\(style)<div class=\"options\"><div data-record=\"a\" data-value=\"left\"><strong>Left</strong>\(hero)Text stays on the dark sky.</div></div>"
+    #expect(!Lint(kitCSS: kitOfShapes).run(html: page).contains { $0.text.contains("words in one block") })
+    let long = Array(repeating: "lorem", count: 45).joined(separator: " ")
+    let callout = "<body><style>.note { background: var(--bridge-panel); padding: 8px }</style><div class=\"note\"><p>\(long)</p></div>"
+    #expect(Lint(kitCSS: kitOfShapes).run(html: callout).contains { $0.text.hasPrefix("45 words in one block") })
+}
+
+@Test func lintTakesAPreviewDrawnByThePagesOwnStyleAsEvidence() {
+    let card = { (v: String) in "<div data-record=\"palette\" data-value=\"\(v)\"><strong>\(v)</strong> Warm browns on flour cream, the colour of the bread itself, safe but less distinctive.<div class=\"site\"><b>Brot</b><span class=\"site-btn\">Order</span></div></div>" }
+    let page = "<body><style>.site { background: var(--bg); border: 1px solid var(--bridge-line) } .site-btn { background: var(--bridge-accent) }</style><div class=\"options\">\(card("roggen"))\(card("salbei"))</div>"
+    #expect(!Lint(kitCSS: kitOfShapes).run(html: page).contains { $0.text.hasPrefix("option cards that are only text") })
+    let unstyled = page.replacingOccurrences(of: "background: var(--bg); border: 1px solid var(--bridge-line)", with: "padding: 4px").replacingOccurrences(of: ".site-btn { background: var(--bridge-accent) }", with: "")
+    #expect(Lint(kitCSS: kitOfShapes).run(html: unstyled).contains { $0.text.hasPrefix("option cards that are only text") })
+}
+
+@Test func lintReadsEscapedMarkupAsText() {
+    let page = """
+    <style>.card { padding: 4px }</style>
+    <pre><code class="language-html">&lt;div class="shot card"&gt;&lt;p style="color: #333"&gt;x&lt;/p&gt;&lt;/div&gt;</code></pre>
+    <p>Write <code>&lt;span class="whatever"&gt;</code> in the template.</p>
+    <div class="faint">y</div>
+    """
+    let texts = Lint(kitCSS: ".card { } .muted { }").run(html: page).map(\.text)
+    #expect(texts.count == 1 && texts.first?.hasPrefix("`.faint` styles nothing") == true)
+}
+
 @Test func sessionLifeFollowsTheHook() throws {
     let dir = FileManager.default.temporaryDirectory.appendingPathComponent("bridge-sessions-\(UUID().uuidString)")
     let own = ClaudeSessions.dir

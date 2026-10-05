@@ -35,7 +35,7 @@ public struct Lint {
         let uses = Self.ranges(#"(?i)\sclass\s*=\s*"([^"]*)""#, in: html)
             + Self.ranges(#"className\s*=\s*['"]([^'"]*)['"]"#, in: html)
             + Self.ranges(#"classList\.(?:add|toggle)\(\s*['"]([^'"]*)['"]"#, in: html)
-        for m in uses {
+        for m in uses where !Self.escaped(html, at: m.whole.lowerBound) {
             for c in String(html[m.inner]).split(separator: " ").map(String.init) where !seen.contains(c) {
                 seen.insert(c)
                 // A script's template pieces (`th${used[n] ? ' used' : ''}`) are not class names.
@@ -51,7 +51,7 @@ public struct Lint {
         }
 
         let cssBits = styles.map { (String(html[$0.inner]), html.distance(from: html.startIndex, to: $0.inner.lowerBound)) }
-            + Self.ranges(#"(?i)\sstyle\s*=\s*"([^"]*)""#, in: html).map { (String(html[$0.inner]), html.distance(from: html.startIndex, to: $0.inner.lowerBound)) }
+            + Self.ranges(#"(?i)\sstyle\s*=\s*"([^"]*)""#, in: html).filter { !Self.escaped(html, at: $0.whole.lowerBound) }.map { (String(html[$0.inner]), html.distance(from: html.startIndex, to: $0.inner.lowerBound)) }
         for (css, base) in cssBits {
             for m in Self.ranges(#"(?i)(?:^|[\s;{])(color|background(?:-color)?|border(?:-color)?|border-top|border-bottom|border-left|border-right|outline|box-shadow|fill|stroke)\s*:\s*([^;}]*)"#, in: css) {
                 let value = String(css[m.inner])
@@ -98,7 +98,10 @@ public struct Lint {
 
     func textWalls(html: String, lineOf: (Int) -> Int) -> [Finding] {
         guard html.range(of: #"(?i)<!doctype html|<html\b|<body\b|<p\b|<div\b"#, options: .regularExpression) != nil else { return [] }
-        let text = Self.masked(html)
+        let masked = Self.masked(html)
+        let css = Self.ranges(#"(?is)<style[^>]*>(.*?)</style>"#, in: html).map { String(html[$0.inner]) }.joined(separator: "\n")
+        let drawn = Self.drawn(in: masked, css: css)
+        let text = Self.blanked(masked, drawn.pictures)
         let offset = { (i: String.Index) in text.distance(from: text.startIndex, to: i) }
         var out: [Finding] = []
 
@@ -115,8 +118,8 @@ public struct Lint {
         }
 
         let plain = cards.filter { card in
-            card.open.range(of: #"(?i)\sdata-record\b"#, options: .regularExpression) != nil
-                && String(text[card.whole]).range(of: #"(?i)<(img|svg|canvas|video|iframe|picture)\b|\sstyle\s*=|class\s*=\s*["'][^"']*\b(swatches|bars|bar|shots|wipe|color)\b"#, options: .regularExpression) == nil
+            let inside = (offset(card.whole.lowerBound) + card.open.count)..<offset(card.whole.upperBound)
+            return card.open.range(of: #"(?i)\sdata-record\b"#, options: .regularExpression) != nil && !drawn.marks.contains { inside.contains($0) }
         }
         if let first = plain.first, let most = plain.map(\.words).max(), most > Self.cardWords {
             out.append(Finding(line: lineOf(offset(first.whole.lowerBound)), level: .warning, text: "option cards that are only text (up to \(most) words): put the evidence in the card, a rendered preview, the real screenshot or a swatch, and keep the words to one line (pages.md, Decision)"))
@@ -124,11 +127,67 @@ public struct Lint {
 
         let total = Self.words(text)
         let visual = html.range(of: #"(?i)<(img|svg|canvas|video|iframe|table)\b|class\s*=\s*["'][^"']*\b(swatches|bars|bar|shots|wipe|color|dials)\b"#, options: .regularExpression) != nil
-        if total > Self.pageWords, !visual {
+        if total > Self.pageWords, !visual, drawn.pictures.isEmpty {
             let body = html.range(of: #"(?i)<body\b"#, options: .regularExpression).map { html.distance(from: html.startIndex, to: $0.lowerBound) } ?? 0
             out.append(Finding(line: lineOf(body), level: .warning, text: "\(total) words and nothing to look at: show the thing (pages.md, Screenshots, Swatches, Evidence: code, diffs, bars), or put prose in your reply or a .md, not a page"))
         }
         return out
+    }
+
+    /// Where the page draws something: media, the kit's visual shapes, and elements its own CSS
+    /// or a style attribute paints (background, border, shadow) or gives a shape (aspect-ratio,
+    /// width and height, a background image). `marks` are their offsets; `pictures` are the ones whose
+    /// text belongs to the picture: a shape, or a painted box with more drawing inside (a mockup).
+    /// A painted box holding only prose is a callout, and its words still count.
+    static func drawn(in text: String, css: String) -> (marks: [Int], pictures: [Range<Int>]) {
+        var painted: Set<String> = [], shaped: Set<String> = []
+        let bare = css.replacingOccurrences(of: #"(?s)/\*.*?\*/"#, with: "", options: .regularExpression)
+        for rule in ranges(#"([^{}]+)\{([^{}]*)\}"#, in: bare) {
+            let decls = String(bare[rule.inner])
+            let (paints, shapes) = (Self.paints(decls), Self.shapes(decls))
+            guard paints || shapes else { continue }
+            let selectors = String(bare[rule.whole].prefix { $0 != "{" })
+            for selector in selectors.split(separator: ",") {
+                let last = selector.split(whereSeparator: { $0.isWhitespace || ">+~".contains($0) }).last.map(String.init) ?? ""
+                for c in matches(#"\.(-?[_a-zA-Z][\w-]*)"#, in: last) {
+                    if paints { painted.insert(c) }
+                    if shapes { shaped.insert(c) }
+                }
+            }
+        }
+        let offset = { (i: String.Index) in text.distance(from: text.startIndex, to: i) }
+        var found: [(at: Int, range: Range<Int>?, picture: Bool, card: Bool)] = []
+        for m in ranges(#"(?i)<(\w+)\b[^>]*>"#, in: text) {
+            let open = String(text[m.whole]), tag = String(text[m.inner]).lowercased()
+            let classes = Set((matches(#"(?i)\sclass\s*=\s*["']([^"']*)"#, in: open).first ?? "").split(separator: " ").map(String.init))
+            let style = matches(#"(?i)\sstyle\s*=\s*["']([^"']*)"#, in: open).first ?? ""
+            let picture = ["img", "svg", "canvas", "video", "iframe", "picture"].contains(tag)
+                || !classes.isDisjoint(with: ["swatches", "bars", "bar", "shots", "wipe", "color", "dials"])
+                || !classes.isDisjoint(with: shaped) || shapes(style)
+            guard picture || !classes.isDisjoint(with: painted) || paints(style) else { continue }
+            let range = element(in: text, at: m.whole, tag: tag).map { offset($0.lowerBound)..<offset($0.upperBound) }
+            found.append((offset(m.whole.lowerBound), range, picture, open.range(of: #"(?i)\sdata-value\b"#, options: .regularExpression) != nil))
+        }
+        let pictures = found.compactMap { d -> Range<Int>? in
+            guard let r = d.range, !d.card else { return nil }
+            return d.picture || found.contains { $0.at > r.lowerBound && r.contains($0.at) } ? r : nil
+        }
+        return (found.map(\.at), pictures)
+    }
+
+    static func paints(_ decls: String) -> Bool {
+        decls.range(of: #"(?i)(?:^|[\s;])(?:background(?:-color)?|border|box-shadow)\s*:\s*(?!(?:none|0|transparent)\s*(?:;|$))"#, options: .regularExpression) != nil
+    }
+
+    static func shapes(_ decls: String) -> Bool {
+        decls.range(of: #"(?i)(?:^|[\s;])aspect-ratio\s*:|(?:^|[\s;])background(?:-image)?\s*:[^;]*(?:url|gradient)\("#, options: .regularExpression) != nil
+            || (decls.range(of: #"(?i)(?:^|[\s;])width\s*:"#, options: .regularExpression) != nil && decls.range(of: #"(?i)(?:^|[\s;])height\s*:"#, options: .regularExpression) != nil)
+    }
+
+    static func blanked(_ text: String, _ ranges: [Range<Int>]) -> String {
+        var chars = Array(text)
+        for r in ranges { for i in r where chars[i] != "\n" { chars[i] = " " } }
+        return String(chars)
     }
 
     static func masked(_ html: String) -> String {
@@ -149,6 +208,13 @@ public struct Lint {
             blank(whole)
         }
         return String(chars)
+    }
+
+    /// `&lt;div class="x"&gt;` shown as code is text, not markup.
+    static func escaped(_ html: String, at i: String.Index) -> Bool {
+        let before = html[..<i]
+        guard let esc = before.range(of: "&lt;", options: .backwards) else { return false }
+        return before.range(of: "<", options: .backwards).map { $0.lowerBound < esc.lowerBound } ?? true
     }
 
     static func element(in html: String, at open: Range<String.Index>, tag: String) -> Range<String.Index>? {
