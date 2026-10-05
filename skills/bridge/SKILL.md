@@ -38,12 +38,20 @@ Every page:
   with a verb ("Drag the pins", "Pick one"), then the visual.
 - Give it five seconds before presenting: could they answer without reading
   a paragraph? A page that is mostly prose belongs in your reply or a `.md`.
+- Look at it before you tell them it is there: `bridge --shot /tmp/…/window.png`
+  writes a picture of the app's window; then read the image.
 
 When it fits:
 
 - Explaining how something works: run the real code on the page, let them
   drag, pull or scrub it, and slow down what is too fast to see (one frame,
-  one cycle).
+  one cycle). Whenever the page re-implements anything instead of importing
+  it, show a check that re-runs the real code on the same input and says
+  whether the result matches; a convincing wrong explanation is worse than
+  none (pages.md "Explorable").
+- "Still text" or too wordy: raise the fidelity (static picture, then
+  interactive, then the real thing running) instead of rewording the same
+  content.
 - Choosing: options side by side at the same scale, one short line each, the
   rest of the card is evidence (pages.md "Decision").
 - Tuning: one control drives everything on the page, the real site in a
@@ -79,6 +87,7 @@ it on the same page.
 | Read a PDF | `spec.pdf` | Scrollable. No pins. |
 | See a diagram | `diagram.svg` | Rendered inline as a document that scales; they can pin its elements. |
 | Look at several things | `bridge a.html b.png c.txt` | All arrive in their list, the first is selected. |
+| Understand how some code works | An explorable `.html` that runs the real code | They drag, scrub and step through it. A diagram of boxes with labels is still text. See pages.md "Explorable". |
 | Choose between things | `decision.html` with option cards | Each option carries evidence. See pages.md "Decision". |
 | Tune values | `.jsx` with Mantine controls, or `.html` with inputs | Read the numbers back with `--read`. |
 | Just look at a site | Nothing: the URL in your reply | The user has a browser. |
