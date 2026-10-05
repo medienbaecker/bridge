@@ -1,3 +1,5 @@
+<img src=".github/icon.png" width="128" alt="">
+
 # Bridge
 
 macOS app that lets Claude Code show pages and read back your answers: a [thicker interface](https://maggieappleton.com/planning-agents) between you and your agents.
