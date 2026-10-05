@@ -1,6 +1,6 @@
 ---
 name: bridge
-description: Show the user something that is easier to look at than to read, in a native window next to their terminal, and get their answer back as JSON. Use when they say "show me", "give me something visual", "I'll have to see it", "make a prototype", "visual diff", "explain that visually", "let me point at it", whenever you write a draft they will paste somewhere (a mail, message, commit text), whether they asked for it or a skill produced it, when you want to show a plan, a decision with evidence, screenshots, a before/after, a live site with controls or evidence around it, or a set of controls to tune, and whenever you are about to ask a multiple-choice question they cannot answer well from a terminal. Not for a site they can open in their own browser: that is a link in your reply. Never use pbcopy to hand over text; use a Bridge page with a Copy button.
+description: Show the user something in a native window next to their terminal and read their answer back as JSON. Load it whenever you are about to hand the user more than a few lines to read, or anything they would understand faster by seeing or touching it: a choice between options, a value to judge by eye (spacing, colour, shadow, timing), what changed in their code, how some code behaves, a plan, findings with numbers, a draft they will paste, or a question they cannot answer well from a terminal. Also when they say "show me", "let me see it", "make a prototype" or "let me point at it". Not for a short factual answer, and not for a site they can open in their own browser. Never use pbcopy to hand over text; use a Bridge page with a Copy button.
 ---
 
 # Bridge
@@ -51,6 +51,17 @@ that difference:
   in the terminal would answer is worse than the line.
 - A multiple-choice question in a terminal strips out everything they would
   need to choose well.
+- Building costs you almost nothing; their attention costs a lot. A page that
+  takes you ten minutes and saves them one is a good trade. A quick form that
+  leaves the work to them is not.
+- A copy of the thing is not the thing. Sample cards, mock data and redrawn
+  screens hide the detail they need to judge; the real page, component or
+  output does not.
+- Some things can only be judged at real size while they change: a shadow, a
+  spacing, an easing, a colour. Named options or a row of thumbnails ask them
+  to compare differences they cannot see.
+- Forms bring your vocabulary. "Layer 2 opacity" is your model of the problem;
+  "too heavy" is theirs.
 
 A page is your chance to close that gap. Work out which of these is in the way
 for this particular thing, and build what removes it; pages.md has the parts.
