@@ -353,6 +353,8 @@ How a piece of code works, shown by running it and letting the user move it:
 - Labels and readouts sit next to what they describe, axes are labelled.
 - For tuning, one control drives everything on the page.
 - Silent by default; any sound starts only after a click.
+- Anything they drag gets `user-select: none` and `preventDefault()` on
+  `pointerdown`, or a real mouse selects the page's text instead.
 
 A module whose own imports are bare package names (`from 'three'`) needs
 bundling first: `npx esbuild src/rope.js --bundle --format=esm --outfile=rope.js`.
@@ -363,7 +365,7 @@ bundling first: `npx esbuild src/rope.js --bundle --format=esm --outfile=rope.js
 <head><meta charset="utf-8"><title>The spring</title>
 <style>
   .steps { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
-  svg { display: block; width: 100%; height: auto; touch-action: none; }
+  svg { display: block; width: 100%; height: auto; touch-action: none; -webkit-user-select: none; user-select: none; }
   #cord { stroke: var(--bridge-muted); stroke-width: 2; fill: none; }
   svg line { stroke: var(--bridge-line); }
   svg text { fill: var(--bridge-muted); font-size: 14px; font-variant-numeric: tabular-nums; }
@@ -438,7 +440,7 @@ function place() {
   $('guess').setAttribute('y', rest + guess + 4);
   $('guess').textContent = `guess x ${guess.toFixed(0)}`;
 }
-$('ghost').addEventListener('pointerdown', () => { held = true; });
+$('ghost').addEventListener('pointerdown', (e) => { e.preventDefault(); held = true; });
 addEventListener('pointermove', (e) => {
   if (!held) return;
   const p = new DOMPoint(e.clientX, e.clientY).matrixTransform($('spring').getScreenCTM().inverse());
