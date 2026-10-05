@@ -88,7 +88,85 @@ public struct Lint {
             let line = lineOf(html.distance(from: html.startIndex, to: m.inner.lowerBound) + js.distance(from: js.startIndex, to: at.lowerBound))
             out.append(Finding(line: line, level: .warning, text: "an AudioWorklet module from a blob URL is refused here (the page is a file:// document): write the processor to a .js file beside the page and addModule('that.js') (pages.md, Sound)"))
         }
+        out += textWalls(html: html, lineOf: lineOf)
         return out.sorted { $0.line < $1.line }
+    }
+
+    static let blockWords = 40
+    static let pageWords = 250
+    static let cardWords = 15
+
+    func textWalls(html: String, lineOf: (Int) -> Int) -> [Finding] {
+        guard html.range(of: #"(?i)<!doctype html|<html\b|<body\b|<p\b|<div\b"#, options: .regularExpression) != nil else { return [] }
+        let text = Self.masked(html)
+        let offset = { (i: String.Index) in text.distance(from: text.startIndex, to: i) }
+        var out: [Finding] = []
+
+        let cards = Self.ranges(#"(?i)<(?!input\b|option\b)(\w+)\b[^>]*\sdata-value\b[^>]*>"#, in: text).compactMap { m -> (whole: Range<String.Index>, open: String, words: Int)? in
+            guard let whole = Self.element(in: text, at: m.whole, tag: String(text[m.inner])) else { return nil }
+            return (whole, String(text[m.whole]), Self.words(String(text[whole])))
+        }
+        var walls = cards.filter { $0.words > Self.blockWords }.map(\.whole)
+        for m in Self.ranges(#"(?is)<(p|li)\b[^>]*>.*?</\1>"#, in: text) where !walls.contains(where: { $0.contains(m.whole.lowerBound) }) {
+            if Self.words(String(text[m.whole])) > Self.blockWords { walls.append(m.whole) }
+        }
+        for wall in walls {
+            out.append(Finding(line: lineOf(offset(wall.lowerBound)), level: .warning, text: "\(Self.words(String(text[wall]))) words in one block: show it instead (pages.md, Screenshots, Swatches, Evidence: code, diffs, bars) or cut it to one line"))
+        }
+
+        let plain = cards.filter { card in
+            card.open.range(of: #"(?i)\sdata-record\b"#, options: .regularExpression) != nil
+                && String(text[card.whole]).range(of: #"(?i)<(img|svg|canvas|video|iframe|picture)\b|\sstyle\s*=|class\s*=\s*["'][^"']*\b(swatches|bars|bar|shots|wipe|color)\b"#, options: .regularExpression) == nil
+        }
+        if let first = plain.first, let most = plain.map(\.words).max(), most > Self.cardWords {
+            out.append(Finding(line: lineOf(offset(first.whole.lowerBound)), level: .warning, text: "option cards that are only text (up to \(most) words): put the evidence in the card, a rendered preview, the real screenshot or a swatch, and keep the words to one line (pages.md, Decision)"))
+        }
+
+        let total = Self.words(text)
+        let visual = html.range(of: #"(?i)<(img|svg|canvas|video|iframe|table)\b|class\s*=\s*["'][^"']*\b(swatches|bars|bar|shots|wipe|color|dials)\b"#, options: .regularExpression) != nil
+        if total > Self.pageWords, !visual {
+            let body = html.range(of: #"(?i)<body\b"#, options: .regularExpression).map { html.distance(from: html.startIndex, to: $0.lowerBound) } ?? 0
+            out.append(Finding(line: lineOf(body), level: .warning, text: "\(total) words and nothing to look at: show the thing (pages.md, Screenshots, Swatches, Evidence: code, diffs, bars), or put prose in your reply or a .md, not a page"))
+        }
+        return out
+    }
+
+    static func masked(_ html: String) -> String {
+        var chars = Array(html)
+        let blank = { (r: Range<String.Index>) in
+            let a = html.distance(from: html.startIndex, to: r.lowerBound), b = html.distance(from: html.startIndex, to: r.upperBound)
+            for i in a..<b where chars[i] != "\n" { chars[i] = " " }
+        }
+        for tag in ["head", "script", "style", "pre", "textarea", "details", "template"] {
+            for m in ranges(#"(?is)<\#(tag)\b[^>]*>.*?</\#(tag)>"#, in: html) { blank(m.whole) }
+        }
+        let copied = Set(matches(#"(?i)data-copy\s*=\s*["']#([\w-]+)"#, in: html))
+        for m in ranges(#"(?i)<(\w+)\b[^>]*>"#, in: html) {
+            let open = String(html[m.whole])
+            let id = matches(#"(?i)\sid\s*=\s*["']([\w-]+)"#, in: open).first
+            let draft = open.range(of: #"(?i)\sclass\s*=\s*["'][^"']*\bdraft\b"#, options: .regularExpression) != nil
+            guard draft || id.map(copied.contains) == true, let whole = element(in: html, at: m.whole, tag: String(html[m.inner])) else { continue }
+            blank(whole)
+        }
+        return String(chars)
+    }
+
+    static func element(in html: String, at open: Range<String.Index>, tag: String) -> Range<String.Index>? {
+        let rest = String(html[open.upperBound...])
+        var depth = 1
+        for m in ranges(#"(?i)<(/?)\#(tag)\b[^>]*>"#, in: rest) {
+            depth += rest[m.whole].hasPrefix("</") ? -1 : 1
+            if depth == 0 {
+                return open.lowerBound..<html.index(open.upperBound, offsetBy: rest.distance(from: rest.startIndex, to: m.whole.upperBound))
+            }
+        }
+        return nil
+    }
+
+    static func words(_ html: String) -> Int {
+        html.replacingOccurrences(of: #"<[^>]+>|&#?\w+;"#, with: " ", options: .regularExpression)
+            .split(whereSeparator: \.isWhitespace)
+            .filter { $0.contains { $0.isLetter || $0.isNumber } }.count
     }
 
     static func suggest(_ c: String, _ vocab: Set<String>) -> String {

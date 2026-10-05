@@ -191,6 +191,48 @@ import Foundation
     #expect(!Lint(kitCSS: "").run(html: file).contains { $0.text.hasPrefix("an AudioWorklet module from a blob URL") })
 }
 
+private let kitOfShapes = ".options { } .draft { } .bars { } .bar { }"
+
+@Test func lintNamesAParagraphWall() {
+    let long = Array(repeating: "lorem", count: 45).joined(separator: " ")
+    let texts = Lint(kitCSS: kitOfShapes).run(html: "<body>\n<p>\(long)</p>\n<ul><li>short item</li><li>\(long)</li></ul>\n<p>One line.</p>").map(\.text)
+    #expect(texts.filter { $0.hasPrefix("45 words in one block") }.count == 2)
+}
+
+@Test func lintLeavesDraftsCodeAndDetailsAlone() {
+    let long = Array(repeating: "lorem", count: 300).joined(separator: " ")
+    let page = """
+    <body>
+    <pre class="draft" id="draft">\(long)</pre>
+    <div id="mail"><p>\(long)</p></div><button data-copy="#mail">Copy</button>
+    <pre><code class="language-js">\(long)</code></pre>
+    <details><summary>Analysis</summary><p>\(long)</p></details>
+    <textarea data-record="note">\(long)</textarea>
+    </body>
+    """
+    #expect(Lint(kitCSS: kitOfShapes).run(html: page).isEmpty)
+}
+
+@Test func lintNamesALongPageWithNothingToLookAt() {
+    let para = "<p>" + Array(repeating: "lorem", count: 30).joined(separator: " ") + "</p>\n"
+    let prose = "<body>\n" + String(repeating: para, count: 10)
+    #expect(Lint(kitCSS: kitOfShapes).run(html: prose).contains { $0.text.hasPrefix("300 words and nothing to look at") })
+    #expect(!Lint(kitCSS: kitOfShapes).run(html: prose + "<img src=\"/a.png\" alt=\"\">").contains { $0.text.contains("nothing to look at") })
+    #expect(!Lint(kitCSS: kitOfShapes).run(html: prose + "<div class=\"bars\"><div class=\"bar\" style=\"--v: 40\"></div></div>").contains { $0.text.contains("nothing to look at") })
+    #expect(Lint(kitCSS: kitOfShapes).run(html: Array(repeating: "lorem", count: 300).joined(separator: " ")).isEmpty)
+}
+
+@Test func lintNamesTextOnlyOptionCards() {
+    let card = { (v: String, extra: String) in "<div data-record=\"layout\" data-value=\"\(v)\">\(extra)<strong>\(v)</strong> Three columns at desktop, one at phone width. Titles wrap to two lines on 12 entries.</div>" }
+    let plain = "<body><div class=\"options\">\n" + card("grid", "") + "\n" + card("list", "") + "</div>"
+    let shown = "<body><div class=\"options\">\n" + card("grid", "<img src=\"/g.png\" alt=\"\">") + "\n" + card("list", "<img src=\"/l.png\" alt=\"\">") + "</div>"
+    let short = "<body><div class=\"options\"><div data-record=\"layout\" data-value=\"grid\"><strong>Grid</strong> Three columns.</div></div>"
+    let found = Lint(kitCSS: kitOfShapes).run(html: plain).filter { $0.text.hasPrefix("option cards that are only text") }
+    #expect(found.count == 1 && found.first?.line == 2)
+    #expect(!Lint(kitCSS: kitOfShapes).run(html: shown).contains { $0.text.hasPrefix("option cards that are only text") })
+    #expect(Lint(kitCSS: kitOfShapes).run(html: short).isEmpty)
+}
+
 @Test func sessionLifeFollowsTheHook() throws {
     let dir = FileManager.default.temporaryDirectory.appendingPathComponent("bridge-sessions-\(UUID().uuidString)")
     let own = ClaudeSessions.dir
