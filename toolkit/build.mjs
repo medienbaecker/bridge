@@ -1,9 +1,8 @@
-// node build.mjs vendor           builds dist/vendor.js, dist/mantine.css and the shims (once, at install)
-// node build.mjs page X.jsx OUT   builds OUT/page.js and OUT/index.html for one page; on failure prints JSON errors and exits 1
+// node build.mjs vendor   builds dist/vendor.js, dist/mantine.css and the shims, and copies esbuild to bin/ (at install or release)
 import * as esbuild from 'esbuild';
-import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync, statSync } from 'node:fs';
-import { dirname, resolve, basename } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { writeFileSync, mkdirSync, copyFileSync, rmSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const dist = resolve(here, 'dist');
@@ -29,66 +28,12 @@ async function vendor() {
     writeFileSync(resolve(dist, 'shims', key(m) + '.js'), lines.join('\n') + '\n');
   }
   copyFileSync(resolve(here, 'node_modules/@mantine/core/styles.css'), resolve(dist, 'mantine.css'));
+  mkdirSync(resolve(here, 'bin'), { recursive: true });
+  // A binary rewritten in place keeps its old cached signature, and macOS kills it on the next run.
+  rmSync(resolve(here, 'bin/esbuild'), { force: true });
+  copyFileSync(resolve(here, 'node_modules/@esbuild/darwin-arm64/bin/esbuild'), resolve(here, 'bin/esbuild'));
   console.log('vendor built');
 }
 
-async function page(source, out) {
-  mkdirSync(out, { recursive: true });
-  const shims = {
-    name: 'bridge-shims',
-    setup(build) {
-      build.onResolve({ filter: /^@bridge$/ }, () => ({ path: resolve(here, 'bridge.js') }));
-      build.onResolve({ filter: /^@page$/ }, () => ({ path: resolve(source) }));
-      build.onResolve({ filter: /.*/ }, (args) => modules.includes(args.path) ? { path: resolve(dist, 'shims', key(args.path) + '.js') } : undefined);
-    },
-  };
-  try {
-    await esbuild.build({
-      entryPoints: [resolve(here, 'scaffold.jsx')],
-      bundle: true, format: 'iife', platform: 'browser', target: 'safari26', jsx: 'automatic',
-      define: { 'process.env.NODE_ENV': '"production"' },
-      plugins: [shims],
-      outfile: resolve(out, 'page.js'),
-      logLevel: 'silent',
-      absWorkingDir: dirname(resolve(source)),
-    });
-  } catch (e) {
-    const errors = (e.errors || [{ text: String(e) }]).map((err) => ({
-      text: err.text,
-      file: err.location?.file, line: err.location?.line, column: err.location?.column, lineText: err.location?.lineText,
-    }));
-    process.stdout.write(JSON.stringify({ errors }));
-    process.exit(1);
-  }
-  const dataFile = resolve(source).replace(/\.[jt]sx$/, '.data.json');
-  let data = 'null';
-  if (existsSync(dataFile)) {
-    try { data = JSON.stringify(JSON.parse(readFileSync(dataFile, 'utf8'))); }
-    catch (e) { process.stdout.write(JSON.stringify({ errors: [{ text: 'page.data.json is not valid JSON: ' + e.message, file: dataFile }] })); process.exit(1); }
-  }
-  const stamp = (file) => `?v=${Math.floor(statSync(file).mtimeMs)}`;
-  const parsed = data === 'null' ? null : JSON.parse(data);
-  const title = (parsed && typeof parsed.title === 'string' ? parsed.title : basename(source).replace(/\.[jt]sx$/, '')).replace(/</g, '&lt;');
-  writeFileSync(resolve(out, 'index.html'), `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>${title}</title>
-<link rel="stylesheet" href="${pathToFileURL(resolve(dist, 'mantine.css')).href}${stamp(resolve(dist, 'mantine.css'))}">
-<link rel="stylesheet" href="${pathToFileURL(resolve(here, 'theme.css')).href}${stamp(resolve(here, 'theme.css'))}">
-<script>window.__bridgeData = ${data.replace(/</g, '\\u003c')};</script>
-</head>
-<body>
-<div id="root"></div>
-<script src="${pathToFileURL(resolve(dist, 'vendor.js')).href}${stamp(resolve(dist, 'vendor.js'))}"></script>
-<script src="page.js?v=${Date.now()}"></script>
-</body>
-</html>
-`);
-  process.stdout.write(JSON.stringify({ ok: true, out }));
-}
-
-const [mode, a, b] = process.argv.slice(2);
-if (mode === 'vendor') await vendor();
-else if (mode === 'page' && a && b) await page(a, b);
-else { console.error('usage: build.mjs vendor | build.mjs page <file.jsx> <outdir>'); process.exit(2); }
+if (process.argv[2] === 'vendor') await vendor();
+else { console.error('usage: build.mjs vendor'); process.exit(2); }

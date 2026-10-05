@@ -9,11 +9,7 @@ version="$(plutil -extract version raw -o - "$root/.claude-plugin/plugin.json" 2
 prefix="${BRIDGE_PREFIX:-$HOME}"
 share="$prefix/.local/share/bridge"
 
-has_node() { command -v node >/dev/null && command -v npm >/dev/null; }
-if [ "$(cat "$share/VERSION" 2>/dev/null)" = "$version" ]; then
-  # A Node installed after Bridge still gets its toolkit.
-  ! has_node || [ -d "$share/toolkit/node_modules" ] && exit 0
-fi
+[ "$(cat "$share/VERSION" 2>/dev/null)" = "$version" ] && exit 0
 
 mkdir -p "$share" || exit 0
 # Sessions that start together must not swap the same app at once. A lock
@@ -35,6 +31,7 @@ update() {
   [ "$(cat "$new/VERSION")" = "$version" ] || { echo "the zip holds $(cat "$new/VERSION"), not $version"; exit 1; }
   codesign --verify "$new/Bridge.app"
   "$new/bridge" --help >/dev/null
+  "$new/toolkit/bin/esbuild" --version >/dev/null
 
   # Never write over a running Mach-O in place: the Stop hook keeps the old
   # CLI running for hours. Copy, then rename.
@@ -49,10 +46,8 @@ update() {
   mv -f "$share/cli-stable.new" "$share/cli-stable"
   ln -sfn "$share/cli-stable" "$prefix/.local/bin/bridge"
 
-  cp "$new"/toolkit/* "$share/toolkit/"
-  if has_node; then
-    (cd "$share/toolkit" && npm install --silent --no-audit --no-fund && node build.mjs vendor)
-  fi
+  rm -f "$share/toolkit/bin/esbuild"
+  ditto "$new/toolkit" "$share/toolkit"
   echo "$version" > "$share/VERSION"
   echo "done"
 }
