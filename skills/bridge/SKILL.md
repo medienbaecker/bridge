@@ -21,53 +21,39 @@ kit both style, flags a colour or radius written out where a `--bridge-*`
 token exists, a `pre` that is really a table, and text walls. Errors exit 1; fix them
 before they see the page. Warnings exit 0; read them.
 
-## Pages are for eyes
+## What goes wrong between you and the user
 
-You read thousands of lines of code, logs and data in seconds; the user sees
-patterns, proportions, outliers and what feels wrong at a glance. They are the
-expert on their project and are not here to learn: they check that you
-understood it the way they do, then accept, correct or choose. A page is
-evidence for a claim, made as cheap to check as you can. A wall of text hands
-them your job, and more words make people agree with you whether you are right
-or not.
+You and the user perceive differently. You take in thousands of lines of code,
+logs and data in seconds; they read a few hundred words a minute but see
+patterns, proportions and what feels wrong at a glance. They are the expert on
+their project. Most of what goes wrong when you hand them something comes from
+that difference:
 
-Every page:
+- Reading is their bottleneck. You write many times faster than they read, so
+  every sentence you add is paid for with their attention, and they start
+  skimming long before you stop writing.
+- Volume persuades. Longer, more confident explanations make people agree
+  more often, whether you are right or wrong, and a fluent argument hides a
+  mistake better than a short one.
+- They cannot see what you saw. You read the files, the diff, the output;
+  they only get your account of it. A claim they cannot check, they have to
+  take on trust or redo your work.
+- Text is the wrong shape for much of what you ask about. A layout, a colour,
+  a shadow, a motion, a curve of numbers or a data flow has to be imagined from
+  words, and everyone imagines it differently.
+- Explaining what they already know costs them. So does being asked to guess
+  or reconstruct something you already know.
+- Surprises drown. The change they did not expect, or the thing you did
+  without being asked, is easy to miss in a long account.
+- Your uncertainty is invisible. Unless you say where you are unsure, they
+  cannot tell a checked fact from a plausible guess.
+- A question pulls them out of their own work. A window for something one line
+  in the terminal would answer is worse than the line.
+- A multiple-choice question in a terminal strips out everything they would
+  need to choose well.
 
-- The answer, or the decision you need, is on the first screen. Detail goes
-  below or into a `<details>`.
-- Show the thing instead of describing it: the real diff hunk, the actual
-  output, the screenshot, the element on the live site. Every claim should be
-  checkable in one glance or one click (pages.md "Screenshots", "Evidence:
-  code, diffs, bars").
-- Lead with surprises: what you did that they did not ask for, and what
-  differs from what they would expect.
-- Say where you are unsure, in the first person: "I did not test the cache on
-  deploy."
-- Use their project's names, and do not explain what they already know.
-- Labels and numbers sit on or next to what they describe. Quantities as
-  position or length on one shared scale, like bars; exact values as a table.
-- Mark the one thing to look at with a single unique feature: the only
-  accent, the only outline. Several highlights cancel out.
-- A heading that states the point, one line that says what to do, then the
-  visual.
-- Never quiz: do not make them guess or predict something you already know.
-- Look at it before you tell them it is there: `bridge --shot /tmp/…/window.png`
-  writes a picture of the app's window; then read the image.
-
-By what they need:
-
-- Deciding or checking: be short. Recommend one option, say when it would be
-  wrong, and show each option's consequence on the real thing. Side by side
-  when options differ a lot; for subtle differences overlay them, toggle in
-  place, or draw the difference (pages.md "Decision").
-- Understanding how something works: an explorable that runs the real code
-  and lets them drag, scrub and step through it, with what is too fast to see
-  slowed down (pages.md "Explorable"). If the page re-implements anything
-  instead of importing it, show a check that re-runs the real code and says
-  whether the result matches.
-- Tuning: controls only where their judgement decides the value (taste,
-  thresholds); one control drives everything on the page, the real site in a
-  frame included (pages.md "Controls that drive the preview").
+A page is your chance to close that gap. Work out which of these is in the way
+for this particular thing, and build what removes it; pages.md has the parts.
 
 ## When to use it, and when not
 
