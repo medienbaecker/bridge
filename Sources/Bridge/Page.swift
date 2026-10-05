@@ -58,6 +58,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         self.title = model.listing.entry(location)?.title ?? BridgeEntry.defaultTitle(location)
         let config = WKWebViewConfiguration()
         config.preferences.setValue(true, forKey: "developerExtrasEnabled")
+        config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
         // For pages without a charset.
         config.preferences.setValue("utf-8", forKey: "defaultTextEncodingName")
         webView = WKWebView(frame: .zero, configuration: config)

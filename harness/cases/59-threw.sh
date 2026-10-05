@@ -16,7 +16,7 @@ HTML
 repo
 (cd "$CASE_DIR/pages" && bridge broken.html 2> "$CASE_DIR/present.err"); wait_ready; settle 0.4
 err=$(sed 's/^bridge-dev: //' "$CASE_DIR/present.err")
-check "an uncaught error, which WebKit mutes on a file page, says where to move the code" "$(printf '%s\n' "$err" | grep -c "^broken.html threw: a script threw, and WebKit hides what from a file:// page: move the code into bridge.ready")" "1"
+check "an uncaught error in a top-level script is named with its line" "$(printf '%s\n' "$err" | grep -c "^broken.html threw: TypeError: null is not an object .*(broken.html:4)$")" "1"
 check "an unhandled rejection is named" "$(printf '%s\n' "$err" | grep -c "^broken.html threw: Unhandled rejection: fetch failed$")" "1"
 check "a throw inside bridge.ready is named with its line" "$(printf '%s\n' "$err" | grep -c "^broken.html threw: in bridge.ready: ready blew up (broken.html:8)$")" "1"
 

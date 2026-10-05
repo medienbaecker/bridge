@@ -337,9 +337,9 @@ page; two at most, and never three.
 
 How a piece of code works, shown by running it and letting the user move it:
 
-- Run the real code. Paste the module's source as it is into a
-  `<script type="text/plain">` (`cat src/spring.js`, never retyped) and
-  import that, as below. For a look, embed the real site in a frame instead.
+- Run the real code: import the project's module directly, by a path
+  relative to the page or an absolute file path, as below. For a look, embed
+  the real site in a frame instead.
 - One step per heading, one line that starts with a verb, then a big visual.
 - Let them drag, pull or scrub it; that is how it is understood.
 - Slow down what is too fast to see: record one cycle, then a step button
@@ -348,10 +348,8 @@ How a piece of code works, shown by running it and letting the user move it:
 - One control drives everything on the page.
 - Silent by default; any sound starts only after a click.
 
-A page is a `file://` document, and a module import from a file is refused,
-from beside the page too; one from a blob URL works. A module that imports
-others: bundle it first (`npx esbuild src/rope.js --bundle --format=esm`) and
-paste the bundle.
+A module whose own imports are bare package names (`from 'three'`) needs
+bundling first: `npx esbuild src/rope.js --bundle --format=esm --outfile=rope.js`.
 
 ```html
 <!doctype html>
@@ -393,17 +391,8 @@ paste the bundle.
 </svg>
 <div class="row"><button id="next">Next step</button><input id="t" type="range" min="0" max="60" step="1" value="0" aria-label="Time"></div>
 
-<script type="text/plain" id="spring.js">
-export function step(x, v, k, damping, dt = 1 / 60) {
-  const a = -k * x - damping * v;
-  v += a * dt;
-  x += v * dt;
-  return [x, v];
-}
-</script>
 <script type="module">
-const real = document.getElementById('spring.js').textContent;
-const { step } = await import(URL.createObjectURL(new Blob([real], { type: 'text/javascript' })));
+import { step } from './spring.js';
 const $ = (id) => document.getElementById(id);
 const params = () => [Number($('k').value), Number($('damping').value)];
 const frames = 60, rest = 80, px = (i) => 30 + i * 370 / frames, py = (x) => 80 + x * 0.9;

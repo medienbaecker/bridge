@@ -37,17 +37,8 @@
 </svg>
 <div class="row"><button id="next">Next step</button><input id="t" type="range" min="0" max="60" step="1" value="0" aria-label="Time"></div>
 
-<script type="text/plain" id="spring.js">
-export function step(x, v, k, damping, dt = 1 / 60) {
-  const a = -k * x - damping * v;
-  v += a * dt;
-  x += v * dt;
-  return [x, v];
-}
-</script>
 <script type="module">
-const real = document.getElementById('spring.js').textContent;
-const { step } = await import(URL.createObjectURL(new Blob([real], { type: 'text/javascript' })));
+import { step } from './spring.js';
 const $ = (id) => document.getElementById(id);
 const params = () => [Number($('k').value), Number($('damping').value)];
 const frames = 60, rest = 80, px = (i) => 30 + i * 370 / frames, py = (x) => 80 + x * 0.9;

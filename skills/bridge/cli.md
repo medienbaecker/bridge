@@ -45,10 +45,7 @@ presenting command's stderr; lint is the one that arrives in time.
 What the page's scripts throw while it loads (an uncaught error, an unhandled
 rejection, a throw inside `bridge.ready`) prints there too, as
 `bridge: page.html threw: <message> (page.html:12)`. A page that threw is
-broken in the user's window; fix it before they look. WebKit hides the message
-of an uncaught error in a top-level script on a `file://` page; that one
-arrives as "a script threw", and moving the code into `bridge.ready(() => { … })`
-gets the message and line on the next present.
+broken in the user's window; fix it before they look.
 
 ## `--read`
 
