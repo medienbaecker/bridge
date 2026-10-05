@@ -1,0 +1,7 @@
+#!/bin/sh
+# Through the symlink, not cli-stable: the CLI picks its flavour from its own name.
+cli="${BRIDGE_PREFIX:-$HOME}/.local/bin/bridge"
+[ -x "$cli" ] && exec "$cli" "$@"
+[ "$1" = --hook ] && exit 0
+echo "bridge is not installed yet: the Bridge plugin downloads it in the background when a session starts. Try again in a minute, or see ~/.local/share/bridge/ensure.log" >&2
+exit 1

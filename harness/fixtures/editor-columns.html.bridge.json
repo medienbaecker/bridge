@@ -1,0 +1,50 @@
+{
+  "answers" : {
+    "columns" : {
+      "four" : [
+        "n",
+        "g",
+        "k",
+        "h"
+      ],
+      "none" : [
+
+      ],
+      "one" : [
+        "b",
+        "c",
+        "a",
+        "i",
+        "l",
+        "o"
+      ],
+      "three" : [
+        "m",
+        "f"
+      ],
+      "two" : [
+        "d",
+        "e",
+        "j"
+      ]
+    }
+  },
+  "comments" : [
+
+  ],
+  "fingerprint" : "4f53cda18c2b",
+  "history" : [
+
+  ],
+  "page" : "/Users/alex/Projects/editor/editor-columns.html",
+  "presented" : {
+    "at" : "2026-01-15T19:57:19Z",
+    "cwd" : "/Users/alex/Projects/editor",
+    "session" : "00000000-0000-4000-8000-000000000001"
+  },
+  "questions" : [
+
+  ],
+  "status" : "open",
+  "version" : 1
+}

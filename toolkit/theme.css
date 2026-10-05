@@ -1,0 +1,41 @@
+:root {
+  color-scheme: light dark;
+  --mantine-primary-color-filled: AccentColor;
+  --mantine-primary-color-filled-hover: color-mix(in srgb, AccentColor 88%, black);
+  --mantine-primary-color-light: color-mix(in srgb, AccentColor 12%, transparent);
+  --mantine-primary-color-light-hover: color-mix(in srgb, AccentColor 18%, transparent);
+  --mantine-primary-color-light-color: AccentColor;
+  --mantine-primary-color-contrast: white;
+  --mantine-color-anchor: AccentColor;
+  --mantine-color-body: Canvas;
+  --mantine-color-text: CanvasText;
+  --mantine-color-dimmed: color-mix(in srgb, CanvasText 55%, transparent);
+  --mantine-color-default-border: color-mix(in srgb, CanvasText 14%, transparent);
+  --mantine-color-default: Canvas;
+  --mantine-color-default-hover: color-mix(in srgb, CanvasText 4%, transparent);
+  --mantine-color-placeholder: color-mix(in srgb, CanvasText 40%, transparent);
+  --mantine-line-height: 1.5;
+}
+:root[data-mantine-color-scheme="dark"] {
+  --mantine-color-body: Canvas;
+  --mantine-color-text: CanvasText;
+  --mantine-color-default: color-mix(in srgb, CanvasText 6%, Canvas);
+  --mantine-color-default-hover: color-mix(in srgb, CanvasText 10%, Canvas);
+  --mantine-color-default-border: color-mix(in srgb, CanvasText 18%, transparent);
+}
+html, body {
+  margin: 0;
+  background: Canvas;
+  color: CanvasText;
+  -webkit-font-smoothing: antialiased;
+}
+#root { padding: 28px 32px 48px; max-width: 880px; }
+[data-record][data-value] {
+  cursor: default;
+  transition: outline-color 80ms, box-shadow 80ms;
+}
+[data-record][data-value][data-selected] {
+  outline: 2px solid AccentColor;
+  outline-offset: -1px;
+}
+html[data-bridge-status="sent"] [data-send], html[data-bridge-readonly] [data-send] { opacity: 0.5; pointer-events: none; }

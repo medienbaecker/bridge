@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Gallery: every plain component</title></head>
+<body>
+<h1>Gallery</h1>
+<p class="muted">Every component <code>skills/bridge/pages.md</code> documents, rendered once. <small>Photographed on every harness run.</small></p>
+
+<h2>Options</h2>
+<div class="options">
+  <div data-record="layout" data-value="grid" tabindex="0"><strong>Grid</strong>Three columns. Titles wrap on 12 of 140 entries.</div>
+  <div data-record="layout" data-value="list" tabindex="0"><strong>List</strong>One entry per row. 4.5 screens tall.</div>
+</div>
+<div class="options stack">
+  <div data-record="tone" data-value="plain" tabindex="0"><strong>Plain</strong>Stacked option, full width.</div>
+</div>
+<fieldset class="options">
+  <legend>Options as radios</legend>
+  <div><input type="radio" name="scenes" id="s-pool" value="pool" data-record="scenes"><label for="s-pool">Option A</label><span>Lorem ipsum dolor sit amet.</span></div>
+  <div><input type="radio" name="scenes" id="s-page" value="page" data-record="scenes"><label for="s-page">Option B</label><span>Consectetur adipiscing elit.</span></div>
+</fieldset>
+<dl class="metrics">
+  <div><dt>bridges in your list</dt><dd>14</dd></div>
+  <div><dt>waiting on you</dt><dd>3</dd></div>
+</dl>
+<div class="swatches" data-record="tint">
+  <button type="button" data-color="#2f6feb"></button>
+  <button type="button" data-color="#1a7f4b"></button>
+  <input type="text" value="#2f6feb" spellcheck="false" aria-label="Hex">
+</div>
+
+<h2>Controls</h2>
+<div class="row">
+  <label>Radius <input type="range" data-record="radius" min="0" max="24" value="8"></label>
+  <label>Count <input type="number" data-record="count" value="3"></label>
+  <label>Name <input type="text" data-record="name" placeholder="Text"></label>
+  <label>Font <select data-record="font"><option>Inter</option><option>Georgia</option></select></label>
+</div>
+<fieldset data-record="side" class="row"><label><input type="radio" name="side" value="left"> Left</label><label><input type="radio" name="side" value="right"> Right</label></fieldset>
+<div data-record="tags" class="row"><label><input type="checkbox" value="a"> A</label><label><input type="checkbox" value="b"> B</label></div>
+<textarea data-record="note" placeholder="Optional"></textarea>
+<div class="dials">
+  <label class="dial"><span>Radius</span><input type="range" data-record="dial-radius" data-unit="px" min="0" max="24" step="0.5" value="8"><output></output></label>
+  <label class="dial"><span>Ease</span><input type="range" data-record="ease" min="0" max="1" step="0.001" value="0.35"><output></output></label>
+</div>
+<div class="color" data-record="accent" value="oklch(0.62 0.19 250)"></div>
+
+<h2>Evidence</h2>
+<div class="compare">
+  <div class="evidence"><strong>Before</strong> 312 lines, 4 files</div>
+  <div class="evidence"><strong>After</strong> 0 lines, 0 files</div>
+</div>
+<table><tr><th>Step</th><th>Files</th></tr><tr><td>Export</td><td>1 new</td></tr></table>
+<div class="card">
+  <div class="row between"><span><strong>Item 1</strong> · 4 parts, 2 locked<br><span class="muted">lorem ipsum dolor sit amet consectetur</span></span><span class="num">4–6 h</span></div>
+  <hr>
+  <div class="row between"><span><strong>Item 2</strong> · A, B, C, D</span><span class="num">3–4 h</span></div>
+  <hr>
+  <div class="row between"><span><strong>Item 3</strong> · 1 of N, rest locked</span><span class="num">4–6 h</span></div>
+</div>
+<table class="data">
+  <tbody>
+    <tr><td><code>#item-a</code></td><td>"Lorem ipsum dolor sit amet"</td><td class="remark">fallback A</td></tr>
+    <tr><td><code>#item-b</code></td><td>…</td><td class="remark">fallback A</td></tr>
+  </tbody>
+  <tbody>
+    <tr><td><code>#item-a</code></td><td>"Consectetur adipiscing elit"</td><td class="remark">the second one</td></tr>
+    <tr><td><code>#item-c</code></td><td>"Sed do eiusmod"</td><td></td></tr>
+  </tbody>
+</table>
+<pre><code>bridge --read page.html</code></pre>
+<figure><img src="/System/Library/Desktop Pictures/Solid Colors/Silver.png" alt=""><figcaption>A local image by absolute path</figcaption></figure>
+<pre><code class="language-diff">- $items = $page->children();
++ $items = $page->children()->listed();</code></pre>
+<pre><code class="language-php">&lt;?php return $page->children()->listed();</code></pre>
+<div class="bars">
+  <div class="bar" style="--v: 100"><span>Grid</span><b>1.9 s</b></div>
+  <div class="bar" style="--v: 63" data-tone="warn"><span>List</span><b>1.2 s</b></div>
+</div>
+<hr>
+
+<h2>Screenshots</h2>
+<div class="shots">
+  <figure><img src="/System/Library/Desktop Pictures/Solid Colors/Silver.png" alt=""><figcaption>320</figcaption></figure>
+  <figure><img src="/System/Library/Desktop Pictures/Solid Colors/Stone.png" alt=""><figcaption>768</figcaption></figure>
+</div>
+<div class="wipe">
+  <img src="/System/Library/Desktop Pictures/Solid Colors/Silver.png" alt="">
+  <img src="/System/Library/Desktop Pictures/Solid Colors/Stone.png" alt="">
+  <input type="range" min="0" max="100" value="50" aria-label="Wipe">
+</div>
+
+<h2>Draft</h2>
+<pre class="draft" id="draft">Hallo Alex,
+
+Lorem ipsum für März sit da.</pre>
+<div class="actions">
+  <button data-copy="#draft" class="primary">Copy</button>
+  <button data-send>Send</button>
+</div>
+</body>
+</html>

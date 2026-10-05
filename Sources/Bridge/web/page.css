@@ -1,0 +1,235 @@
+:root {
+  color-scheme: light dark;
+  --bridge-accent: AccentColor;
+  --bridge-text: CanvasText;
+  --bridge-muted: color-mix(in srgb, CanvasText 55%, transparent);
+  --bridge-line: color-mix(in srgb, CanvasText 14%, transparent);
+  --bridge-panel: color-mix(in srgb, CanvasText 4%, transparent);
+  --bridge-radius: 8px;
+}
+
+html {
+  background: Canvas;
+  color: var(--bridge-text);
+  font: 13px/1.5 -apple-system, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  padding: 28px 32px 48px;
+  max-width: 880px;
+}
+
+h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 6px; }
+h2 { font-size: 15px; font-weight: 600; margin: 28px 0 8px; }
+h3 { font-size: 13px; font-weight: 600; margin: 18px 0 6px; }
+p, ul, ol { margin: 0 0 10px; }
+a { color: var(--bridge-accent); }
+hr { border: 0; border-top: 1px solid var(--bridge-line); margin: 24px 0; }
+code, pre, kbd { font: 12px/1.45 ui-monospace, SF Mono, Menlo, monospace; }
+pre { background: var(--bridge-panel); border-radius: var(--bridge-radius); padding: 12px 14px; overflow: auto; }
+code:not(pre code) { background: var(--bridge-panel); padding: 1px 5px; border-radius: 4px; }
+img, video { max-width: 100%; height: auto; border-radius: 4px; }
+figure { margin: 0 0 12px; }
+figcaption { color: var(--bridge-muted); font-size: 12px; margin-top: 4px; }
+table { border-collapse: collapse; width: 100%; margin: 0 0 12px; }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--bridge-line); vertical-align: top; }
+th { font-weight: 600; color: var(--bridge-muted); font-size: 12px; }
+small, .muted { color: var(--bridge-muted); }
+
+label { display: block; margin: 0 0 6px; }
+input, select, textarea, button {
+  font: inherit;
+  color: inherit;
+  accent-color: var(--bridge-accent);
+}
+input[type=text], input[type=number], input[type=url], input[type=email], input[type=search], textarea {
+  background: var(--bridge-panel);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 5px 8px;
+}
+select {
+  background: Field;
+  border: 1px solid var(--bridge-line);
+  border-radius: 6px;
+  padding: 5px 8px;
+}
+textarea { width: 100%; box-sizing: border-box; min-height: 72px; resize: vertical; }
+input:focus-visible, textarea:focus-visible, select:focus-visible, button:focus-visible, [data-record][data-value]:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--bridge-accent) 45%, transparent);
+  outline-offset: 1px;
+}
+
+button, .button {
+  background: var(--bridge-panel);
+  border: 1px solid var(--bridge-line);
+  border-radius: 6px;
+  padding: 4px 12px;
+  cursor: default;
+}
+button:active { filter: brightness(0.92); }
+[data-send], .primary {
+  background: var(--bridge-accent);
+  border-color: transparent;
+  color: white;
+  font-weight: 500;
+}
+html[data-bridge-status="sent"] [data-send], html[data-bridge-readonly] [data-send] { opacity: 0.5; pointer-events: none; }
+
+.options { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin: 0 0 16px; }
+.options.stack { grid-template-columns: 1fr; }
+[data-record][data-value]:not(.color, [data-send]) {
+  display: block;
+  border: 1px solid var(--bridge-line);
+  border-radius: var(--bridge-radius);
+  padding: 12px 14px;
+  cursor: default;
+  background: Canvas;
+  transition: border-color 80ms, box-shadow 80ms;
+}
+[data-record][data-value]:not(.color, [data-send]):hover { border-color: color-mix(in srgb, CanvasText 30%, transparent); }
+[data-record][data-value][data-selected]:not(.color, [data-send]) {
+  border-color: var(--bridge-accent);
+  box-shadow: 0 0 0 1px var(--bridge-accent) inset;
+}
+[data-record][data-value] > :first-child { margin-top: 0; }
+[data-record][data-value] > :last-child { margin-bottom: 0; }
+[data-record][data-value] img { display: block; width: 100%; margin-bottom: 8px; }
+[data-record][data-value] strong, [data-record][data-value] b { display: block; margin-bottom: 2px; }
+
+.row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+/* Values sit right on the label's first baseline so a column of them reads down. */
+.row.between { justify-content: space-between; align-items: baseline; flex-wrap: nowrap; }
+.row.between > :first-child { flex: 1 1 auto; min-width: 0; }
+.num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.card { border: 1px solid var(--bridge-line); border-radius: var(--bridge-radius); padding: 12px 14px; margin: 0 0 12px; }
+.card > :first-child { margin-top: 0; }
+.card > :last-child { margin-bottom: 0; }
+.card > hr { margin: 10px 0; }
+table.data { width: auto; }
+.data th, .data td { padding: 3px 18px 3px 0; }
+.data .remark { color: var(--bridge-muted); }
+.data tbody + tbody > tr:first-child > td { padding-top: 16px; }
+.actions { display: flex; gap: 8px; margin-top: 24px; align-items: center; }
+.compare { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.evidence { background: var(--bridge-panel); border-radius: var(--bridge-radius); padding: 10px 12px; margin: 8px 0; }
+.draft { white-space: pre-wrap; background: var(--bridge-panel); border-radius: var(--bridge-radius); padding: 14px 16px; }
+/* A surface inside a surface paints nothing, so composing documented classes
+   never gives a box in a box with doubled padding. Fields and buttons inside a
+   panel get a Field background so they do not sink into it. */
+:is(.evidence, .draft) :is(pre, .draft, .evidence) { background: none; padding: 0; border-radius: 0; margin: 6px 0 0; }
+:is(.evidence, .draft) :is(pre, .draft, .evidence):first-child { margin-top: 0; }
+:is(.evidence, .draft) code:not(pre code) { background: none; padding: 0 4px; border: 1px solid var(--bridge-line); }
+:is(.evidence, .draft) :is(input[type=text], input[type=number], input[type=url], input[type=email], input[type=search], textarea, button, .button) { background: Field; border-color: var(--bridge-line); }
+
+.bridge-previous {
+  display: block;
+  color: var(--bridge-muted);
+  font-size: 12px;
+  margin: -6px 0 12px;
+}
+.bridge-previous::before { content: "Last time: "; }
+.dials > .bridge-previous { margin: 0 0 4px 10px; }
+.bridge-frame-refused { color: var(--bridge-muted); font-size: 12px; margin: 0 0 6px; }
+
+.bridge-md blockquote { margin: 0 0 10px; padding: 2px 14px; border-left: 3px solid var(--bridge-line); color: var(--bridge-muted); }
+.bridge-md input[type=checkbox] { margin-right: 6px; }
+
+.wipe { position: relative; display: block; margin: 0 0 12px; --wipe: 50%; }
+.wipe img { display: block; width: 100%; margin: 0; }
+.wipe img + img { position: absolute; inset: 0; clip-path: inset(0 0 0 var(--wipe)); }
+.wipe::after { content: ""; position: absolute; top: 0; bottom: 0; left: var(--wipe); width: 2px; margin-left: -1px; background: var(--bridge-accent); pointer-events: none; }
+.wipe input[type=range] { position: absolute; inset: auto 0 0 0; width: 100%; margin: 0; opacity: 0; height: 100%; top: 0; cursor: ew-resize; }
+.shots { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); margin: 0 0 12px; }
+.shots figure { margin: 0; }
+.shots img { border: 1px solid var(--bridge-line); }
+
+.doc-text-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 10px; }
+.doc-text { margin: 0; font: 13px/1.55 -apple-system, system-ui, sans-serif; }
+.doc-image { margin: 0; text-align: center; }
+.doc-image img { max-width: 100%; height: auto; border-radius: 6px; box-shadow: 0 0 0 1px var(--bridge-line); }
+.doc-svg svg { display: block; width: 100%; height: auto; max-height: calc(100vh - 80px); }
+
+.token.comment, .token.prolog, .token.doctype, .token.cdata { color: var(--bridge-muted); }
+.token.punctuation { color: color-mix(in srgb, CanvasText 60%, transparent); }
+.token.property, .token.tag, .token.constant, .token.symbol, .token.keyword, .token.atrule { color: color-mix(in srgb, #a626a4 80%, CanvasText); }
+.token.selector, .token.attr-name, .token.string, .token.char, .token.builtin, .token.inserted { color: color-mix(in srgb, #50a14f 80%, CanvasText); }
+.token.number, .token.boolean, .token.attr-value, .token.function, .token.class-name { color: color-mix(in srgb, #4078f2 80%, CanvasText); }
+.token.operator, .token.entity, .token.url, .token.variable, .token.deleted { color: color-mix(in srgb, #e45649 80%, CanvasText); }
+.token.important, .token.bold { font-weight: 600; }
+.language-diff > .token.inserted, .language-diff > .token.deleted { display: block; margin: 0 -14px; padding: 0 14px; color: inherit; }
+.language-diff > .token.inserted { background: color-mix(in srgb, #50a14f 14%, transparent); }
+.language-diff > .token.deleted { background: color-mix(in srgb, #e45649 14%, transparent); }
+.language-diff .token.prefix { display: inline; color: var(--bridge-muted); }
+.language-diff .token.coord { color: var(--bridge-muted); }
+
+.bars { display: grid; gap: 6px; margin: 0 0 12px; }
+.bar { display: grid; grid-template-columns: minmax(80px, 1fr) 4fr auto; gap: 10px; align-items: center; font-size: 12px; }
+.bar::after { content: ""; grid-column: 2; height: 12px; border-radius: 3px; background: var(--bridge-accent); width: calc(var(--v, 0) * 1%); order: 1; }
+.bar > span { grid-column: 1; }
+.bar > b { grid-column: 3; order: 2; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--bridge-muted); }
+.bar[data-muted]::after { background: var(--bridge-line); }
+
+.dials { display: grid; gap: 4px; margin: 0 0 16px; }
+.dial { position: relative; display: grid; grid-template-columns: 1fr auto; align-items: center; height: 28px; padding: 0 10px; margin: 0; border-radius: 6px; background: var(--bridge-panel); overflow: hidden; --fill: 0%; }
+.dial::before { content: ""; position: absolute; inset: 0; width: var(--fill); background: color-mix(in srgb, var(--bridge-accent) 24%, transparent); pointer-events: none; }
+.dial > span, .dial > output { position: relative; z-index: 1; pointer-events: none; font-size: 12px; }
+.dial > output { color: var(--bridge-muted); font-variant-numeric: tabular-nums; }
+.dial > input[type=range] { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: ew-resize; -webkit-appearance: none; }
+/* A dial that records wears the accent at rest; one that only drives a preview is grey. */
+.dial:not(:has(input[data-record]))::before { background: color-mix(in srgb, var(--bridge-muted) 22%, transparent); }
+/* Once it holds an answer, a dot at the readout says so. */
+.dial:has(input[data-answered]) > output::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--bridge-accent); vertical-align: 1px; }
+:is(input:not([type=range]):not([type=checkbox]):not([type=radio]), textarea, select)[data-answered] { box-shadow: inset 2px 0 0 var(--bridge-accent); }
+.dial:focus-within { outline: 2px solid color-mix(in srgb, var(--bridge-accent) 45%, transparent); outline-offset: 1px; }
+
+.bridge-color { display: grid; grid-template-columns: 56px 1fr; gap: 10px 12px; margin: 0 0 16px; align-items: start; }
+.bridge-swatch { width: 56px; height: 96px; border-radius: 8px; box-shadow: 0 0 0 1px var(--bridge-line) inset; grid-row: 1 / 3; }
+.bridge-color-dials { display: grid; gap: 4px; }
+.bridge-color-dial::before { background: none; }
+.bridge-color-dial { --dial-l: 0.7; --dial-c: 0.12; --dial-h: 250; }
+.bridge-color-dial:has(input[name=l]) { background: linear-gradient(to right, oklch(0 var(--dial-c) var(--dial-h)), oklch(1 var(--dial-c) var(--dial-h))); }
+.bridge-color-dial:has(input[name=c]) { background: linear-gradient(to right, oklch(var(--dial-l) 0 var(--dial-h)), oklch(var(--dial-l) 0.4 var(--dial-h))); }
+.bridge-color-dial:has(input[name=h]) { background: linear-gradient(to right in oklch longer hue, oklch(var(--dial-l) var(--dial-c) 0), oklch(var(--dial-l) var(--dial-c) 360)); }
+.bridge-color-dial::after { content: ""; position: absolute; top: 0; bottom: 0; left: var(--fill); width: 2px; margin-left: -1px; background: Canvas; box-shadow: 0 0 0 1px CanvasText; pointer-events: none; }
+.bridge-color-dial > span, .bridge-color-dial > output { color: CanvasText; text-shadow: 0 0 3px Canvas, 0 0 3px Canvas; }
+.bridge-color-read { display: flex; gap: 10px; align-items: center; font-size: 12px; }
+.bridge-color-read .bridge-hex { width: 84px; font: 12px ui-monospace, SF Mono, Menlo, monospace; background: var(--bridge-panel); border: 1px solid transparent; border-radius: 6px; padding: 3px 6px; color: inherit; }
+.bridge-color-read code { font-size: 12px; }
+.bridge-color-read small { color: var(--bridge-muted); }
+
+fieldset.options { border: 0; padding: 0; margin: 0 0 16px; min-width: 0; }
+.options > legend { font-weight: 600; margin: 0 0 8px; padding: 0; grid-column: 1 / -1; }
+.options > :has(> input[type=radio]) {
+  position: relative;
+  display: block;
+  border: 1px solid var(--bridge-line);
+  border-radius: var(--bridge-radius);
+  padding: 12px 14px 12px 36px;
+  background: Canvas;
+  transition: border-color 80ms, box-shadow 80ms;
+}
+.options > :has(> input[type=radio]):hover { border-color: color-mix(in srgb, CanvasText 30%, transparent); }
+.options > :has(> input[type=radio]:checked) { border-color: var(--bridge-accent); box-shadow: 0 0 0 1px var(--bridge-accent) inset; }
+.options > :has(> input[type=radio]) > input[type=radio] { position: absolute; left: 12px; top: 15.5px; margin: 0; }
+.options > :has(> input[type=radio]) > label { display: block; font-weight: 600; margin: 0 0 2px; }
+.options > :has(> input[type=radio]) > label + span { display: block; }
+
+.metrics { display: grid; gap: 2px; margin: 0 0 12px; max-width: 460px; }
+.metrics > div { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; padding: 5px 0; border-bottom: 1px solid var(--bridge-line); font-size: 12px; }
+.metrics dt { color: var(--bridge-muted); }
+.metrics dd { margin: 0; font-variant-numeric: tabular-nums; text-align: right; }
+
+.bar[data-tone="warn"]::after { background: #d9822b; }
+.bar[data-tone="bad"]::after { background: #d9534f; }
+
+details { margin: 0 0 10px; }
+details > summary { font-weight: 600; cursor: default; }
+
+.swatches { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 12px; }
+.swatches [data-color] { width: 26px; height: 26px; padding: 0; border: 1px solid var(--bridge-line); border-radius: 6px; cursor: default; }
+.swatches [data-color][aria-pressed="true"] { box-shadow: 0 0 0 2px Canvas, 0 0 0 4px var(--bridge-accent); }
+.swatches input { width: 84px; font: 12px ui-monospace, SF Mono, Menlo, monospace; }

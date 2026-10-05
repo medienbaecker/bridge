@@ -1,0 +1,304 @@
+<meta charset="utf-8">
+<title>Demo: the script</title>
+<style>
+:root {
+  --paper: Canvas;
+  --ink: CanvasText;
+  --ink-soft: color-mix(in srgb, CanvasText 72%, transparent);
+  --ink-faint: color-mix(in srgb, CanvasText 45%, transparent);
+  --rule: color-mix(in srgb, CanvasText 14%, transparent);
+  --rule-strong: color-mix(in srgb, CanvasText 30%, transparent);
+  --accent: AccentColor;
+  --warn: color-mix(in srgb, #c98a12 80%, CanvasText);
+  --bad: color-mix(in srgb, #d0453b 80%, CanvasText);
+}
+
+.howto { margin: 0 0 10px; font-size: 12.5px; color: var(--ink-faint); }
+.howto summary { cursor: default; list-style: none; color: var(--ink-faint); }
+.howto summary::-webkit-details-marker { display: none; }
+.howto summary::before { content: "?"; display: inline-grid; place-items: center;
+  width: 15px; height: 15px; margin-right: 6px; border-radius: 50%;
+  border: 1px solid var(--rule-strong); font-size: 10px; }
+.howto[open] summary { color: var(--ink-soft); }
+.howto p { margin: 6px 0 0 21px; line-height: 1.5; }
+.howto kbd { font: inherit; border: 1px solid var(--rule); border-radius: 4px; padding: 0 4px; }
+
+  .tools { position: sticky; top: 0; z-index: 3; display: flex; gap: 8px; align-items: center; justify-content: flex-end; padding: 8px 0; background: var(--paper); border-bottom: 1px solid var(--rule); font-size: 12px; color: var(--ink-faint); }
+  .tools .bar { margin-left: auto; display: flex; gap: 14px; }
+  .tools .bar b { color: var(--ink); }
+  .page { max-width: 816px; padding-left: 56px; box-sizing: border-box; }
+  #doc { position: relative; padding: 28px 0 45vh; font-size: 19px; line-height: 1.55; outline: none; }
+  #doc p, #doc div { margin: 0 0 22px; min-height: 1.55em; contain: layout; }
+  #doc h2 { font-size: 28px; font-weight: 700; margin: 44px 0 14px; padding: 0; border: 0; }
+  #doc > :first-child { margin-top: 0; }
+  .plus { position: absolute; left: -52px; width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--rule-strong); background: var(--paper); color: var(--ink-soft); font-size: 22px; line-height: 1; display: none; place-items: center; cursor: pointer; z-index: 2; }
+  .plus.on { display: grid; }
+  .plus:hover { border-color: var(--ink); color: var(--ink); }
+  .menu { position: absolute; left: -12px; display: none; gap: 6px; z-index: 3; padding: 6px; border-radius: 999px; background: var(--paper); border: 1px solid var(--rule); box-shadow: 0 6px 24px rgba(0,0,0,.12); }
+  .menu.on { display: flex; }
+  .menu button { font-size: 12px; }
+  .th { position: relative; display: inline-block; vertical-align: middle; width: 180px; aspect-ratio: 16/10; margin: 2px 6px 2px 0; border-radius: 3px; overflow: hidden; background: #000; cursor: grab; user-select: none; contain: layout paint; }
+  .th.dragging { opacity: .35; }
+  .drop-mark { display: inline-block; width: 3px; height: 1.2em; vertical-align: middle; background: var(--accent); border-radius: 2px; }
+  .th img { display: block; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+  .th span { position: absolute; left: 4px; bottom: 4px; font-size: 11px; padding: 2px 5px; border-radius: 2px; background: rgba(0,0,0,.7); color: #fff; }
+  .th .x { position: absolute; top: 4px; right: 4px; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; line-height: 1; background: rgba(0,0,0,.7); color: #fff; cursor: pointer; opacity: 0; }
+  .th:hover .x { opacity: 1; }
+  .th.built { outline: 1.5px solid var(--accent); }
+  .th.broken { border: 1.5px solid var(--bad); background: transparent; }
+  .th.broken .t { padding: 10px; font-size: 12px; color: var(--bad); }
+  .th.state span { background: var(--ink); }
+  .th.built span { background: var(--accent); color: var(--paper); }
+  .th.draft { border: 1.5px dashed var(--accent); background: transparent; transition: width .15s; }
+  .th.draft:focus-within { width: 100%; aspect-ratio: auto; min-height: 120px; display: block; margin: 6px 0; }
+  .th.draft:focus-within .t { font-size: 15px; line-height: 1.5; padding: 12px 14px 28px; height: auto; min-height: 96px; overflow: visible; }
+  .th.draft .t { padding: 8px 10px 22px; font-size: 12.5px; line-height: 1.35; white-space: pre-wrap; outline: none; height: 100%; overflow: auto; user-select: text; cursor: text; }
+  .th.draft .t:empty::before { content: 'what is in this item?'; color: var(--ink-faint); }
+  .th.draft span { background: var(--accent); color: var(--paper); }
+  .th.dup { outline: 2px solid var(--warn); }
+  .th.sel { outline: 2px solid var(--ink); }
+  .big { position: fixed; inset: 0; z-index: 50; display: none; place-items: center; background: rgba(0,0,0,.88); cursor: zoom-out; }
+  .big.on { display: grid; }
+  .big img { max-width: 92vw; max-height: 82vh; border-radius: 4px; }
+  .big p { margin: 10px 0 0; color: #fff; font-size: 14px; text-align: center; }
+  .picker { width: min(96vw, 1400px); max-height: 90vh; overflow: auto; padding: 16px; border-radius: 10px; background: var(--paper); cursor: default; }
+  .picker h2 { margin: 0 0 10px; font-size: 13px; }
+  .picker .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 8px; }
+  .picker .th { width: auto; margin: 0; cursor: copy; display: block; }
+  .picker .th.used { opacity: .35; }
+  .picker .th:hover, .picker .th:focus-visible { outline: 2px solid var(--accent); }
+  .picker .th i { position: absolute; inset: auto 0 0 0; padding: 3px 5px; font-size: 10.5px; line-height: 1.2; background: rgba(0,0,0,.72); color: #fff; font-style: normal; }
+  .picker .th span { bottom: auto; top: 4px; }
+  #lock { display: none; margin: 10px 0; padding: 10px 14px; border-radius: 8px; background: #b3261e; color: #fff; font-size: 14px; }
+  body.locked #doc { opacity: .75; }
+</style>
+
+<div class="page">
+  <details class="howto">
+    <summary>How this works</summary>
+    <p>Write. On an empty line a <b>+</b> appears: item, block, or part.
+    <kbd>⌘K</kbd> picks an item anywhere. Click an image to see it big, hover it for ×.</p>
+  </details>
+  <div class="tools">
+    <span class="bar" id="bar"></span>
+  </div>
+  <div style="position: relative">
+    <button type="button" class="plus" id="plus" aria-label="Insert">+</button>
+    <div class="menu" id="menu"><button type="button" id="pick">item</button><button type="button" id="draft">block</button><button type="button" id="section">part</button></div>
+    <div id="doc" contenteditable="true" spellcheck="false" autocorrect="off" autocapitalize="off" writingsuggestions="false" aria-label="The document"></div>
+  </div>
+  <div class="big" id="big"></div>
+</div>
+
+<script>
+(function () {
+  const IMAGES = 'images-s';
+  const FULL = 'images';
+  const ITEMS = {
+    1:'Item 1',2:'Item 2',3:'Item 3',4:'Item 4',5:'Item 5',6:'Item 6',
+    7:'Item 7',8:'Item 8',9:'Item 9',10:'Item 10',11:'Item 11',12:'Item 12',
+    13:'Item 13',14:'Item 14',15:'Item 15',16:'Item 16',17:'Item 17',18:'Item 18',
+    19:'Item 19',20:'Item 20',21:'Item 21',22:'Item 22',23:'Item 23',24:'Item 24',
+    25:'Item 25',26:'Item 26',27:'Item 27',28:'Item 28',29:'Item 29',30:'Item 30',
+    31:'Item 31',32:'Item 32',33:'Item 33',34:'Item 34',35:'Item 35',36:'Item 36',
+    37:'Item 37',38:'Item 38',39:'Item 39',40:'Item 40',41:'Item 41',42:'Item 42',
+    43:'Item 43',44:'Item 44',45:'Item 45',46:'Item 46',47:'Item 47',48:'Item 48',
+    49:'Item 49',50:'Item 50',51:'Item 51',52:'Item 52',53:'Item 53',54:'Item 54',
+    55:'Item 55',56:'Item 56',57:'Item 57',58:'Item 58',59:'Item 59',60:'Item 60',
+    61:'Item 61',62:'Item 62',63:'Item 63',64:'Item 64',65:'Item 65',66:'Item 66',
+    67:'Item 67',
+    D1:'Block 1',D2:'Block 2',D3:'Block 3',D4:'Block 4',D5:'Block 5',D6:'Block 6',D7:'Block 7',
+    'D7@0':'Block 7, step 1','D7@1':'Block 7, step 2','D7@2':'Block 7, step 3',D9:'Block 9',D8:'Block 8',
+    '1@0':'Item 1, first state',
+  };
+  const BUILT = { D2: 'placeholder block two', D3: 'placeholder block three', D5: 'placeholder block five' };
+  const norm = t => t.toLowerCase().replace(/\s+/g, ' ').trim();
+  const builtFor = text => { const n = norm(text); return Object.keys(BUILT).find(k => n.startsWith(BUILT[k])) || null; };
+  const isKey = n => /^D/.test(String(n)) || /@/.test(String(n));
+  const keyOfStr = v => isKey(v) ? v : (ITEMS[+v] ? +v : String(v));
+  const file = n => { const m = String(n).match(/^(\d+)@(\d+)$/); return `item-${m ? m[1].padStart(2, '0') + '@' + m[2] : /^D/.test(String(n)) ? n : String(n).padStart(2, '0')}.png`; };
+  const REV = 6;
+  const INITIAL = "# Document\n\nLorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod. Dolor\n\nTempor incididunt ut labore et dolore magna aliqua ut enim ad. Minim veniam quis nostrud exercitation ullamco laboris aliquip\n\nNisi ut aliquip ex ea commodo consequat duis aute irure dolor. In reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla. Pariatur excepteur pariatur\n\nSint occaecat cupidatat non proident sunt in culpa qui incididunt\n\nOfficia deserunt mollit anim id est laborum lorem ipsum dolor sit. Amet consectetur ut\n\nAdipiscing elit sed do eiusmod pariatur\n\n[D2]\n\nTempor incididunt ut labore et dolore magna aliqua ut enim ad. Minim veniam quis nostrud exercitation ullamco laboris nisi ut aliquip ex. Consequat\n\nEa commodo consequat duis aute irure dolor incididunt\n\nIn reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla. Pariatur\n\n[D3]\n\nPariatur excepteur sint occaecat cupidatat non proident sunt in culpa qui. Officia deserunt mollit anim id est laborum lorem ipsum dolor sit. Amet consectetur ut\n\nAdipiscing elit sed do eiusmod tempor incididunt ut labore et dolore. Magna incididunt\n\nAliqua ut enim ad minim veniam quis nostrud exercitation ullamco exercitation\n\n[36][37]\n\nLaboris nisi ut aliquip ex ea commodo consequat duis consectetur\n\n[D4]\n\nAute irure dolor in reprehenderit sed\n\nIn voluptate velit esse cillum dolore eu fugiat nulla aliquip\n\n[1]\n\nPariatur excepteur sint occaecat cupidatat non proident sunt in culpa qui. Officia consectetur\n\nDeserunt mollit anim id est laborum lorem ipsum dolor sit amet. Consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et. Dolore magna aliqua ut enim ad minim veniam quis nostrud exercitation. Ullamco laboris nisi incididunt\n\n[3]\n\nUt aliquip ex ea commodo consequat duis aute irure dolor in. In exercitation\n\n[2]\n\nVoluptate velit esse cillum dolore eu fugiat nulla pariatur excepteur sint. Occaecat cupidatat non proident sunt in culpa qui officia deserunt mollit. Anim id est laborum lorem ipsum dolor sit amet consectetur adipiscing. Elit sed do eiusmod tempor incididunt ut labore et dolore magna. Aliqua ut enim ad minim veniam quis nostrud exercitation ullamco laboris. Nisi ut aliquip ex ea commodo exercitation\n\nConsequat duis aute irure dolor in reprehenderit in voluptate velit esse. Consectetur\n\n---\n\nCillum dolore eu fugiat nulla pariatur excepteur sint occaecat cupidatat non. Proident consequat\n\nSunt in culpa qui officia aliquip\n\n[1@0]\n\nDeserunt consequat\n\nMollit anim id est laborum lorem ipsum dolor sit amet consectetur. Adipiscing elit sed do eiusmod tempor incididunt sed\n\n[25]\n\nUt labore et dolore magna aliqua ut enim ad minim veniam. Quis nostrud dolor\n\n[34][33] [28]\n\nExercitation ullamco laboris nisi ut aliquip ex ea commodo consequat duis. Aute irure dolor in reprehenderit in voluptate velit esse cillum exercitation\n\nDolore eu fugiat nulla pariatur excepteur sint occaecat cupidatat exercitation\n\n[29]\n\nNon proident sunt in culpa qui officia deserunt mollit anim id. Est laborum lorem ipsum dolor sit amet consectetur adipiscing elit sed. Do eiusmod tempor incididunt ut labore et dolore magna aliqua ut. Enim ad minim veniam quis nostrud exercitation ullamco laboris nisi ut. Aliquip ex ea commodo pariatur\n\n[D6]\n\nConsequat duis aute irure dolor in reprehenderit in voluptate velit esse. Cillum dolore eu fugiat nulla pariatur excepteur sint occaecat cupidatat non. Proident sunt in culpa qui officia deserunt mollit anim id est. Laborum lorem ipsum dolor sit amet consectetur adipiscing elit sed do. Eiusmod tempor pariatur\n\n[D7@0]\n\nIncididunt ut labore et dolore magna aliqua ut enim ad minim. Veniam quis nostrud exercitation\n\n[D9]\n\n[D7@1]\n\nExercitation ullamco laboris nisi ut aliquip ex ea commodo consequat duis. Aute irure dolor in reprehenderit in voluptate exercitation\n\n[D7@2]\n\nVelit esse cillum dolore eu fugiat nulla pariatur excepteur sint occaecat. Cupidatat non proident sunt in culpa qui officia deserunt mollit anim. Id est laborum lorem ipsum dolor sit amet consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam quis nostrud exercitation ullamco laboris nisi. Ut aliquip ex ea commodo consequat duis aute irure dolor in. Reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat sed\n\n[D8]\n\nNon proident sunt in culpa qui officia deserunt mollit anim id. Est laborum lorem ipsum dolor sit amet consectetur adipiscing elit sed. Do eiusmod tempor incididunt ut labore et dolore magna aliqua ut. Enim ad minim veniam quis nostrud consectetur\n\n[30]\n\nExercitation ullamco laboris nisi ut aliquip ex ea commodo consequat duis. Aute irure dolor in reprehenderit in voluptate velit esse cillum dolore. Eu fugiat nulla pariatur excepteur sint occaecat cupidatat non proident sunt. In culpa qui officia deserunt mollit anim id est laborum lorem. Ipsum dolor sit amet consectetur adipiscing amet\n\n[52]\n\nElit sed do eiusmod tempor incididunt ut labore et dolore magna. Aliqua ut enim ad minim veniam quis nostrud exercitation ullamco laboris. Nisi ut aliquip ex ea commodo consequat duis aute irure dolor. In reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla. Pariatur excepteur sint occaecat cupidatat non proident sunt in culpa qui. Officia deserunt mollit anim id est laborum lorem ipsum dolor sit. Amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore. Et dolore magna aliqua ut enim ad minim veniam quis nostrud. Exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat duis. Aute irure dolor in reprehenderit in voluptate velit esse cillum dolore. Eu fugiat tempor\n\n[39]\n\n# Part 1\n\nNulla pariatur excepteur sint occaecat cupidatat non proident sunt in culpa. Qui officia deserunt mollit anim id est laborum lorem ipsum dolor. Sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut. Labore et dolore magna aliqua ut enim ad minim veniam quis. Nostrud tempor\n\n[5]\n\n## Part A:\n\n[7] [6][8][14]\n\nExercitation ullamco laboris nisi ut aliquip ex ea commodo consequat duis. Aliquip\n\n- Aute irure dolor in reprehenderit in voluptate velit esse cillum dolore. Eu fugiat aliquip\n\n- Nulla aliquip\n\n[10][12][13]\n\n## Part B\n\n- Pariatur excepteur sint occaecat cupidatat non proident sunt in culpa qui. Officia deserunt mollit anim id est laborum lorem ipsum dolor sit. Amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore. Et dolore magna aliqua ut enim ad minim veniam quis nostrud. Exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat duis. Aute irure dolor in reprehenderit in voluptate velit esse cillum dolore. Eu fugiat nulla pariatur excepteur sint occaecat cupidatat non proident sunt. In culpa qui officia deserunt mollit anim id est laborum lorem. Ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor. Incididunt ut labore et dolore magna aliqua ut enim ad minim. Veniam quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea. Commodo consequat duis aute irure dolor in reprehenderit in voluptate velit. Esse cillum dolore eu fugiat nulla pariatur excepteur sint occaecat incididunt\n\n- Cupidatat non proident aliquip\n\n- Sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum exercitation\n\n[16] [19][17][61]\n\n- Dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt. Ut labore consectetur\n\n[62]\n\n# Part 3\n\nEt dolore magna aliqua ut enim ad minim veniam quis nostrud. Exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat duis. Aute irure dolor in reprehenderit in voluptate velit esse cillum dolore. Eu fugiat nulla pariatur excepteur sint occaecat cupidatat non proident sunt. In culpa qui officia deserunt mollit anim id est laborum lorem. Ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor. Incididunt ut labore et dolore magna aliqua ut enim ad minim. Veniam quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea. Commodo consequat duis aute irure dolor in reprehenderit in voluptate velit. Esse cillum dolore eu fugiat nulla pariatur excepteur sint occaecat cupidatat. Non proident sunt in culpa qui officia deserunt mollit anim id. Est laborum lorem ipsum dolor sit amet consectetur adipiscing elit sed. Consectetur\n\n[block: Do eiusmod incididunt]\n\nTempor incididunt ut labore et dolore magna aliqua ut enim ad. Minim veniam quis nostrud exercitation ullamco laboris nisi ut aliquip ex. Ea commodo consequat duis aute irure dolor in reprehenderit in voluptate. Velit esse cillum dolore eu fugiat nulla pariatur excepteur sint occaecat. Cupidatat non proident sunt in culpa qui officia deserunt mollit anim. Id est laborum lorem ipsum dolor sit amet consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam quis nostrud exercitation ullamco laboris nisi. Ut aliquip ex ea commodo consequat duis aute irure dolor in. Reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident sunt in culpa qui officia. Deserunt consectetur\n\nMollit anim id est laborum lorem ipsum dolor sit amet consectetur. Adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore. Magna aliqua ut enim ad minim veniam quis nostrud exercitation ullamco. Laboris nisi ut aliquip ex ea commodo consequat duis aute irure. Dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat. Nulla pariatur excepteur sint occaecat cupidatat non proident sunt in culpa. Qui officia deserunt mollit anim id est laborum lorem ipsum dolor. Sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut. Labore et dolore magna aliqua ut enim ad minim veniam quis. Nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum. Dolore eu fugiat nulla pariatur consectetur\n\nExcepteur sint occaecat cupidatat non proident sunt in culpa qui officia. Deserunt mollit anim id est laborum lorem ipsum dolor sit amet. Consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et. Dolore magna aliqua ut enim ad minim veniam quis nostrud exercitation. Ullamco laboris nisi ut aliquip ex ea commodo consequat duis aute. Irure dolor in reprehenderit in voluptate velit esse cillum dolore eu. Fugiat nulla pariatur excepteur sint occaecat cupidatat non proident sunt in. Culpa qui officia deserunt mollit anim id est laborum lorem ipsum. Dolor sit amet consectetur tempor\n\nAdipiscing elit sed do eiusmod tempor incididunt ut labore et dolore. Magna aliqua ut enim ad minim veniam quis nostrud exercitation ullamco. Laboris nisi ut aliquip ex ea commodo consequat duis aute irure. Dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat. Nulla pariatur excepteur sint occaecat cupidatat non proident sunt in culpa. Qui officia deserunt mollit anim id est laborum lorem ipsum dolor. Sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut. Labore et dolore magna aliqua ut enim ad minim veniam quis. Nostrud exercitation ullamco laboris dolor\n\n[56]\n\nNisi ut aliquip ex ea commodo consequat duis aute irure dolor. In reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla. Pariatur excepteur sint occaecat cupidatat non proident sunt in culpa qui. Officia deserunt mollit anim id est laborum lorem ipsum dolor sit. Amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore. Et dolore magna aliqua ut enim ad minim veniam quis nostrud. Exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat duis. Aute irure pariatur\n\nDolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat. Nulla pariatur excepteur sint occaecat cupidatat non proident sunt in culpa. Qui officia deserunt mollit anim id est laborum lorem ipsum dolor. Sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut. Labore et dolore magna aliqua ut enim ad minim veniam quis. Nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum. Dolore eu fugiat nulla pariatur excepteur sint occaecat cupidatat non proident. Sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod. Tempor incididunt ut labore et dolore magna aliqua ut enim ad. Minim veniam quis nostrud exercitation ullamco laboris nisi ut aliquip ex. Ea commodo consequat duis aute irure dolor in reprehenderit in voluptate. Velit esse cillum dolore eu fugiat nulla pariatur excepteur sint occaecat. Cupidatat non proident sunt in culpa qui officia deserunt tempor\n\n# Part 4\n\n[51] [53]\n\n[38]\n\n# Part 5\n\nMollit anim id est laborum lorem ipsum dolor sit amet consectetur. Adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore. Magna aliqua ut enim ad minim veniam quis nostrud exercitation ullamco. Laboris aliquip\n\n[45]\n\nNisi ut aliquip ex ea commodo consequat duis aute irure dolor. In reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla. Pariatur excepteur sint occaecat cupidatat non proident sunt in culpa qui. Officia deserunt mollit anim id est laborum lorem ipsum dolor sit. Amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore. Et dolore magna aliqua ut enim ad minim veniam quis nostrud. Exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat duis. Aute irure dolor in reprehenderit in voluptate velit consequat\n\n[41] [42] [46] [47]\n\n[40] [48] [49] [50]\n\nEsse cillum dolore eu fugiat nulla pariatur excepteur sint occaecat cupidatat. Non proident sunt in culpa qui officia deserunt mollit anim id. Est laborum lorem ipsum dolor sit amet consectetur adipiscing elit sed. Do eiusmod tempor incididunt ut labore et dolore magna aliqua ut. Enim ad minim veniam quis nostrud exercitation ullamco laboris nisi ut. Aliquip ex ea commodo consequat duis aute irure dolor in reprehenderit. In voluptate velit esse cillum dolore eu fugiat nulla pariatur excepteur. Sint occaecat cupidatat non proident sunt in culpa qui officia deserunt. Mollit anim id est laborum lorem ipsum dolor sit amet consectetur. Adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore. Magna aliqua ut enim ad minim veniam quis nostrud exercitation ullamco. Laboris nisi ut aliquip ex ea commodo consequat duis aute irure. Dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat. Nulla pariatur excepteur sint occaecat cupidatat non proident sunt in culpa. Qui officia deserunt mollit anim id est laborum lorem ipsum dolor. Sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut. Labore et dolore magna aliqua ut enim ad minim veniam quis. Nostrud exercitation ullamco laboris nisi ut aliquip ex incididunt\n\n[54] [55] [57]\n\nEa commodo consequat duis aute irure dolor in reprehenderit in voluptate. Velit esse cillum dolore eu fugiat nulla pariatur excepteur sint occaecat. Cupidatat non proident sunt in culpa qui officia consequat\n\nDeserunt mollit pariatur\n\n[58] [59] [60]\n\nAnim id est laborum lorem ipsum dolor sit amet consectetur adipiscing. Elit sed do eiusmod tempor incididunt ut labore et dolore magna. Aliqua ut enim ad minim veniam quis nostrud exercitation ullamco laboris. Nisi ut aliquip ex ea commodo consequat duis aute irure dolor. In reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla. Pariatur excepteur sint occaecat cupidatat non proident sunt in culpa qui. Officia deserunt mollit anim id est laborum lorem ipsum dolor sit. Amet consectetur adipiscing elit sed do eiusmod tempor incididunt exercitation\n\n# Part 6\n\n[62] [63] [64] [65] [66] [67]\n";
+  const doc = document.getElementById('doc'), bar = document.getElementById('bar'), big = document.getElementById('big');
+  const esc = t => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const REF = /\[(D?\d{1,2}(?:@\d+)?|NaN)\]|\[block:([^\]]*)\]/g;
+
+  function itemNode(n) {
+    const f = document.createElement('figure'); f.className = 'th' + (/^D/.test(String(n)) ? ' built' : '') + (/@/.test(String(n)) ? ' state' : ''); f.contentEditable = 'false'; f.draggable = true; f.dataset.n = n; f.title = n + ' ' + (ITEMS[n] || '');
+    if (!ITEMS[n]) { f.classList.add('broken'); f.innerHTML = `<div class="t">no item "${esc(String(n))}"<br><small>click to pick one</small></div><b class="x" title="remove">×</b>`; f.style.cursor = 'pointer'; return f; }
+    f.innerHTML = `<img src="${IMAGES}/${file(n)}" alt="Item ${n}: ${esc(ITEMS[n] || '')}"><span>${n}</span><b class="x" title="remove">×</b>`;
+    return f;
+  }
+  function blockNode(text) {
+    const f = document.createElement('figure'); f.className = 'th draft'; f.contentEditable = 'false'; f.draggable = true;
+    f.addEventListener('mousedown', e => { f.draggable = !e.target.closest('.t'); }, true);
+    f.innerHTML = `<div class="t" contenteditable="plaintext-only" spellcheck="false"></div><span>block</span><b class="x" title="remove">×</b>`;
+    f.querySelector('.t').textContent = text; return f;
+  }
+  // references with a lost number, restored by the paragraph they followed
+  const REPAIR = [[/marker three/i, 'D3'], [/marker four/i, 'D4'], [/marker start\.?$/i, '1@0']];
+  function fromText(text) {
+    const frag = document.createDocumentFragment(); let prev = '';
+    const folded = text.replace(/\[block:([^\]]*)\]/g, (m, t) => '[block:' + t.replace(/\n/g, '⏎') + ']');
+    folded.split('\n').forEach(line => {
+      if (line.trim() === '') return;
+      if (/^#\s*/.test(line)) { const h = document.createElement('h2'); h.textContent = line.replace(/^#\s*/, ''); frag.appendChild(h); prev = ''; return; }
+      const p = document.createElement('p'); let last = 0;
+      for (const m of line.matchAll(REF)) {
+        if (m.index > last) p.appendChild(document.createTextNode(line.slice(last, m.index)));
+        if (m[1]) { let k = keyOfStr(m[1]); if (k === 'NaN') { const r = REPAIR.find(([re]) => re.test(prev.trim())); k = r ? r[1] : 'NaN'; } p.appendChild(itemNode(k)); }
+        else { const dt = m[2].replace(/⏎/g, '\n').trim(), b = builtFor(dt); p.appendChild(b ? itemNode(b) : blockNode(dt)); }
+        last = m.index + m[0].length;
+      }
+      if (last < line.length) p.appendChild(document.createTextNode(line.slice(last)));
+      frag.appendChild(p); if (line.replace(REF, '').trim()) prev = line.replace(REF, '');
+    });
+    return frag;
+  }
+  function toText() {
+    const out = [];
+    const blockText = el => { let s = ''; el.childNodes.forEach(c => {
+      if (c.nodeType === 3) s += c.textContent;
+      else if (c.classList && c.classList.contains('draft')) s += '[block: ' + c.querySelector('.t').innerText.replace(/\n+$/, '') + ']';
+      else if (c.classList && c.classList.contains('th')) s += '[' + c.dataset.n + ']';
+      else if (c.tagName === 'BR') s += '\n';
+      else s += blockText(c);
+    }); return s; };
+    doc.childNodes.forEach(el => {
+      if (el.nodeType === 3) { if (el.textContent.trim()) out.push(el.textContent.trim(), ''); return; }
+      if (el.tagName === 'H2') { out.push('# ' + el.textContent.trim(), ''); return; }
+      const t = blockText(el).replace(/ /g, ' ').trim(); if (t) out.push(t, '');
+    });
+    return out.join('\n').trim() + '\n';
+  }
+
+  let saveT, lastText = '';
+  function update() {
+    try { update2(); } catch (err) { console.error('update failed', err); }
+  }
+  function update2() {
+    const text = toText(); if (text === lastText) return; lastText = text;
+    const seen = {}, order = [];
+    doc.querySelectorAll('.th[data-n]').forEach(t => { const n = keyOfStr(t.dataset.n); seen[n] = (seen[n] || 0) + 1; order.push(n); t.classList.toggle('dup', seen[n] > 1); });
+    const used = new Set(Object.keys(seen).filter(k => !/^D/.test(k)).map(k => k.split('@')[0])).size, built = Object.keys(seen).filter(k => /^D/.test(k)).length, blocks = doc.querySelectorAll('.th.draft').length, words = (text.replace(REF, '').match(/\S+/g) || []).length;
+    const dups = Object.values(seen).filter(c => c > 1).length;
+    bar.innerHTML = `<span><b>${used}</b> of 67 items</span><span><b>${67 - used}</b> unused</span><span><b>${built}</b> built blocks</span><span><b>${blocks}</b> open blocks</span><span><b>${words}</b> words</span>` + (dups ? `<span style="color:var(--warn)"><b>${dups}</b> twice</span>` : '');
+    clearTimeout(saveT); saveT = setTimeout(() => { if (window.bridge && bridge.set) { bridge.set('script', text, 'The document as written, with [n] item references and [block: …] placeholders'); bridge.set('items-in-order', order, 'Item numbers in the order the script uses them'); bridge.set('rev', REV, 'Revision of the text the agent last wrote into this page'); } }, 1200);
+  }
+  const obs = new MutationObserver(records => {
+    if (!records.some(r => { const t = r.target.nodeType === 1 ? r.target : r.target.parentNode; return !(t && t.closest && t.closest('.bridge-pin, #bridge-composer')); })) return;
+    clearTimeout(obs.t); obs.t = setTimeout(update, 200);
+  });
+
+  const plus = document.getElementById('plus'), menu = document.getElementById('menu');
+  function placePlus() {
+    const s = document.getSelection(); if (!s.rangeCount || !doc.contains(s.anchorNode)) { plus.classList.remove('on'); return; }
+    let n = s.anchorNode; if (n.nodeType === 3) n = n.parentNode; const block = n.closest('#doc > *') || (n === doc ? null : n);
+    if (!block || block.textContent.trim() !== '' || block.querySelector('.th')) { plus.classList.remove('on'); menu.classList.remove('on'); return; }
+    const wrap = doc.parentNode.getBoundingClientRect(), b = block.getBoundingClientRect();
+    plus.style.top = (b.top - wrap.top + b.height / 2 - 18) + 'px'; menu.style.top = (b.top - wrap.top + b.height / 2 - 17) + 'px';
+    plus.classList.add('on');
+  }
+  plus.addEventListener('click', () => { menu.classList.toggle('on'); });
+  doc.addEventListener('keydown', () => menu.classList.remove('on'));
+  let caret = null;
+  const rememberCaret = () => { const s = document.getSelection(); if (s.rangeCount && doc.contains(s.anchorNode)) caret = s.getRangeAt(0).cloneRange(); };
+  const onCaret = () => { rememberCaret(); placePlus(); };
+  doc.addEventListener('keyup', onCaret); doc.addEventListener('mouseup', onCaret); doc.addEventListener('focus', onCaret); let lastBlock = null; document.addEventListener('selectionchange', () => { if (document.activeElement !== doc) return; const s = document.getSelection(); let n = s.anchorNode; if (n && n.nodeType === 3) n = n.parentNode; const b = n && n.closest ? n.closest('#doc > *') : null; if (b !== lastBlock || (b && b.textContent.trim() === '')) { lastBlock = b; placePlus(); } });
+  function insertNode(node) {
+    let r = caret; if (!r) { r = document.createRange(); r.selectNodeContents(doc); r.collapse(false); }
+    r.deleteContents();
+    let host = r.startContainer.nodeType === 1 ? r.startContainer : r.startContainer.parentNode;
+    const inTh = host.closest && host.closest('.th'); if (inTh) { r = document.createRange(); r.setStartAfter(inTh); r.collapse(true); host = inTh.parentNode; }
+    if (host === doc) { const p = document.createElement('p'); p.appendChild(node); r.insertNode(p); }
+    else if (host.tagName === 'H2' || host.closest('h2')) { const h = host.closest('h2'); const p = document.createElement('p'); p.appendChild(node); h.after(p); }
+    else r.insertNode(node);
+    const space = document.createTextNode(' '); node.after(space);
+    const s = document.getSelection(), nr = document.createRange(); nr.setStartAfter(space); nr.collapse(true); s.removeAllRanges(); s.addRange(nr); caret = nr.cloneRange();
+    doc.focus(); update(); placePlus();
+  }
+  document.getElementById('draft').addEventListener('click', () => { menu.classList.remove('on'); const d = blockNode(''); insertNode(d); d.querySelector('.t').focus(); });
+  document.getElementById('section').addEventListener('click', () => {
+    menu.classList.remove('on'); doc.focus(); if (caret) { const s = document.getSelection(); s.removeAllRanges(); s.addRange(caret); }
+    const s = document.getSelection(); const block = s.anchorNode && (s.anchorNode.nodeType === 1 ? s.anchorNode : s.anchorNode.parentNode).closest('h2, p, div');
+    document.execCommand('formatBlock', false, block && block.tagName === 'H2' ? 'p' : 'h2'); update();
+  });
+  doc.addEventListener('click', e => {
+    const x = e.target.closest('.x'); if (x) { x.closest('.th').remove(); update(); return; }
+    const t = e.target.closest('.th[data-n]'); if (!t) return;
+    if (t.classList.contains('broken')) { openPicker(t); return; }
+    showOne(keyOfStr(t.dataset.n));
+  });
+  // the shortcut belongs to the page, not to the document element: the user reaches
+  // for it before the caret is anywhere
+  document.addEventListener('keydown', e => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); openPicker(null); }
+  });
+  doc.addEventListener('keydown', e => {
+    if (e.target.closest('.draft .t')) { e.stopPropagation(); if (e.key === 'Escape') e.target.blur(); }
+  });
+  doc.addEventListener('input', e => { if (e.target.closest && e.target.closest('.draft .t')) update(); });
+  doc.addEventListener('paste', e => { e.preventDefault(); const t = (e.clipboardData || window.clipboardData).getData('text/plain'); document.execCommand('insertText', false, t); });
+
+  let dragEl = null; const mark = document.createElement('span'); mark.className = 'drop-mark'; mark.contentEditable = 'false';
+  const pointRange = (x, y) => document.caretRangeFromPoint ? document.caretRangeFromPoint(x, y) : (document.caretPositionFromPoint ? (p => { const r = document.createRange(); r.setStart(p.offsetNode, p.offset); r.collapse(true); return r; })(document.caretPositionFromPoint(x, y)) : null);
+  doc.addEventListener('dragstart', e => { const t = e.target.closest && e.target.closest('.th'); if (!t || !doc.contains(t)) return; dragEl = t; t.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', t.dataset.n || 'block'); });
+  doc.addEventListener('dragend', () => { dragEl && dragEl.classList.remove('dragging'); dragEl = null; mark.remove(); });
+  doc.addEventListener('dragover', e => {
+    if (!dragEl) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+    let r = pointRange(e.clientX, e.clientY); if (!r || !doc.contains(r.startContainer)) return;
+    let host = r.startContainer.nodeType === 1 ? r.startContainer : r.startContainer.parentNode;
+    const th = host.closest('.th'); if (th) { r = document.createRange(); const rect = th.getBoundingClientRect(); if (e.clientX > rect.left + rect.width / 2) r.setStartAfter(th); else r.setStartBefore(th); r.collapse(true); }
+    if (th === dragEl) return;
+    mark.remove(); r.insertNode(mark);
+  });
+  doc.addEventListener('drop', e => {
+    if (!dragEl) return; e.preventDefault();
+    if (!mark.parentNode) { mark.remove(); return; }
+    const el = dragEl; dragEl = null; el.classList.remove('dragging');
+    mark.replaceWith(el); const sp = document.createTextNode(' '); el.after(sp);
+    if (el.parentNode === doc) { const p = document.createElement('p'); el.replaceWith(p); p.append(el, sp); }
+    doc.querySelectorAll('p:empty, div:empty').forEach(x => { if (!x.querySelector('br')) x.remove(); });
+    update();
+  });
+  function openPicker(replace) {
+    rememberCaret();
+    const used = {}; doc.querySelectorAll('.th[data-n]').forEach(t => used[t.dataset.n] = 1);
+    const tile = n => `<figure class="th${used[n] ? ' used' : ''}" data-n="${n}" tabindex="0" title="${n} ${esc(ITEMS[n])}"><img src="${IMAGES}/${file(n)}" alt="Item ${n}: ${esc(ITEMS[n])}"><span>${n}</span><i>${esc(ITEMS[n])}</i></figure>`;
+    const keys = Object.keys(ITEMS), ds = keys.filter(k => /^D/.test(k)), st = keys.filter(k => /@/.test(k)), ns = keys.filter(k => !isKey(k));
+    big.innerHTML = `<div class="picker"><h2>Click an item to put it at the cursor. Dimmed ones are already in the document. Escape closes.</h2><div class="grid">${ds.map(tile).join('')}</div><h2 style="margin-top:14px">Items at an earlier click</h2><div class="grid">${st.map(tile).join('')}</div><h2 style="margin-top:14px">The deck</h2><div class="grid">${ns.map(tile).join('')}</div></div>`;
+    big.classList.add('on');
+    const pick = n => { big.classList.remove('on'); if (replace) { replace.replaceWith(itemNode(n)); update(); } else insertNode(itemNode(n)); };
+    const keyOf = t => keyOfStr(t.dataset.n);
+    big.querySelectorAll('.th').forEach(t => {
+      t.addEventListener('click', e => { e.stopPropagation(); pick(keyOf(t)); });
+      t.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); pick(keyOf(t)); } });
+    });
+    big.querySelector('.picker').addEventListener('click', e => e.stopPropagation());
+    big.querySelector('.th')?.focus();
+  }
+  document.getElementById('pick').addEventListener('click', () => { menu.classList.remove('on'); openPicker(null); });
+  function showOne(n) { big.innerHTML = `<div><img src="${FULL}/${file(n)}" alt=""><p>${n} ${esc(ITEMS[n])}</p></div>`; big.classList.add('on'); }
+  big.addEventListener('click', () => big.classList.remove('on'));
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && big.classList.contains('on')) big.classList.remove('on'); });
+
+  const lock = document.createElement('div'); lock.id = 'lock';
+  lock.textContent = 'Saving is not available in this Bridge build yet. The text is read-only until it is, so nothing you type can be lost.';
+  document.querySelector('.tools').after(lock);
+  function canSave() { return !!(window.bridge && typeof bridge.set === 'function' && typeof bridge.get === 'function'); }
+  function setLocked(on) { doc.contentEditable = on ? 'false' : 'true'; lock.style.display = on ? 'block' : 'none'; document.body.classList.toggle('locked', on); }
+  let started = false;
+  function start() {
+    if (started) return; started = true;
+    const saved = bridge.get('script'), rev = bridge.get('rev') || 0;
+    doc.replaceChildren(fromText(typeof saved === 'string' && saved.trim() && rev >= REV ? saved : INITIAL));
+    update(); obs.observe(doc, { childList: true, characterData: true, subtree: true });
+    setLocked(false);
+  }
+  function startReadOnly() {
+    doc.replaceChildren(fromText(INITIAL)); setLocked(true);
+    const poll = setInterval(() => { if (canSave()) { clearInterval(poll); (bridge.ready ? bridge.ready(start) : start()); } }, 1500);
+  }
+  if (canSave()) (bridge.ready ? bridge.ready(start) : start()); else startReadOnly();
+})();
+</script>

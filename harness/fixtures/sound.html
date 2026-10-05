@@ -1,0 +1,13 @@
+<!doctype html><html><head><meta charset="utf-8"><title>blob probe</title></head><body><h1>blob probe</h1>
+<script>
+window.probe = async () => {
+  const out = {};
+  const url = (code, type) => URL.createObjectURL(new Blob([code], { type }));
+  try { const ctx = new AudioContext(); await ctx.audioWorklet.addModule(url("registerProcessor('p', class extends AudioWorkletProcessor { process() { return true } })", 'text/javascript')); out.worklet = 'ok'; } catch (e) { out.worklet = String(e); }
+  try { await new Promise((res, rej) => { const w = new Worker(url("postMessage('hi')", 'text/javascript')); w.onmessage = () => res(); w.onerror = (e) => rej(e.message || 'error'); setTimeout(() => rej('timeout'), 2000); }); out.worker = 'ok'; } catch (e) { out.worker = String(e); }
+  try { await import(url("export default 1", 'text/javascript')); out.importBlob = 'ok'; } catch (e) { out.importBlob = String(e); }
+  try { const r = await fetch(url("x", 'text/plain')); out.fetchBlob = r.ok ? 'ok' : r.status; } catch (e) { out.fetchBlob = String(e); }
+  out.origin = location.origin;
+  return out;
+};
+</script></body></html>

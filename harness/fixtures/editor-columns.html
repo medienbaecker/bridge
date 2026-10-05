@@ -1,0 +1,123 @@
+<meta charset="utf-8">
+<title>Demo: four columns</title>
+<style>
+  .cols { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; align-items: start; }
+  .col { border: 1px solid var(--bridge-line); border-radius: 10px; background: var(--bridge-panel); padding: 10px; min-height: 200px; }
+  .col.over { outline: 2px dashed var(--bridge-accent); outline-offset: -2px; }
+  .col h2 { margin: 0 0 8px; font-size: 13px; font-weight: 700; text-transform: none; letter-spacing: 0; color: CanvasText; }
+  .col h2 small { display: block; font-weight: 400; font-size: 11px; color: var(--bridge-muted); margin-top: 2px; }
+  .col.none { grid-column: 1 / -1; min-height: 60px; background: transparent; border-style: dashed; }
+  .col.none .items { display: flex; flex-wrap: wrap; gap: 6px; }
+  .col.none .item { flex: 1 1 240px; }
+  .items { display: flex; flex-direction: column; gap: 6px; min-height: 30px; }
+  .item { padding: 8px 10px; border: 1px solid var(--bridge-line); border-radius: 8px; background: Canvas; cursor: grab; }
+  .item:focus-visible { outline: 2px solid CanvasText; outline-offset: 1px; }
+  .item.dragging { opacity: .35; }
+  .item.doubt { border-left: 3px solid #d9822b; }
+  .claim { margin: 0; font-size: 13px; font-weight: 600; line-height: 1.35; }
+  .refs { margin: 3px 0 0; font-size: 10.5px; color: var(--bridge-muted); line-height: 1.4; }
+  .why { margin: 4px 0 0; font-size: 11px; color: var(--bridge-muted); font-style: italic; }
+  .hint { font-size: 11.5px; color: var(--bridge-muted); margin-top: 14px; }
+</style>
+
+<header>
+    <h1>Four columns, fifteen cards</h1>
+    <p>Lorem ipsum dolor sit amet. Drag a card to another column. A yellow edge marks a card in doubt.</p>
+  </header>
+  <div class="cols" id="cols">
+    <section class="col" data-col="one"><h2>Part 1<small>lorem ipsum dolor sit amet, consectetur</small></h2><div class="items"></div></section>
+    <section class="col" data-col="two"><h2>Part 2<small>sed do eiusmod tempor</small></h2><div class="items"></div></section>
+    <section class="col" data-col="three"><h2>Part 3<small>ut labore et dolore magna</small></h2><div class="items"></div></section>
+    <section class="col" data-col="four"><h2>Part 4<small>ut enim ad minim veniam, quis nostrud</small></h2><div class="items"></div></section>
+    <section class="col none" data-col="none"><h2>none of the four</h2><div class="items"></div></section>
+  </div>
+  <p class="hint">Keyboard: focus a card, ← → moves it one column, ↑ ↓ reorders inside the column.</p>
+<script>
+  // Record a value and read the recorded answers without a kit API.
+  function rec(key, value) {
+    document.documentElement.dataset.bridgeRecord = JSON.stringify({ key, value });
+    document.dispatchEvent(new Event("bridge:record"));
+  }
+  const answers = window.__bridgeAnswers || {};
+</script>
+<script>
+(function () {
+  const COLS = ['one', 'two', 'three', 'four', 'none'];
+  const POINTS = [
+    ['b','one','Card B: Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod. Tempor incididunt consequat','4 · 5 · 6 · 7 · 8 · 11','ut labore et dolore magna aliqua pariatur'],
+    ['c','one','Card C: Ut enim ad minim veniam quis nostrud exercitation tempor','9 · 10','ullamco laboris nisi ut aliquip consequat'],
+    ['a','one','Card A: Ex ea commodo consequat duis aute irure dolor in reprehenderit ut','1 · 2 · 3 · 36 · 37 · 62 · 63','in voluptate velit exercitation', true],
+    ['i','one','Card I: Esse cillum dolore eu fugiat nulla pariatur excepteur sint occaecat amet','38','cupidatat non proident sunt in incididunt'],
+    ['l','one','Card L: Culpa exercitation','43 · 44','consequat'],
+    ['o','one','Card O: Qui officia deserunt mollit anim id est laborum lorem ipsum dolor. Sit amet consectetur dolor','64 · 65','adipiscing elit sed do incididunt'],
+    ['d','two','Card D: Eiusmod tempor incididunt ut labore et dolore magna aliqua ut enim. Ad minim pariatur','12 · 13 · 14 · 19 · 66 · 67','veniam quis nostrud consectetur'],
+    ['e','two','Card E: Exercitation ullamco laboris nisi ut aliquip exercitation','15 · 16 · 17 · 18 · 22 · 61','ex ea commodo consectetur'],
+    ['j','two','Card J: Consequat duis aute irure dolor in in exercitation','39 · 40 · 48 · 49 · 50','voluptate velit esse cillum consequat', true],
+    ['m','three','Card M: Dolore eu fugiat nulla pariatur excepteur sint occaecat exercitation','51 · 53','cupidatat non proident consectetur'],
+    ['f','three','Card F: Sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet consequat','20 · 21 · 28 · 29 · 31 · 32 · 33 · 34 · 35 · 52','consectetur adipiscing elit sed do consectetur', true],
+    ['n','four','Card N: Eiusmod tempor incididunt tempor','58 · 59 · 60','ut labore et dolore magna consequat'],
+    ['g','four','Card G: Aliqua ut enim ad minim veniam quis nostrud exercitation pariatur','23 · 24 · 25 · 26 · 27 · 54 · 55 · 56 · 57','ullamco laboris nisi ut aliquip aliquip'],
+    ['k','four','Card K: Ex ea commodo consequat duis aute irure dolor in consectetur','41 · 42 · 45 · 46 · 47','reprehenderit in voluptate velit pariatur', true],
+    ['h','none','Card H: Consequat','30','esse cillum dolore eu fugiat pariatur'],
+  ];
+  const byId = Object.fromEntries(POINTS.map(p => [p[0], p]));
+  const place = Object.fromEntries(POINTS.map(p => [p[0], p[1]]));
+  const order = Object.fromEntries(COLS.map(c => [c, POINTS.filter(p => p[1] === c).map(p => p[0])]));
+
+  function render() {
+    COLS.forEach(c => {
+      const host = document.querySelector(`[data-col="${c}"] .items`); host.innerHTML = '';
+      order[c].forEach(id => {
+        const p = byId[id], card = document.createElement('article');
+        card.className = 'item' + (p[5] ? ' doubt' : ''); card.draggable = true; card.dataset.id = id; card.tabIndex = 0;
+        card.innerHTML = `<p>${p[2]}</p><p class="why">${p[4]}</p><p class="refs">items ${p[3]}</p>`;
+        host.appendChild(card);
+      });
+    });
+    if (started) {
+      const out = {}; COLS.forEach(c => out[c] = order[c].slice());
+      rec('columns', out);
+    }
+  }
+  function moveTo(id, col, beforeId, after) {
+    order[place[id]].splice(order[place[id]].indexOf(id), 1);
+    const arr = order[col]; let j = beforeId ? arr.indexOf(beforeId) + (after ? 1 : 0) : arr.length;
+    arr.splice(j, 0, id); place[id] = col; render();
+    document.querySelector(`[data-id="${id}"]`)?.focus();
+  }
+
+  let drag = null;
+  const cols = document.getElementById('cols');
+  cols.addEventListener('dragstart', e => { const c = e.target.closest('.item'); if (!c) return; drag = c.dataset.id; c.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', drag); });
+  cols.addEventListener('dragend', () => { drag = null; cols.querySelectorAll('.over, .dragging').forEach(el => el.classList.remove('over', 'dragging')); });
+  cols.addEventListener('dragover', e => {
+    if (!drag) return; const col = e.target.closest('.col'); if (!col) return; e.preventDefault();
+    cols.querySelectorAll('.over').forEach(el => el.classList.remove('over')); col.classList.add('over');
+  });
+  cols.addEventListener('drop', e => {
+    if (!drag) return; const col = e.target.closest('.col'); if (!col) return; e.preventDefault();
+    const card = e.target.closest('.item'); let before = null, after = false;
+    if (card && card.dataset.id !== drag) { before = card.dataset.id; const b = card.getBoundingClientRect(); after = e.clientY > b.top + b.height / 2; }
+    moveTo(drag, col.dataset.col, before, after); drag = null;
+  });
+  cols.addEventListener('keydown', e => {
+    const card = e.target.closest('.item'); if (!card || e.target !== card) return;
+    const id = card.dataset.id, col = place[id], ci = COLS.indexOf(col), arr = order[col], i = arr.indexOf(id);
+    if (e.key === 'ArrowLeft' && ci > 0) { e.preventDefault(); moveTo(id, COLS[ci - 1]); }
+    if (e.key === 'ArrowRight' && ci < COLS.length - 1) { e.preventDefault(); moveTo(id, COLS[ci + 1]); }
+    if (e.key === 'ArrowUp' && i > 0) { e.preventDefault(); arr.splice(i, 1); arr.splice(i - 1, 0, id); render(); document.querySelector(`[data-id="${id}"]`).focus(); }
+    if (e.key === 'ArrowDown' && i < arr.length - 1) { e.preventDefault(); arr.splice(i, 1); arr.splice(i + 1, 0, id); render(); document.querySelector(`[data-id="${id}"]`).focus(); }
+  });
+
+  let started = false;
+  function start() {
+    const saved = answers.columns;
+    if (saved && COLS.every(c => Array.isArray(saved[c])) && COLS.flatMap(c => saved[c]).length === POINTS.length) {
+      COLS.forEach(c => { order[c] = saved[c].slice(); saved[c].forEach(id => place[id] = c); });
+    }
+    render();
+    started = true;
+  }
+  start();
+})();
+</script>

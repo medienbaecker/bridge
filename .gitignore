@@ -1,0 +1,6 @@
+.build/
+node_modules/
+harness/out/
+build.noindex/
+.DS_Store
+harness/__pycache__/

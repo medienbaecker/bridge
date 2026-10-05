@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Plan: move the archive to static pages</title></head>
+<body>
+<h1>Move the archive to static pages</h1>
+<p class="muted">Three steps, one afternoon. Nothing to answer; cross it when you have read it.</p>
+<h2>1. Export</h2>
+<p>A script walks <code>content/archive</code> and writes one HTML file per entry into <code>public/archive/</code>.</p>
+<h2>2. Redirects</h2>
+<p>The 140 old URLs keep working through a single rule in <code>.htaccess</code>.</p>
+<h2>3. Remove the route</h2>
+<p>The dynamic route and its controller go away. Diff: <strong>-312 lines</strong>.</p>
+<table>
+<tr><th>Step</th><th>Files</th><th>Risk</th></tr>
+<tr><td>Export</td><td>1 new</td><td>none</td></tr>
+<tr><td>Redirects</td><td>1 changed</td><td>low</td></tr>
+<tr><td>Remove</td><td>4 deleted</td><td>low</td></tr>
+</table>
+</body>
+</html>

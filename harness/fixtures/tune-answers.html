@@ -1,0 +1,11 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Button radius</title>
+<style>.preview button { border-radius: var(--radius, 8px); padding: var(--pad, 10px) 18px; font: inherit; border: 1px solid var(--bridge-line); background: var(--bridge-panel); }</style></head>
+<body><h1>Button radius</h1>
+<div class="preview"><button>Anfrage senden</button></div>
+<div class="dials">
+  <label class="dial"><span>Radius (answers)</span><input type="range" data-record="radius" data-drive="--radius" data-unit="px" data-target=".preview" min="0" max="24" step="0.5" value="8"><output></output></label>
+  <label class="dial"><span>Padding (preview only)</span><input type="range" data-drive="--pad" data-unit="px" data-target=".preview" min="4" max="20" step="1" value="10"><output></output></label>
+</div>
+<label>Label <input type="text" data-record="label" placeholder="Button text"></label>
+<label>Weight <select data-record="weight"><option>Regular</option><option>Medium</option></select></label>
+</body></html>

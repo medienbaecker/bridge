@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Card layout for the archive</title>
+</head>
+<body>
+<h1>Card layout for the archive</h1>
+<p class="muted">The archive page has 140 entries. Two layouts survive the content; pick one.</p>
+
+<h2>Layout</h2>
+<div class="options">
+  <div data-record="layout" data-value="grid" tabindex="0">
+    <strong>Grid</strong>
+    Three columns at desktop, one at phone width. Titles wrap to two lines on 12 of 140 entries.
+  </div>
+  <div data-record="layout" data-value="list" tabindex="0">
+    <strong>List</strong>
+    One entry per row with the date on the right. Nothing wraps, but the page is 4.5 screens tall.
+  </div>
+</div>
+
+<h2>Corner radius</h2>
+<label>Radius <input type="range" data-record="radius" min="0" max="24" value="8"> <output>8</output></label>
+
+<h2>Anything else</h2>
+<textarea data-record="note" placeholder="Optional"></textarea>
+
+<div class="actions">
+  <button data-send>Send</button>
+  <small>⌘⇧⏎ also sends</small>
+</div>
+</body>
+</html>
