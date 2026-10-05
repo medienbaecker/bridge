@@ -23,11 +23,11 @@ before they see the page. Warnings exit 0; read them.
 
 ## What goes wrong between you and the user
 
-You and the user perceive differently. You take in thousands of lines of code,
-logs and data in seconds; they read a few hundred words a minute but see
-patterns, proportions and what feels wrong at a glance. They are the expert on
-their project. Most of what goes wrong when you hand them something comes from
-that difference:
+Building costs you almost nothing; their attention is what's expensive. You
+take in thousands of lines of code, logs and data in seconds; they read a few
+hundred words a minute but see patterns, proportions and what feels wrong at a
+glance, and they are the expert on their project. Most of what goes wrong when
+you hand them something comes from treating their time as cheaper than yours:
 
 - Reading is their bottleneck. You write many times faster than they read, so
   every sentence you add is paid for with their attention, and they start
@@ -51,9 +51,8 @@ that difference:
   in the terminal would answer is worse than the line.
 - A multiple-choice question in a terminal strips out everything they would
   need to choose well.
-- Building costs you almost nothing; their attention costs a lot. A page that
-  takes you ten minutes and saves them one is a good trade. A quick form that
-  leaves the work to them is not.
+- A page that takes you ten minutes and saves them one is a good trade. A
+  quick form that leaves the work to them is not.
 - A copy of the thing is not the thing. Sample cards, mock data and redrawn
   screens hide the detail they need to judge; the real page, component or
   output does not.
