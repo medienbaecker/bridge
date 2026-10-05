@@ -250,9 +250,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         out["listEmpty"] = .string(window.sidebar.emptyText)
         out["listHeader"] = .string(window.listHeader.stringValue)
         out["listHeaderX"] = .number(Double(window.listHeader.convert(window.listHeader.bounds, to: nil).minX))
-        out["documentTitle"] = .string(window.docTitleView.title)
+        out["documentTitle"] = .string(window.docTitleView.stringValue)
         out["documentTitleX"] = .number(Double(window.docTitleView.convert(window.docTitleView.bounds, to: nil).minX))
-        out["documentIcon"] = .bool(window.docTitleView.iconShown)
         out["listEmptyFrame"] = .object(window.sidebar.emptyFrame)
         out["bridgesColumn"] = .array(model.shown().map { .string($0.location) })
         out["quietRows"] = .array(model.shown().filter { model.isQuiet($0) }.map { .string($0.location) })
@@ -263,7 +262,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         })
         out["toolbarLabelsShown"] = .bool(window.window?.toolbar?.displayMode == .iconAndLabel)
         out["subtitle"] = .string(window.window?.subtitle ?? "")
-        out["representedFile"] = .string(window.window?.representedURL?.path ?? "")
         out["sidebar"] = .array(model.listing.projects.map { project in
             .object([
                 "project": .string((project as NSString).lastPathComponent),
