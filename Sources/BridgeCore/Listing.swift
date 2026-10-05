@@ -19,6 +19,10 @@ public enum Kind: String, Codable, Sendable {
     public var isDocument: Bool { self != .url && self != .pdf }
 }
 
+public enum Links: String, Codable, Sendable {
+    case window, browser, external
+}
+
 public struct BridgeEntry: Codable, Equatable, Sendable, Identifiable {
     public var id: String
     public var location: String
@@ -29,6 +33,7 @@ public struct BridgeEntry: Codable, Equatable, Sendable, Identifiable {
     public var unread: Bool
     public var crossed: Bool
     public var session: String
+    public var links: String?
 
     public init(location: String, project: String, session: String, at: Date = Date()) {
         self.id = Paths.id(for: location)

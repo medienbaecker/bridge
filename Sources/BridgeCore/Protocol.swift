@@ -1,7 +1,7 @@
 import Foundation
 
 public enum Request: Codable, Sendable {
-    case present(locations: [String], cwd: String, session: String, ground: Ground?)
+    case present(locations: [String], cwd: String, session: String, ground: Ground?, links: String?)
     case state
     case audit(location: String)
     case cross(location: String)

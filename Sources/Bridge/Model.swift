@@ -114,15 +114,17 @@ final class Model {
         return p
     }
 
-    func present(_ locations: [String], cwd: String, session: String, ground: Ground?) {
+    func present(_ locations: [String], cwd: String, session: String, ground: Ground?, links: String?) {
         let project = Ground.projectRoot(for: cwd)
         for loc in locations {
             if listing.entry(loc) != nil {
                 listing.update(loc) { e in
-                    e.presentedAt = Date(); e.unread = true; e.crossed = false; e.session = session; e.project = project
+                    e.presentedAt = Date(); e.unread = true; e.crossed = false; e.session = session; e.project = project; e.links = links
                 }
             } else {
-                listing.bridges.append(BridgeEntry(location: loc, project: project, session: session))
+                var entry = BridgeEntry(location: loc, project: project, session: session)
+                entry.links = links
+                listing.bridges.append(entry)
             }
             let page = page(for: loc)
             page.presented(Presentation(session: session, cwd: cwd, ground: ground))
