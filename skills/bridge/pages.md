@@ -342,16 +342,13 @@ How a piece of code works, shown by running it and letting the user move it:
   the real site in a frame instead.
 - One step per heading: a heading that states the point, one line that
   starts with a verb, then a big visual.
-- The page makes its point before anyone touches it; controls are for going
-  deeper.
-- Give each control a question: let them set where they think it lands
-  ("How many requests will this send?"), then reveal what the real code does.
+- The finding stands in one line at the top; the controls let them see it
+  happen.
 - Next to a slider, show key states at once: a row of small multiples, the
   result at three settings side by side.
 - Slow down what is too fast to see: record one cycle, then a step button
   and a scrubber over it, not autoplay.
 - Labels and readouts sit next to what they describe, axes are labelled.
-- For tuning, one control drives everything on the page.
 - Silent by default; any sound starts only after a click.
 - Anything they drag gets `user-select: none` and `preventDefault()` on
   `pointerdown`, or a real mouse selects the page's text instead.

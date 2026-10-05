@@ -24,52 +24,49 @@ before they see the page. Warnings exit 0; read them.
 ## Pages are for eyes
 
 You read thousands of lines of code, logs and data in seconds; the user sees
-patterns, proportions, outliers and what feels wrong at a glance. A page turns
-what you read into something they can see, and their clicks and pins come
-back to you as data. A wall of text hands them your job.
+patterns, proportions, outliers and what feels wrong at a glance. They are the
+expert on their project and are not here to learn: they check that you
+understood it the way they do, then accept, correct or choose. A page is
+evidence for a claim, made as cheap to check as you can. A wall of text hands
+them your job, and more words make people agree with you whether you are right
+or not.
 
 Every page:
 
-- Show the thing, not a description of it: the mockup, the real screenshot,
-  a swatch, a diff, a chart (pages.md "Screenshots", "Swatches", "Evidence:
+- The answer, or the decision you need, is on the first screen. Detail goes
+  below or into a `<details>`.
+- Show the thing instead of describing it: the real diff hunk, the actual
+  output, the screenshot, the element on the live site. Every claim should be
+  checkable in one glance or one click (pages.md "Screenshots", "Evidence:
   code, diffs, bars").
-- Every label, number and explaining word sits on or next to what it
-  describes, or their eyes jump between terminal and window. Long prose
-  belongs in your reply.
-- Quantities as position or length on one shared scale, like bars (Cleveland
-  and McGill); exact lookups as a table.
+- Lead with surprises: what you did that they did not ask for, and what
+  differs from what they would expect.
+- Say where you are unsure, in the first person: "I did not test the cache on
+  deploy."
+- Use their project's names, and do not explain what they already know.
+- Labels and numbers sit on or next to what they describe. Quantities as
+  position or length on one shared scale, like bars; exact values as a table.
 - Mark the one thing to look at with a single unique feature: the only
   accent, the only outline. Several highlights cancel out.
-- Cut what is interesting but not needed for the answer, decorative motion
-  included. Plain styling is fine.
-- A heading that states the point, one line that starts with a verb ("Drag
-  the pins", "Pick one"), then the visual. More than one part: numbered steps
-  they advance, one idea each.
-- It makes its point with no interaction at all; controls are for going
-  deeper.
-- Give it five seconds before presenting: could they answer without reading
-  a paragraph?
+- A heading that states the point, one line that says what to do, then the
+  visual.
+- Never quiz: do not make them guess or predict something you already know.
 - Look at it before you tell them it is there: `bridge --shot /tmp/…/window.png`
   writes a picture of the app's window; then read the image.
 
-When it fits:
+By what they need:
 
-- Explaining how something works: run the real code, at the lowest fidelity
-  that shows the mechanism. Give each control a question: let them set where
-  they think it lands, then reveal what the real code does. Next to the
-  control, show key states at once (small multiples). Step frames or a
-  scrubber over autoplay; animate only when motion is the content. Whenever
-  the page re-implements anything instead of importing it, show a check that
-  re-runs the real code on the same input and says whether the result
-  matches; a convincing wrong explanation is worse than none (pages.md
-  "Explorable").
-- Code they know: drop text the picture already shows. Name the parts up
-  front only on unfamiliar ground.
-- Choosing: options side by side at the same scale when they differ a lot;
-  for subtle differences overlay them, toggle in place, or draw the
-  difference. One short line each, the rest of the card is evidence (pages.md
-  "Decision").
-- Tuning: one control drives everything on the page, the real site in a
+- Deciding or checking: be short. Recommend one option, say when it would be
+  wrong, and show each option's consequence on the real thing. Side by side
+  when options differ a lot; for subtle differences overlay them, toggle in
+  place, or draw the difference (pages.md "Decision").
+- Understanding how something works: an explorable that runs the real code
+  and lets them drag, scrub and step through it, with what is too fast to see
+  slowed down (pages.md "Explorable"). If the page re-implements anything
+  instead of importing it, show a check that re-runs the real code and says
+  whether the result matches.
+- Tuning: controls only where their judgement decides the value (taste,
+  thresholds); one control drives everything on the page, the real site in a
   frame included (pages.md "Controls that drive the preview").
 
 ## When to use it, and when not
@@ -102,7 +99,7 @@ it on the same page.
 | Read a PDF | `spec.pdf` | Scrollable. No pins. |
 | See a diagram | `diagram.svg` | Rendered inline as a document that scales; they can pin its elements. |
 | Look at several things | `bridge a.html b.png c.txt` | All arrive in their list, the first is selected. |
-| Understand how some code works | An explorable `.html` that runs the real code | Each control asks a question: they predict, then see what the code does. See pages.md "Explorable". |
+| Understand how some code works | An explorable `.html` that runs the real code | They drag, scrub and step through it. See pages.md "Explorable". |
 | Choose between things | `decision.html` with option cards | Each option carries evidence. See pages.md "Decision". |
 | Tune values | `.jsx` with Mantine controls, or `.html` with inputs | Read the numbers back with `--read`. |
 | Just look at a site | Nothing: the URL in your reply | The user has a browser. |
