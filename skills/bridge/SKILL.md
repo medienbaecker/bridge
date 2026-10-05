@@ -23,7 +23,9 @@ before they see the page. Warnings exit 0; read them.
 
 ## Pages are for eyes
 
-A page is something to look at, not to read.
+The user wants to see the thing itself, not read about it. Words on a page
+only name what they look at or tell them what to do; the meaning is in what
+they see and touch.
 
 Every page:
 
