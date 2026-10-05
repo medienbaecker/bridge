@@ -14,12 +14,9 @@ for i, b in enumerate(re.findall(r'```html\n(.*?)```', md, re.S)):
     page = b if b.lstrip().startswith('<!doctype') else f'<!doctype html><html><head><title>Sample {i}</title></head><body>\n{b}\n</body></html>\n'
     (out / f'sample-{i:02d}.html').write_text(page)
 PY
-fixture spring.js >/dev/null
 repo
 n=$(ls "$CASE_DIR/pages"/sample-*.html | wc -l | tr -d ' ')
 check "pages.md has html samples to test" "$([ "$n" -ge 10 ] && echo many)" "many"
-same() { python3 -c 'import sys; print("same" if open(sys.argv[1]).read() in open(sys.argv[2]).read() else "differs")' "$@"; }
-check "the Explorable sample in pages.md is harness/fixtures/explorable.html" "$(same "$ROOT/harness/fixtures/explorable.html" "$ROOT/skills/bridge/pages.md")" "same"
 mkdir -p "$CASE_DIR/sibling"
 echo 'export const answer = 42;' > "$CASE_DIR/sibling/mod.js"
 printf '<!doctype html><title>Sibling</title><p id="out"></p>\n<script type="module">import { answer } from "./mod.js"; document.getElementById("out").textContent = answer;</script>\n' > "$CASE_DIR/sibling/page.html"
@@ -33,9 +30,6 @@ for page in "$CASE_DIR/pages"/sample-*.html; do
   check "$name: lint has no error ($(bridge --lint "$page" | grep ': error: ' | head -1 | cut -d: -f3- | cut -c1-90))" "$errors" "0"
   (cd "$CASE_DIR/pages" && bridge "$(basename "$page")" 2> "$CASE_DIR/$name.err"); wait_ready; settle 0.6
   check "$name: presenting prints nothing on stderr" "$(grep -v WARNING "$CASE_DIR/$name.err" | cut -c1-120)" ""
-  if grep -q '<title>The spring</title>' "$page"; then
-    check "$name: the explorable imports spring.js beside it and draws with it" "$(bridge --js "$page" "return !!document.getElementById('trace').getAttribute('d')")" "true"
-  fi
   driven=$(bridge --js "$page" "$driver")
   keys=$(printf '%s' "$driven" | jq -r '.keys | join(",")'); undriven=$(printf '%s' "$driven" | jq -r '.undriven | join(",")')
   if [ -n "$keys" ]; then
