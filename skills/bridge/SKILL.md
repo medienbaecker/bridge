@@ -23,22 +23,29 @@ before they see the page. Warnings exit 0; read them.
 
 ## Pages are for eyes
 
-A page is something to look at, not to read. Images, position, colour and
-size land in a glance; a paragraph has to be read.
+A page is something to look at, not to read.
 
-- Show the thing instead of describing it: the rendered mockup, the real
-  screenshot, a swatch, a diff, a chart (pages.md "Screenshots", "Swatches",
-  "Evidence: code, diffs, bars").
-- Compare side by side at the same scale, never one above the other at different sizes.
-- Numbers become bars or a chart, not sentences.
-- At most one short line of text per option; the rest of the card is its
-  evidence (pages.md "Decision"). A value to tune moves a live preview
-  ("Controls that drive the preview").
-- One question per page.
-- Before presenting, give it five seconds: could they answer without reading
-  a paragraph? If not, cut words and show more.
-- A page that is mostly prose belongs in your terminal reply or a short `.md`,
-  not on a decision page.
+Every page:
+
+- Show the thing, not a description of it: the mockup, the real screenshot,
+  a swatch, a diff, a chart (pages.md "Screenshots", "Swatches", "Evidence:
+  code, diffs, bars").
+- Numbers live in the picture: bars, labelled axes, a readout next to what it
+  measures. Not in sentences.
+- More than one part: numbered steps, each a heading, one line that starts
+  with a verb ("Drag the pins", "Pick one"), then the visual.
+- Give it five seconds before presenting: could they answer without reading
+  a paragraph? A page that is mostly prose belongs in your reply or a `.md`.
+
+When it fits:
+
+- Explaining how something works: run the real code on the page, let them
+  drag, pull or scrub it, and slow down what is too fast to see (one frame,
+  one cycle).
+- Choosing: options side by side at the same scale, one short line each, the
+  rest of the card is evidence (pages.md "Decision").
+- Tuning: one control drives everything on the page, the real site in a
+  frame included (pages.md "Controls that drive the preview").
 
 ## When to use it, and when not
 
