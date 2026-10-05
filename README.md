@@ -2,9 +2,9 @@
 
 # Bridge
 
-Claude Code reads and writes faster than you ever will; you see patterns and what's off at a glance. Bridge connects the two: the agent builds visual pages from ready-made components in a window next to your terminal, and what you click and point at goes back to it. It's a small native Swift app that shows the pages with WebKit.
+Agents write faster than we can read. The human world is much more visual. Bridge connects the two: the agent builds visual pages from ready-made components, and what you click and point at goes back to it using a hook.
 
-[Planning with Agents](https://maggieappleton.com/planning-agents), Maggie Appleton
+Inspired by [Planning with Agents](https://maggieappleton.com/planning-agents).
 
 ![Bridge](.github/screenshot.png)
 
