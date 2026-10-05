@@ -226,7 +226,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
             let on = page?.pointing ?? false
             item.image = Self.pointImage(on: on)
             pointShownOn = on
-            return page != nil && page?.viewingVersion == nil && page?.kind != .url && page?.kind != .pdf
+            return page != nil && page?.viewingVersion == nil && page?.kind != .pdf
         case Self.notesId: return page.map { !$0.sidecar.comments.isEmpty } ?? false
         case Self.send:
             let state = page?.sendLabel ?? "Send"

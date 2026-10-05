@@ -23,11 +23,11 @@ check_json "the site loaded over http" "$(js "return location.href")" '.' "$url"
 check_json "its title is the row title" "$(bridge --state)" '.title' "Beispielseite für Umlaute"
 check_json "its own styles are untouched" "$(js "return getComputedStyle(document.body).fontFamily")" '.' "Georgia"
 check_json "the page stylesheet was not injected into a site" "$(js "return getComputedStyle(document.body).maxWidth")" '.' "none"
-check_json "point is available" "$(bridge --state)" '[.toolbar[] | select(.id=="point") | .enabled][0]' "false"
+check_json "point is available" "$(bridge --state)" '[.toolbar[] | select(.id=="point") | .enabled][0]' "true"
 snap site "A live site by URL"
 
-# Pins on a site: allowed through the page, even though the toolbar hides Point for URLs
-js "@bridge __bridge.point(true); return 1" >/dev/null
+# Pins on a site
+bridge --do point >/dev/null
 js "const el = document.querySelector('a.more'); const r = el.getBoundingClientRect(); el.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true, clientX: r.left + 5, clientY: r.top + 5}))" >/dev/null
 settle
 check_json "the pending note still names the site's element for an agent, though the composer does not show it" "$(js "@bridge return __bridgeNotes.pending?.target")" '. | startswith("a.")' "true"
