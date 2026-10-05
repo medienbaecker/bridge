@@ -74,7 +74,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         return modified > launchedAt
     }
 
-    @objc func updateTick() { checkUpdate() }
+    @objc func updateTick() {
+        checkUpdate()
+        window?.sidebar.refreshTimes()
+    }
 
     func checkUpdate() {
         if updateReady { if updateText == nil { updateText = "Update ready" } } else { updateText = nil }

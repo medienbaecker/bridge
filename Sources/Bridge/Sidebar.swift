@@ -174,6 +174,10 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         return status == "open"
     }
 
+    func refreshTimes() {
+        outline.enumerateAvailableRowViews { row, _ in (row.view(atColumn: 0) as? BridgeCell)?.tick() }
+    }
+
     static func ago(_ date: Date, from now: Date = Date()) -> String {
         let s = Int(now.timeIntervalSince(date))
         if s < 60 { return "now" }
@@ -431,8 +435,13 @@ final class BridgeCell: NSTableCellView {
     required init?(coder: NSCoder) { fatalError() }
 
     private var text = ""
+    private var presentedAt: Date?
     private(set) var dim = false
     private(set) var struck = false
+
+    func tick() {
+        if let presentedAt { time.stringValue = SidebarController.ago(presentedAt) }
+    }
 
     func configure(_ entry: BridgeEntry, waiting: Bool, quiet: Bool = false, from: String? = nil, resolved: String? = nil) {
         text = entry.title
@@ -445,7 +454,8 @@ final class BridgeCell: NSTableCellView {
         dim = entry.crossed || quiet
         struck = entry.crossed
         restyle()
-        time.stringValue = SidebarController.ago(entry.presentedAt)
+        presentedAt = entry.presentedAt
+        tick()
         notes.stringValue = resolved ?? ""
         notes.toolTip = resolved.map { "\($0) notes resolved" }
         unread = entry.unread
