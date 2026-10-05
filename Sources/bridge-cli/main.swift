@@ -5,6 +5,7 @@ import BridgeCore
 let me = (CommandLine.arguments[0] as NSString).lastPathComponent
 let usage = """
 bridge-dev <file|url> [more files]      present; a URL opens the live site
+bridge-dev --links <mode> <file|url>    where its links open: window (in Bridge), browser, or external (other hosts in the browser; a URL's default)
 bridge-dev --read   <file>              what they have answered so far, JSON, no blocking
 bridge-dev --sidecar <file>             where their record for that page lives (in the app's store)
 bridge-dev --seed-from <flavour>        once, into an empty flavour: copy that flavour's list and records here
@@ -393,12 +394,18 @@ case "--quit":
     _ = send(.quit)
 
 default:
-    if first.hasPrefix("--") { fail(usage) }
+    var links: String?
+    if let i = args.firstIndex(of: "--links") {
+        guard i + 1 < args.count, Links(rawValue: args[i + 1]) != nil else { fail("--links window|browser|external <file|url>") }
+        links = args[i + 1]
+        args.removeSubrange(i...(i + 1))
+    }
+    if args.first?.hasPrefix("--") ?? true { fail(usage) }
     let locations = args.map { location($0) }
     for loc in locations where Kind.of(loc) != .url && !FileManager.default.fileExists(atPath: loc) {
         fail("no such file: \(loc)")
     }
-    _ = check(send(.present(locations: locations, cwd: cwd, session: Session.current, ground: Ground.current(in: cwd)), launching: true))
+    _ = check(send(.present(locations: locations, cwd: cwd, session: Session.current, ground: Ground.current(in: cwd), links: links), launching: true))
     // The agent that wrote the page sees this in its tool result; nothing else
     // would tell it that classes it made up style nothing.
     for loc in locations where Kind.of(loc) != .url {

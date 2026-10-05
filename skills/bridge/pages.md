@@ -344,6 +344,12 @@ The frame earns its place by what is around it. For a site the user should
 only look at, give them the URL in your reply; present it directly
 (`bridge http://site.test/archive`) only when they should pin spots on it.
 
+A link clicked in the frame stays in the frame when it goes to the same host
+and opens in the user's browser when it goes elsewhere. Set
+`data-links="window"` on the iframe to keep every link in the frame, or
+`data-links="browser"` to send every link out. A `target="_blank"` link always
+opens in the browser.
+
 Any site loads in a frame unless it refuses to be framed with
 `X-Frame-Options` or CSP `frame-ancestors`, which every browser obeys.
 Presenting the page names a frame that refuses on stderr, and the page says

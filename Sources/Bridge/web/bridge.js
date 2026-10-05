@@ -3,9 +3,21 @@ function __bridgeInit(options) {
   const handler = window.webkit.messageHandlers.bridge;
   const post = (type, data = {}) => handler.postMessage({ type, ...data });
 
+  // A frame from another origin cannot read its own iframe element, so it asks
+  // the frame around it for its data-links.
+  window.addEventListener('message', (e) => {
+    if (e.data?.bridgeLinks !== '?') return;
+    const frame = [...document.querySelectorAll('iframe')].find((f) => f.contentWindow === e.source);
+    if (frame) e.source.postMessage({ bridgeLinks: frame.dataset.links || 'external' }, '*');
+  });
+
   // Inside an embedded frame (a live site in an iframe) the runtime only
   // receives driven CSS properties; everything else belongs to the top page.
   if (window !== window.top) {
+    window.addEventListener('message', (e) => {
+      if (e.source === window.parent && e.data?.bridgeLinks && e.data.bridgeLinks !== '?') post('frame-links', { links: e.data.bridgeLinks });
+    });
+    window.parent.postMessage({ bridgeLinks: '?' }, '*');
     globalThis.__bridge = {
       drive(prop, value, target) {
         for (const el of document.querySelectorAll(target || ':root')) el.style.setProperty(prop, value);

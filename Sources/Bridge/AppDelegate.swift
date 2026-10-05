@@ -119,9 +119,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     func handle(_ request: Request, reply: @escaping @Sendable (Response) -> Void) {
         switch request {
-        case .present(let locations, let cwd, let session, let ground):
+        case .present(let locations, let cwd, let session, let ground, let links):
             let wasActive = NSApp.isActive
-            model.present(locations, cwd: cwd, session: session, ground: ground)
+            model.present(locations, cwd: cwd, session: session, ground: ground, links: links)
             if !Env.test { NSApp.activate() }
             window.showWindow(nil)
             if !Env.test, !wasActive, let loc = locations.first { Notify.arrived(model.listing.entry(loc)) }
@@ -209,6 +209,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             out["ready"] = .bool(page.ready)
             out["buildMs"] = page.buildMs.map { .number(Double($0)) } ?? .null
             out["zoom"] = .number(Double((page.zoom * 100).rounded() / 100))
+            out["links"] = .string(page.links.rawValue)
         }
         if let w = window.window {
             out["windowNumber"] = .number(Double(w.windowNumber))
@@ -224,6 +225,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             }
         }
         checkUpdate()
+        out["openedExternally"] = .array(Page.openedExternally.map { .string($0.absoluteString) })
         out["updateReady"] = .bool(updateReady)
         out["updateText"] = updateText.map { .string($0) } ?? .null
         out["banner"] = window.bannerText.map { .string($0) } ?? .null

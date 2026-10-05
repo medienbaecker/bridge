@@ -2,6 +2,7 @@
 
 ```sh
 bridge <file|url> [more files]         present; html, jsx, md, txt, images, svg, pdf, or a URL; the first is selected
+bridge --links <mode> <file|url>       where its links open: window (in Bridge), browser, or external (other hosts in the browser)
 bridge --read   <file>                 what they have answered so far, JSON, no blocking
 bridge --wait   <file> --timeout 900   block until they click Send (or close), then print
 bridge --cross  <file>                 done with it: it folds away under "Crossed"
@@ -20,6 +21,11 @@ bridge --hook stop [--timeout N]        the Claude Code Stop hook (installed onc
 Files are resolved against the current directory. Present from inside the
 project's repo: the page is grouped under that project in the user's list, and
 the answer records repo, branch and commit.
+
+A URL defaults to `--links external`: the user can click around the site and a
+link to another host opens in their browser. A file defaults to `browser`. The
+mode holds until the next present, which sets it again. A `target="_blank"`
+link always opens in the browser.
 
 ## `--lint`
 

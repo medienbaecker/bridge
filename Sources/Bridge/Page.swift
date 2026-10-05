@@ -3,7 +3,7 @@ import WebKit
 import CryptoKit
 import BridgeCore
 
-final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegate {
+final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegate, WKUIDelegate {
     static let world = WKContentWorld.world(name: "bridge")
     static let runtime: String = {
         let web = Bundle.module.url(forResource: "web", withExtension: nil)!
@@ -41,6 +41,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
     var buildFailed = false
     var buildMs: Int?
     var frames: [WKFrameInfo] = []
+    var frameLinks: [String: Links] = [:]
     var shape: String?
     var shapedContent: Data?
     var bump: (content: Data?, why: String)?
@@ -65,6 +66,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         installScripts()
         config.userContentController.addScriptMessageHandler(self, contentWorld: Page.world, name: "bridge")
         webView.navigationDelegate = self
+        webView.uiDelegate = self
         webView.setValue(false, forKey: "drawsBackground")
         if kind != .url {
             let dir = URL(fileURLWithPath: location).deletingLastPathComponent()
@@ -89,6 +91,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
     func close() {
         webView.configuration.userContentController.removeScriptMessageHandler(forName: "bridge", contentWorld: Page.world)
         webView.navigationDelegate = nil
+        webView.uiDelegate = nil
         watcher = nil
     }
 
@@ -132,6 +135,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         viewingVersion = nil
         ready = false
         frames = []
+        frameLinks = [:]
         drives = [:]
         errors = []
         // The page reads the record through a document-start script, which is a
@@ -261,6 +265,11 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
                 frames.removeAll { $0.request.url == message.frameInfo.request.url }
                 frames.append(message.frameInfo)
                 for d in drives.values { call("__bridge.drive(prop, value, target)", d, in: message.frameInfo) }
+            }
+            replyHandler(nil, nil)
+        case "frame-links":
+            if !message.frameInfo.isMainFrame, let url = Self.document(message.frameInfo.request.url) {
+                frameLinks[url] = Links(rawValue: body["links"] as? String ?? "") ?? .external
             }
             replyHandler(nil, nil)
         case "drive":
@@ -629,12 +638,43 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         return (.useCredential, URLCredential(trust: trust))
     }
 
+    var links: Links {
+        model.listing.entry(location)?.links.flatMap(Links.init) ?? (kind == .url ? .external : .browser)
+    }
+
+    static var openedExternally: [URL] = []
+
+    static func openExternally(_ url: URL) {
+        if Env.test { openedExternally.append(url) } else { NSWorkspace.shared.open(url) }
+    }
+
+    static func document(_ url: URL?) -> String? { url?.absoluteString.components(separatedBy: "#").first }
+
+    static func origin(_ url: URL?) -> String? {
+        guard let url, let scheme = url.scheme?.lowercased(), let host = url.host?.lowercased() else { return nil }
+        return "\(scheme)://\(host):\(url.port ?? (scheme == "https" ? 443 : 80))"
+    }
+
+    // A link that opens a new window has no target frame; createWebViewWith hands it to the browser.
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void) {
-        if action.navigationType == .linkActivated, let url = action.request.url, !url.isFileURL, kind != .url {
-            NSWorkspace.shared.open(url)
+        guard action.navigationType == .linkActivated, let url = action.request.url, !url.isFileURL, let frame = action.targetFrame else {
+            decisionHandler(.allow); return
+        }
+        // A main frame's info reads about:blank during a fragment navigation, so the main frame goes by the web view's URL.
+        let current = frame.isMainFrame ? webView.url : frame.request.url
+        let samePage = url.fragment != nil && Self.document(url) == Self.document(current)
+        let mode = frame.isMainFrame ? links : Self.document(current).flatMap { frameLinks[$0] } ?? .external
+        let sameHost = Self.origin(url) != nil && Self.origin(url) == Self.origin(current)
+        if !samePage, mode == .browser || (mode == .external && !sameHost) {
+            Self.openExternally(url)
             decisionHandler(.cancel)
             return
         }
         decisionHandler(.allow)
+    }
+
+    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        if let url = action.request.url, url.scheme != "about" { Self.openExternally(url) }
+        return nil
     }
 }
