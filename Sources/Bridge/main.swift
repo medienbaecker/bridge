@@ -19,5 +19,5 @@ let delegate = AppDelegate()
 app.delegate = delegate
 app.setActivationPolicy(Env.test ? .accessory : .regular)
 // The harness measures pixels against light chrome, so a system switch to dark mode must not reach it.
-if Env.test { app.appearance = NSAppearance(named: .aqua) }
+if Env.test { app.appearance = NSAppearance(named: ProcessInfo.processInfo.environment["BRIDGE_APPEARANCE"] == "dark" ? .darkAqua : .aqua) }
 app.run()
