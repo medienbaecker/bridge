@@ -18,8 +18,27 @@ bridge --read decision.html   # what they answered so far, JSON, returns at once
 Lint while you still hold the file. It knows the kit's real vocabulary and
 says what a guessed class should have been, names a class the page and the
 kit both style, flags a colour or radius written out where a `--bridge-*`
-token exists, and a `pre` that is really a table. Errors exit 1; fix them
+token exists, a `pre` that is really a table, and text walls. Errors exit 1; fix them
 before they see the page. Warnings exit 0; read them.
+
+## Pages are for eyes
+
+A page is something to look at, not to read. Images, position, colour and
+size land in a glance; a paragraph has to be read.
+
+- Show the thing instead of describing it: the rendered mockup, the real
+  screenshot, a swatch, a diff, a chart (pages.md "Screenshots", "Swatches",
+  "Evidence: code, diffs, bars").
+- Compare side by side at the same scale, never one above the other at different sizes.
+- Numbers become bars or a chart, not sentences.
+- At most one short line of text per option; the rest of the card is its
+  evidence (pages.md "Decision"). A value to tune moves a live preview
+  ("Controls that drive the preview").
+- One question per page.
+- Before presenting, give it five seconds: could they answer without reading
+  a paragraph? If not, cut words and show more.
+- A page that is mostly prose belongs in your terminal reply or a short `.md`,
+  not on a decision page.
 
 ## When to use it, and when not
 
