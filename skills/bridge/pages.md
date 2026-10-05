@@ -407,6 +407,11 @@ use those, or `Canvas`/`CanvasText` for surface and text.
 
 ## What the base stylesheet gives you
 
+Blocks on the page, in a `.card` and in an option card are spaced by one
+rule: each gets `margin-top: var(--bridge-flow)` (12px) from the one before.
+Give your own elements no outer margins; set `--bridge-flow` on one if it
+needs more or less room above it.
+
 `h1 h2 h3 p ul ol table pre code img figure figcaption hr small .muted`,
 `.options` (grid of option cards), `.options.stack`, `.row` (flex row),
 `.row.between` with `.num` (label and value on one line), `.card` (bordered
