@@ -1,3 +1,5 @@
+@property --bridge-flow { syntax: "<length>"; inherits: false; initial-value: 12px; }
+
 :root {
   color-scheme: light dark;
   --bridge-accent: AccentColor;
@@ -22,24 +24,31 @@ body {
   max-width: 880px;
 }
 
-h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 6px; }
-h2 { font-size: 15px; font-weight: 600; margin: 28px 0 8px; }
-h3 { font-size: 13px; font-weight: 600; margin: 18px 0 6px; }
-p, ul, ol { margin: 0 0 10px; }
+:where(h1, h2, h3, h4, h5, h6, p, ul, ol, dl, figure, blockquote, pre, hr, fieldset) { margin: 0; }
+/* Specificity 0,0,1, like an element rule: a page's `* { margin: 0 }` keeps the
+   flow, its own `p { margin: … }` replaces it. A style or script before the
+   first block does not push that block down. */
+:where(body, .card, [data-record][data-value], .evidence, .draft, details, .bridge-md, blockquote, li, .compare > *) > :where(:not(script, style, template)) ~ :not(script, style, template) { margin-top: var(--bridge-flow); }
+:is(h1, h2, h3, summary) + * { --bridge-flow: 8px; }
+hr, hr + * { --bridge-flow: 24px; }
+label + label { --bridge-flow: 6px; }
+
+h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; --bridge-flow: 28px; }
+h2 { font-size: 15px; font-weight: 600; --bridge-flow: 28px; }
+h3 { font-size: 13px; font-weight: 600; --bridge-flow: 18px; }
 a { color: var(--bridge-accent); }
-hr { border: 0; border-top: 1px solid var(--bridge-line); margin: 24px 0; }
+hr { border: 0; border-top: 1px solid var(--bridge-line); }
 code, pre, kbd { font: 12px/1.45 ui-monospace, SF Mono, Menlo, monospace; }
 pre { background: var(--bridge-panel); border-radius: var(--bridge-radius); padding: 12px 14px; overflow: auto; }
 code:not(pre code) { background: var(--bridge-panel); padding: 1px 5px; border-radius: 4px; }
 img, video { max-width: 100%; height: auto; border-radius: 4px; }
-figure { margin: 0 0 12px; }
 figcaption { color: var(--bridge-muted); font-size: 12px; margin-top: 4px; }
-table { border-collapse: collapse; width: 100%; margin: 0 0 12px; }
+table { border-collapse: collapse; width: 100%; }
 th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--bridge-line); vertical-align: top; }
 th { font-weight: 600; color: var(--bridge-muted); font-size: 12px; }
 small, .muted { color: var(--bridge-muted); }
 
-label { display: block; margin: 0 0 6px; }
+label { display: block; }
 input, select, textarea, button {
   font: inherit;
   color: inherit;
@@ -79,7 +88,7 @@ button:active { filter: brightness(0.92); }
 }
 html[data-bridge-status="sent"] [data-send], html[data-bridge-readonly] [data-send] { opacity: 0.5; pointer-events: none; }
 
-.options { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin: 0 0 16px; }
+.options { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
 .options.stack { grid-template-columns: 1fr; }
 [data-record][data-value]:not(.color, [data-send]) {
   display: block;
@@ -95,33 +104,30 @@ html[data-bridge-status="sent"] [data-send], html[data-bridge-readonly] [data-se
   border-color: var(--bridge-accent);
   box-shadow: 0 0 0 1px var(--bridge-accent) inset;
 }
-[data-record][data-value] > :first-child { margin-top: 0; }
-[data-record][data-value] > :last-child { margin-bottom: 0; }
 [data-record][data-value] img { display: block; width: 100%; margin-bottom: 8px; }
-[data-record][data-value] strong, [data-record][data-value] b { display: block; margin-bottom: 2px; }
+[data-record][data-value] strong, [data-record][data-value] b { display: block; }
+[data-record][data-value] > img + * { --bridge-flow: 0; }
+[data-record][data-value] > :is(strong, b) + * { --bridge-flow: 2px; }
 
 .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 /* Values sit right on the label's first baseline so a column of them reads down. */
 .row.between { justify-content: space-between; align-items: baseline; flex-wrap: nowrap; }
 .row.between > :first-child { flex: 1 1 auto; min-width: 0; }
 .num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
-.card { border: 1px solid var(--bridge-line); border-radius: var(--bridge-radius); padding: 12px 14px; margin: 0 0 12px; }
-.card > :first-child { margin-top: 0; }
-.card > :last-child { margin-bottom: 0; }
-.card > hr { margin: 10px 0; }
+.card { border: 1px solid var(--bridge-line); border-radius: var(--bridge-radius); padding: 12px 14px; }
+.card > hr, .card > hr + * { --bridge-flow: 10px; }
 table.data { width: auto; }
 .data th, .data td { padding: 3px 18px 3px 0; }
 .data .remark { color: var(--bridge-muted); }
 .data tbody + tbody > tr:first-child > td { padding-top: 16px; }
-.actions { display: flex; gap: 8px; margin-top: 24px; align-items: center; }
+.actions { display: flex; gap: 8px; align-items: center; --bridge-flow: 24px; }
 .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.evidence { background: var(--bridge-panel); border-radius: var(--bridge-radius); padding: 10px 12px; margin: 8px 0; }
+.evidence { background: var(--bridge-panel); border-radius: var(--bridge-radius); padding: 10px 12px; --bridge-flow: 8px; }
 .draft { white-space: pre-wrap; background: var(--bridge-panel); border-radius: var(--bridge-radius); padding: 14px 16px; }
 /* A surface inside a surface paints nothing, so composing documented classes
    never gives a box in a box with doubled padding. Fields and buttons inside a
    panel get a Field background so they do not sink into it. */
-:is(.evidence, .draft) :is(pre, .draft, .evidence) { background: none; padding: 0; border-radius: 0; margin: 6px 0 0; }
-:is(.evidence, .draft) :is(pre, .draft, .evidence):first-child { margin-top: 0; }
+:is(.evidence, .draft) :is(pre, .draft, .evidence) { background: none; padding: 0; border-radius: 0; --bridge-flow: 6px; }
 :is(.evidence, .draft) code:not(pre code) { background: none; padding: 0 4px; border: 1px solid var(--bridge-line); }
 :is(.evidence, .draft) :is(input[type=text], input[type=number], input[type=url], input[type=email], input[type=search], textarea, button, .button) { background: Field; border-color: var(--bridge-line); }
 
@@ -129,27 +135,26 @@ table.data { width: auto; }
   display: block;
   color: var(--bridge-muted);
   font-size: 12px;
-  margin: -6px 0 12px;
+  --bridge-flow: 6px;
 }
 .bridge-previous::before { content: "Last time: "; }
 .dials > .bridge-previous { margin: 0 0 4px 10px; }
-.bridge-frame-refused { color: var(--bridge-muted); font-size: 12px; margin: 0 0 6px; }
+.bridge-frame-refused { color: var(--bridge-muted); font-size: 12px; }
 
-.bridge-md blockquote { margin: 0 0 10px; padding: 2px 14px; border-left: 3px solid var(--bridge-line); color: var(--bridge-muted); }
+.bridge-md blockquote { padding: 2px 14px; border-left: 3px solid var(--bridge-line); color: var(--bridge-muted); }
 .bridge-md input[type=checkbox] { margin-right: 6px; }
 
-.wipe { position: relative; display: block; margin: 0 0 12px; --wipe: 50%; }
+.wipe { position: relative; display: block; --wipe: 50%; }
 .wipe img { display: block; width: 100%; margin: 0; }
 .wipe img + img { position: absolute; inset: 0; clip-path: inset(0 0 0 var(--wipe)); }
 .wipe::after { content: ""; position: absolute; top: 0; bottom: 0; left: var(--wipe); width: 2px; margin-left: -1px; background: var(--bridge-accent); pointer-events: none; }
 .wipe input[type=range] { position: absolute; inset: auto 0 0 0; width: 100%; margin: 0; opacity: 0; height: 100%; top: 0; cursor: ew-resize; }
-.shots { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); margin: 0 0 12px; }
-.shots figure { margin: 0; }
+.shots { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 .shots img { border: 1px solid var(--bridge-line); }
 
-.doc-text-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 10px; }
-.doc-text { margin: 0; font: 13px/1.55 -apple-system, system-ui, sans-serif; }
-.doc-image { margin: 0; text-align: center; }
+.doc-text-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.doc-text { font: 13px/1.55 -apple-system, system-ui, sans-serif; }
+.doc-image { text-align: center; }
 .doc-image img { max-width: 100%; height: auto; border-radius: 6px; box-shadow: 0 0 0 1px var(--bridge-line); }
 .doc-svg svg { display: block; width: 100%; height: auto; max-height: calc(100vh - 80px); }
 
@@ -166,15 +171,15 @@ table.data { width: auto; }
 .language-diff .token.prefix { display: inline; color: var(--bridge-muted); }
 .language-diff .token.coord { color: var(--bridge-muted); }
 
-.bars { display: grid; gap: 6px; margin: 0 0 12px; }
+.bars { display: grid; gap: 6px; }
 .bar { display: grid; grid-template-columns: minmax(80px, 1fr) 4fr auto; gap: 10px; align-items: center; font-size: 12px; }
 .bar::after { content: ""; grid-column: 2; height: 12px; border-radius: 3px; background: var(--bridge-accent); width: calc(var(--v, 0) * 1%); order: 1; }
 .bar > span { grid-column: 1; }
 .bar > b { grid-column: 3; order: 2; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--bridge-muted); }
 .bar[data-muted]::after { background: var(--bridge-line); }
 
-.dials { display: grid; gap: 4px; margin: 0 0 16px; }
-.dial { position: relative; display: grid; grid-template-columns: 1fr auto; align-items: center; height: 28px; padding: 0 10px; margin: 0; border-radius: 6px; background: var(--bridge-panel); overflow: hidden; --fill: 0%; }
+.dials { display: grid; gap: 4px; }
+.dial { position: relative; display: grid; grid-template-columns: 1fr auto; align-items: center; height: 28px; padding: 0 10px; border-radius: 6px; background: var(--bridge-panel); overflow: hidden; --fill: 0%; }
 .dial::before { content: ""; position: absolute; inset: 0; width: var(--fill); background: color-mix(in srgb, var(--bridge-accent) 24%, transparent); pointer-events: none; }
 .dial > span, .dial > output { position: relative; z-index: 1; pointer-events: none; font-size: 12px; }
 .dial > output { color: var(--bridge-muted); font-variant-numeric: tabular-nums; }
@@ -186,7 +191,7 @@ table.data { width: auto; }
 :is(input:not([type=range]):not([type=checkbox]):not([type=radio]), textarea, select)[data-answered] { box-shadow: inset 2px 0 0 var(--bridge-accent); }
 .dial:focus-within { outline: 2px solid color-mix(in srgb, var(--bridge-accent) 45%, transparent); outline-offset: 1px; }
 
-.bridge-color { display: grid; grid-template-columns: 56px 1fr; gap: 10px 12px; margin: 0 0 16px; align-items: start; }
+.bridge-color { display: grid; grid-template-columns: 56px 1fr; gap: 10px 12px; align-items: start; }
 .bridge-swatch { width: 56px; height: 96px; border-radius: 8px; box-shadow: 0 0 0 1px var(--bridge-line) inset; grid-row: 1 / 3; }
 .bridge-color-dials { display: grid; gap: 4px; }
 .bridge-color-dial::before { background: none; }
@@ -201,7 +206,7 @@ table.data { width: auto; }
 .bridge-color-read code { font-size: 12px; }
 .bridge-color-read small { color: var(--bridge-muted); }
 
-fieldset.options { border: 0; padding: 0; margin: 0 0 16px; min-width: 0; }
+fieldset.options { border: 0; padding: 0; min-width: 0; }
 .options > legend { font-weight: 600; margin: 0 0 8px; padding: 0; grid-column: 1 / -1; }
 .options > :has(> input[type=radio]) {
   position: relative;
@@ -218,7 +223,7 @@ fieldset.options { border: 0; padding: 0; margin: 0 0 16px; min-width: 0; }
 .options > :has(> input[type=radio]) > label { display: block; font-weight: 600; margin: 0 0 2px; }
 .options > :has(> input[type=radio]) > label + span { display: block; }
 
-.metrics { display: grid; gap: 2px; margin: 0 0 12px; max-width: 460px; }
+.metrics { display: grid; gap: 2px; max-width: 460px; }
 .metrics > div { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; padding: 5px 0; border-bottom: 1px solid var(--bridge-line); font-size: 12px; }
 .metrics dt { color: var(--bridge-muted); }
 .metrics dd { margin: 0; font-variant-numeric: tabular-nums; text-align: right; }
@@ -226,10 +231,9 @@ fieldset.options { border: 0; padding: 0; margin: 0 0 16px; min-width: 0; }
 .bar[data-tone="warn"]::after { background: #d9822b; }
 .bar[data-tone="bad"]::after { background: #d9534f; }
 
-details { margin: 0 0 10px; }
 details > summary { font-weight: 600; cursor: default; }
 
-.swatches { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 12px; }
+.swatches { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .swatches [data-color] { width: 26px; height: 26px; padding: 0; border: 1px solid var(--bridge-line); border-radius: 6px; cursor: default; }
 .swatches [data-color][aria-pressed="true"] { box-shadow: 0 0 0 2px Canvas, 0 0 0 4px var(--bridge-accent); }
 .swatches input { width: 84px; font: 12px ui-monospace, SF Mono, Menlo, monospace; }
