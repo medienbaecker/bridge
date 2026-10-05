@@ -333,6 +333,135 @@ If the analysis genuinely needs more,
 the rest goes in a `<details>` they can open, or in chat. One question per
 page; two at most, and never three.
 
+### Explorable
+
+How a piece of code works, shown by running it and letting the user move it:
+
+- Run the real code. Paste the module's source as it is into a
+  `<script type="text/plain">` (`cat src/spring.js`, never retyped) and
+  import that, as below. For a look, embed the real site in a frame instead.
+- One step per heading, one line that starts with a verb, then a big visual.
+- Let them drag, pull or scrub it; that is how it is understood.
+- Slow down what is too fast to see: record one cycle, then a step button
+  and a scrubber over it.
+- Numbers are readouts next to what they measure, axes are labelled.
+- One control drives everything on the page.
+- Silent by default; any sound starts only after a click.
+
+A page is a `file://` document, and a module import from a file is refused,
+from beside the page too; one from a blob URL works. A module that imports
+others: bundle it first (`npx esbuild src/rope.js --bundle --format=esm`) and
+paste the bundle.
+
+```html
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>The spring</title>
+<style>
+  svg { display: block; width: 100%; max-width: 560px; height: auto; touch-action: none; }
+  svg line { stroke: var(--bridge-line); }
+  svg text { fill: var(--bridge-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  #weight, #dot { fill: var(--bridge-accent); cursor: grab; }
+  #trace { stroke: var(--bridge-accent); stroke-width: 2; fill: none; }
+  #marker { stroke: var(--bridge-muted); }
+  #t { flex: 1; max-width: 440px; }
+</style></head>
+<body>
+<h1>The spring</h1>
+<div class="dials">
+  <label class="dial"><span>Stiffness</span><input id="k" type="range" min="1" max="200" step="0.1" value="60"><output></output></label>
+  <label class="dial"><span>Damping</span><input id="damping" type="range" min="0" max="20" step="0.01" value="3"><output></output></label>
+</div>
+
+<h2>1. Drag the weight</h2>
+<p class="muted">Pull it down, let go: step() moves it every frame.</p>
+<svg id="spring" viewBox="0 0 400 170">
+  <line id="cord" x1="200" y1="0" x2="200" y2="80"></line>
+  <circle id="weight" cx="200" cy="80" r="14"></circle>
+  <text id="readout" x="224" y="84"></text>
+</svg>
+
+<h2>2. One second, slowed down</h2>
+<p class="muted">Step or scrub through one release from x = 80.</p>
+<svg id="plot" viewBox="0 0 400 170">
+  <line x1="30" y1="80" x2="400" y2="80"></line>
+  <text x="0" y="84">x 0</text><text x="378" y="168">1 s</text>
+  <path id="trace"></path>
+  <line id="marker" x1="30" y1="0" x2="30" y2="160"></line>
+  <circle id="dot" r="4"></circle>
+  <text id="at" y="12"></text>
+</svg>
+<div class="row"><button id="next">Next step</button><input id="t" type="range" min="0" max="60" step="1" value="0" aria-label="Time"></div>
+
+<script type="text/plain" id="spring.js">
+export function step(x, v, k, damping, dt = 1 / 60) {
+  const a = -k * x - damping * v;
+  v += a * dt;
+  x += v * dt;
+  return [x, v];
+}
+</script>
+<script type="module">
+const real = document.getElementById('spring.js').textContent;
+const { step } = await import(URL.createObjectURL(new Blob([real], { type: 'text/javascript' })));
+const $ = (id) => document.getElementById(id);
+const params = () => [Number($('k').value), Number($('damping').value)];
+const frames = 60, rest = 80, px = (i) => 30 + i * 370 / frames, py = (x) => 80 + x * 0.9;
+let x = 0, v = 0, held = false, trace = [];
+
+function frame() {
+  if (!held) [x, v] = step(x, v, ...params());
+  $('weight').setAttribute('cy', rest + x);
+  $('cord').setAttribute('y2', rest + x);
+  $('readout').setAttribute('y', rest + x + 4);
+  $('readout').textContent = `x ${x.toFixed(1)}  v ${v.toFixed(1)}`;
+  requestAnimationFrame(frame);
+}
+$('weight').addEventListener('pointerdown', () => { held = true; v = 0; });
+addEventListener('pointermove', (e) => {
+  if (!held) return;
+  const p = new DOMPoint(e.clientX, e.clientY).matrixTransform($('spring').getScreenCTM().inverse());
+  x = Math.max(-70, Math.min(70, p.y - rest));
+});
+addEventListener('pointerup', () => { held = false; });
+
+function record() {
+  trace = [[80, 0]];
+  for (let i = 1; i <= frames; i++) trace.push(step(...trace[i - 1], ...params()));
+  $('trace').setAttribute('d', trace.map(([x], i) => `${i ? 'L' : 'M'}${px(i)} ${py(x)}`).join(' '));
+  scrub();
+}
+function scrub() {
+  const i = Number($('t').value), [x, v] = trace[i];
+  for (const a of ['x1', 'x2']) $('marker').setAttribute(a, px(i));
+  $('dot').setAttribute('cx', px(i));
+  $('dot').setAttribute('cy', py(x));
+  $('at').setAttribute('x', Math.min(px(i) + 6, 250));
+  $('at').textContent = `${(i / frames).toFixed(2)} s  x ${x.toFixed(1)}  v ${v.toFixed(1)}`;
+}
+$('t').addEventListener('input', scrub);
+$('next').addEventListener('click', () => { $('t').value = (Number($('t').value) + 1) % (frames + 1); scrub(); });
+for (const id of ['k', 'damping']) $(id).addEventListener('input', record);
+record();
+frame();
+</script>
+</body>
+</html>
+```
+
+Whenever the page re-implements something instead of importing it, show a
+check that runs the real code on the same input and says whether the result
+matches. A convincing wrong explanation is worse than none:
+
+```js
+const real = [[80, 0]];
+for (let i = 1; i < trace.length; i++) real.push(step(...real[i - 1], ...params()));
+const off = trace.findIndex(([x], i) => Math.abs(x - real[i][0]) > 1e-9);
+$('check').textContent = off < 0 ? 'Matches spring.js' : `Differs from spring.js at frame ${off}`;
+```
+
+with `<p class="evidence" id="check"></p>` next to the picture it vouches for.
+
 ### Live site next to evidence
 
 ```html

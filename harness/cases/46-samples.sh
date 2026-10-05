@@ -17,6 +17,9 @@ PY
 repo
 n=$(ls "$CASE_DIR/pages"/sample-*.html | wc -l | tr -d ' ')
 check "pages.md has html samples to test" "$([ "$n" -ge 10 ] && echo many)" "many"
+same() { python3 -c 'import sys; print("same" if open(sys.argv[1]).read() in open(sys.argv[2]).read() else "differs")' "$@"; }
+check "the Explorable sample in pages.md is harness/fixtures/explorable.html" "$(same "$ROOT/harness/fixtures/explorable.html" "$ROOT/skills/bridge/pages.md")" "same"
+check "and it runs harness/fixtures/spring.js as it is" "$(same "$ROOT/harness/fixtures/spring.js" "$ROOT/harness/fixtures/explorable.html")" "same"
 driver=$(cat "$ROOT/harness/cases/46-driver.js")
 for page in "$CASE_DIR/pages"/sample-*.html; do
   name=$(basename "$page" .html)
@@ -24,6 +27,9 @@ for page in "$CASE_DIR/pages"/sample-*.html; do
   check "$name: lint has no error ($(bridge --lint "$page" | grep ': error: ' | head -1 | cut -d: -f3- | cut -c1-90))" "$errors" "0"
   (cd "$CASE_DIR/pages" && bridge "$(basename "$page")" 2> "$CASE_DIR/$name.err"); wait_ready; settle 0.6
   check "$name: presenting prints nothing on stderr" "$(grep -v WARNING "$CASE_DIR/$name.err" | cut -c1-120)" ""
+  if grep -q '<title>The spring</title>' "$page"; then
+    check "$name: the explorable imports the real code and draws with it" "$(bridge --js "$page" "return !!document.getElementById('trace').getAttribute('d')")" "true"
+  fi
   driven=$(bridge --js "$page" "$driver")
   keys=$(printf '%s' "$driven" | jq -r '.keys | join(",")'); undriven=$(printf '%s' "$driven" | jq -r '.undriven | join(",")')
   if [ -n "$keys" ]; then
