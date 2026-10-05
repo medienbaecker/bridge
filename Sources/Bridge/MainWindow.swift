@@ -166,6 +166,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         }
         if id == Self.docTitle {
             let item = NSToolbarItem(itemIdentifier: id)
+            docTitleView.indent = listHeader.indent
             item.view = docTitleView
             item.label = "Document"
             return item
