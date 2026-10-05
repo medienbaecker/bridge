@@ -31,7 +31,7 @@
     document.dispatchEvent(new Event('bridge:error'));
   };
   window.addEventListener('error', (e) => {
-    if (e.message === 'Script error.' && !e.lineno) report('a script threw, and WebKit hides what from a file:// page: move the code into bridge.ready(() => { … }) and the next present names the error and its line');
+    if (e.message === 'Script error.' && !e.lineno) report('a script from another origin threw, and WebKit hides its message: load it from a file beside the page to see the error and its line');
     else if (e.message) report(e.message, e.filename, e.lineno);
   });
   window.addEventListener('unhandledrejection', (e) => report('Unhandled rejection: ' + (e.reason && e.reason.message || e.reason)));
