@@ -116,7 +116,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
     static let listName = NSToolbarItem.Identifier("listName")
     static let docTitle = NSToolbarItem.Identifier("documentTitle")
     let listHeader = TitleLabel()
-    let docTitleView = DocumentTitle()
+    let docTitleView = TitleLabel()
 
     static func pointImage(on: Bool) -> NSImage? {
         symbol("mappin.and.ellipse", on ? "Pointing" : "Point", tint: on ? .controlAccentColor : nil)
@@ -139,10 +139,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         window?.toolbar?.validateVisibleItems()
         window?.title = page?.title ?? "Bridge"
         listHeader.show(ScopeCell.name(of: model.scope))
-        docTitleView.show(title: page?.title, url: window?.representedURL)
-        // The path is the window's represented file, reachable through the proxy icon,
-        // rather than a subtitle under every title.
-        if let page, page.kind != .url { window?.representedURL = URL(fileURLWithPath: page.location) } else { window?.representedURL = nil }
+        docTitleView.show(page?.title ?? "")
     }
 
     // MARK: Toolbar
@@ -637,41 +634,5 @@ class TitleLabel: NSTextField {
         style.lineBreakMode = .byTruncatingTail
         attributedStringValue = NSAttributedString(string: text, attributes: [.font: font ?? .titleBarFont(ofSize: NSFont.systemFontSize), .paragraphStyle: style])
         invalidateIntrinsicContentSize()
-    }
-}
-
-/// The document's icon and title over the page column, the icon draggable like a
-/// proxy icon. One text field with the icon as an attachment, because the toolbar
-/// draws a label bare but wraps a custom view in a capsule.
-final class DocumentTitle: TitleLabel, NSDraggingSource {
-    private var url: URL?
-    private var icon: NSImage?
-
-    var title: String { url == nil ? stringValue : String(stringValue.dropFirst(2)) }
-    var iconShown: Bool { icon != nil }
-
-    func show(title: String?, url: URL?) {
-        self.url = url
-        icon = url.map { NSWorkspace.shared.icon(forFile: $0.path) }
-        guard let icon else { stringValue = title ?? ""; return }
-        let attachment = NSTextAttachment()
-        icon.size = NSSize(width: 16, height: 16)
-        attachment.image = icon
-        attachment.bounds = NSRect(x: 0, y: -3.5, width: 16, height: 16)
-        let text = NSMutableAttributedString(attachment: attachment)
-        text.append(NSAttributedString(string: " " + (title ?? ""), attributes: [.font: font ?? .titleBarFont(ofSize: NSFont.systemFontSize)]))
-        attributedStringValue = text
-        invalidateIntrinsicContentSize()
-    }
-
-    override func mouseDragged(with event: NSEvent) {
-        guard let url, let icon else { return }
-        let item = NSDraggingItem(pasteboardWriter: url as NSURL)
-        item.setDraggingFrame(NSRect(x: 0, y: (bounds.height - 16) / 2, width: 16, height: 16), contents: icon)
-        beginDraggingSession(with: [item], event: event, source: self)
-    }
-
-    func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
-        context == .outsideApplication ? [.copy, .link] : .generic
     }
 }
