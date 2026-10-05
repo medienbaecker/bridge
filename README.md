@@ -1,6 +1,6 @@
 # Bridge
 
-macOS app that lets Claude Code show pages and read back your answers.
+macOS app that lets Claude Code show pages and read back your answers. Why: [Planning with Agents](https://maggieappleton.com/planning-agents) by Maggie Appleton.
 
 ![Bridge](.github/screenshot.png)
 
