@@ -48,7 +48,6 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
         stack.orientation = .vertical
         stack.spacing = 0
         stack.alignment = .width
-        stack.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 12, right: 0)
         view = stack
     }
 
@@ -65,11 +64,17 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
     func showUpdate(_ text: String?) {
         update.isHidden = text == nil
         if let text { update.text = text }
+        fitFoot()
     }
 
     func showPileup(_ text: String?) {
         pileup.isHidden = text == nil
         if let text { pileup.text = text }
+        fitFoot()
+    }
+
+    private func fitFoot() {
+        (view as? NSStackView)?.edgeInsets.bottom = update.isHidden && pileup.isHidden ? 0 : 12
     }
 
     func listWaiters() {
