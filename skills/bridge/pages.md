@@ -398,9 +398,10 @@ Nothing to answer: the user crosses it when they have read it, or leaves notes.
 ### Sound
 
 A page is a `file://` document. Workers, `import()` and `fetch()` from blob
-URLs work, but an AudioWorklet module from a blob URL is refused ("Cross-origin
-script load denied"). Write the processor to a file beside the page and load
-that; no local server needed:
+URLs work. An AudioWorklet module from a blob URL is refused by some WebKit
+versions ("Cross-origin script load denied") and loaded by others, so write
+the processor to a file beside the page and load that; it works on every
+version, no local server needed:
 
 ```js
 const ctx = new AudioContext();

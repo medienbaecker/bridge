@@ -75,13 +75,13 @@ public struct Lint {
                 out.append(Finding(line: line, level: .warning, text: "this pre looks like columns spaced by hand, not code: aligned data is a table.data with a .remark cell per row and a tbody per group (pages.md, Aligned data)"))
             }
         }
-        // A page is a file:// document and its blobs have another origin, so WebKit
-        // refuses an AudioWorklet module from a blob; a file beside the page loads.
+        // A page is a file:// document and its blobs have another origin, so some WebKit
+        // versions refuse an AudioWorklet module from a blob; a file beside the page always loads.
         for m in Self.ranges(#"(?is)<script[^>]*>(.*?)</script>"#, in: html) {
             let js = String(html[m.inner])
             guard let at = js.range(of: "addModule("), js.range(of: #"createObjectURL|blob:"#, options: .regularExpression) != nil else { continue }
             let line = lineOf(html.distance(from: html.startIndex, to: m.inner.lowerBound) + js.distance(from: js.startIndex, to: at.lowerBound))
-            out.append(Finding(line: line, level: .warning, text: "an AudioWorklet module from a blob URL is refused here (the page is a file:// document): write the processor to a .js file beside the page and addModule('that.js') (pages.md, Sound)"))
+            out.append(Finding(line: line, level: .warning, text: "an AudioWorklet module from a blob URL is refused by some WebKit versions (the page is a file:// document): write the processor to a .js file beside the page and addModule('that.js') (pages.md, Sound)"))
         }
         out += textWalls(html: html, lineOf: lineOf)
         return out.sorted { $0.line < $1.line }
