@@ -121,10 +121,10 @@ card is marked by the browser:
 Both shapes record the `value`; do not switch a page from one to the other
 after the user has answered it (that changes what the page asks).
 
-A `checked` radio or checkbox, a range or select with a value, is a
-proposal: the record carries it from the moment the user sees the page, and
-names the key under `defaults` until they touch the control. If your page's
-outcome depends on them actually deciding, do not pre-check it.
+Do not pre-check an option. A `checked` radio or checkbox looks like their
+answer and is recorded as one from the moment they see the page (named under
+`defaults` until they touch it). A range or select starts at today's value,
+so what they leave alone means "keep it".
 
 ### Key and value
 

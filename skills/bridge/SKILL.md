@@ -91,6 +91,9 @@ dark variant (`prefers-color-scheme: dark`); the window follows the system.
 Words carry only what cannot be shown: a name and one line of consequence per
 option. When a card needs a paragraph, the picture is missing.
 
+Nothing a decision rests on is selected before they choose; a tuning control
+starts at today's value.
+
 **Look before they do.** `bridge --shot page.html /tmp/…/page.png` renders the
 page off-screen, the way the window would, without presenting it. Read the
 image and ask: where does my eye land first? Can I see what they are judging
