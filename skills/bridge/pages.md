@@ -2,8 +2,13 @@
 
 A plain page is one `.html` file. Bridge injects a stylesheet that makes
 semantic HTML look like a macOS panel in light and dark, following the system
-accent. Write the content; do not write CSS unless you need something the base
-does not give you. No `<style>` for fonts, colours or backgrounds.
+accent. The kit owns the parts that ask: buttons, option cards, inputs,
+drafts, notes. Leave those alone, so answering feels the same on every page.
+
+What the page shows is yours to design: write a `<style>`, draw in SVG or CSS,
+make illustrations and icons, pick a palette for the topic. Give every colour
+you choose a dark variant (`@media (prefers-color-scheme: dark)`). The shapes
+below show how each kit part is written, not what a page should look like.
 
 ## How recording works
 
@@ -248,9 +253,14 @@ shape for what would otherwise be a hand-spaced `pre`.
 ### Tuning by feel: dials and colour
 
 Numbers the user tunes by feel are dials, not sliders: one filled row per
-value, draggable anywhere across the row, label left, readout right. Six of them
-read as a property list to play with, not a form to fill in. Underneath is a
-real range input, so keyboard and screen readers work.
+value, draggable anywhere across the row, label left, readout right. Underneath
+is a real range input, so keyboard and screen readers work.
+
+Name a dial in their words, not the property's: "Weight" for a shadow, not
+offset, blur and opacity. When several properties move together, one dial
+drives one custom property and your CSS derives the rest from it
+(`box-shadow: 0 calc(var(--weight) * 8px) calc(var(--weight) * 24px) rgb(0 0 0 / calc(var(--weight) * .35))`).
+A dial per raw property is for when they asked for the numbers.
 
 ```html
 <div class="dials">
@@ -423,7 +433,8 @@ text panel), `.shots` (screenshot grid), `.wipe` (before/after), `.bars` and
 `.language-*` on `code` (highlighting; `.language-diff` for diffs),
 `.primary` and `[data-send]` (accent button), `.button` (a link that looks
 like one). Colours: `var(--bridge-accent)`, `var(--bridge-muted)`,
-`var(--bridge-line)`, `var(--bridge-panel)`.
+`var(--bridge-line)`, `var(--bridge-panel)`; your own palette goes in your
+`<style>` next to its dark variant.
 
 Nothing else exists. A class the kit does not define and the page does not
 define in its own `<style>` styles nothing, and the CLI says so on stderr

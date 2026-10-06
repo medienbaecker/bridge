@@ -18,6 +18,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
 
     let location: String
     let kind: Kind
+    let preview: Bool
     unowned let model: Model
     let webView: WKWebView
     let sidecarURL: URL
@@ -49,8 +50,9 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
     var drives: [String: [String: Any]] = [:]
     var errors: [String] = []
 
-    init(location: String, model: Model) {
+    init(location: String, model: Model, preview: Bool = false) {
         self.location = location
+        self.preview = preview
         self.kind = Kind.of(location)
         self.model = model
         self.sidecarURL = Paths.sidecar(for: location)
@@ -69,7 +71,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         webView.navigationDelegate = self
         webView.uiDelegate = self
         webView.setValue(false, forKey: "drawsBackground")
-        if kind != .url {
+        if kind != .url, !preview {
             let dir = URL(fileURLWithPath: location).deletingLastPathComponent()
             let files = [location, sidecarURL.path, Paths.dataFile(for: location).path]
             watcher = Watcher(directory: dir, files: files) { [weak self] in self?.fileChanged() }
@@ -253,11 +255,11 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
             let classes = body["classes"] as? [String: Any]
             unknownClasses = (classes?["unknown"] as? [String]) ?? []
             collidingClasses = (classes?["both"] as? [String]) ?? []
-            if let t = body["title"] as? String, !t.isEmpty, viewingVersion == nil, !buildFailed { title = t; model.setTitle(t, for: location) }
+            if let t = body["title"] as? String, !t.isEmpty, viewingVersion == nil, !buildFailed, !preview { title = t; model.setTitle(t, for: location) }
             checkFrames()
             fallthrough
         case "shape":
-            if viewingVersion == nil, !buildFailed, !missing, let shape = body["shape"] as? String {
+            if !preview, viewingVersion == nil, !buildFailed, !missing, let shape = body["shape"] as? String {
                 applyShape(shape, questions: body["questions"] as? [String] ?? [], api: body["api"] as? [String] ?? [])
             }
             replyHandler(readyPayload(), nil)
@@ -281,7 +283,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
             }
             replyHandler(nil, nil)
         case "size":
-            if kind == .image, let w = body["width"] as? Int, let h = body["height"] as? Int {
+            if kind == .image, !preview, let w = body["width"] as? Int, let h = body["height"] as? Int {
                 title = "\((location as NSString).lastPathComponent) · \(w)×\(h)"
                 model.setTitle(title, for: location)
             }
@@ -614,14 +616,14 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
     }
 
     func save() {
-        guard unreadable == nil else { return }
+        guard unreadable == nil, !preview else { return }
         let data = sidecar.data()
         lastWritten = data
         try? data.write(to: sidecarURL, options: .atomic)
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        if kind == .url { let t = webView.title ?? ""; if !t.isEmpty { title = t; model.setTitle(t, for: location) } }
+        if kind == .url, !preview { let t = webView.title ?? ""; if !t.isEmpty { title = t; model.setTitle(t, for: location) } }
         if kind == .pdf { ready = true; model.onChange() }
     }
 

@@ -11,6 +11,7 @@ bridge --remove <file>                 take it off their list entirely (rare)
 bridge --reset <file>                  remove it and forget their answers, history and notes: the next present is version 1
 bridge --state                         what the app is showing right now, JSON
 bridge --shot <out.png>                a picture of the app's window, to check what they see
+bridge --shot <file> <out.png> [--width N]   the page rendered off-screen, as the window would show it, without presenting it
 bridge --waiters                       agent processes waiting for an answer, with age and memory, JSON
 bridge --pins   <file>                 open notes with their threads
 bridge --reply  <file> <id> <text>
@@ -34,8 +35,9 @@ presented, one finding per line as `file:line: level: what to do`. Errors
 (exit 1): a class no stylesheet defines, with the nearest thing in the
 vocabulary or the shape the word usually wants; a class the page's own
 `<style>` and the kit both define, which lands both on the element (rename
-yours, the message suggests a prefix from the title). Warnings (exit 0): a
-colour or a border radius written out where `var(--bridge-*)` exists; a `pre`
+yours, the message suggests a prefix from the title). Warnings (exit 0):
+colours of the page's own with no dark variant, or a colour in a `style`
+attribute, which no dark variant can reach; a `pre`
 whose lines are columns spaced by hand, or `language-*` on text that is not
 that language. A page that loads a stylesheet from elsewhere is not checked
 for unknown classes, since that sheet may define anything. The same checks

@@ -15,6 +15,7 @@ public enum Request: Codable, Sendable {
     case command(name: String, argument: String?)
     case snapshot(path: String)
     case shot(path: String, screen: Bool)
+    case render(location: String, path: String, width: Double?)
     case quit
 }
 

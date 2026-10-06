@@ -2,7 +2,7 @@
 # `bridge --lint`: the four faults that cost real damage, caught while the
 # writing agent still holds the file, one line each, saying what to do. An
 # unknown class with a suggestion from the real vocabulary, a class the page
-# and the kit both style, a colour or radius written out, a pre that is a
+# and the kit both style, colours with no dark variant, a pre that is a
 # table. Errors exit 1, warnings 0; the gallery is clean; the editor script collides.
 source "$(dirname "$0")/../lib.sh"
 page="$CASE_DIR/pages/lint.html"
@@ -22,10 +22,10 @@ cat > "$page" <<'HTML'
 HTML
 out=$(bridge --lint "$page"); code=$?
 check "errors exit 1" "$code" "1"
-check "one line per finding, in line order, with the file and the level" "$(printf '%s\n' "$out" | cut -d: -f1-3 | tr '\n' '|')" "lint.html:3: warning|lint.html:3: warning|lint.html:6: error|lint.html:7: error|lint.html:8: warning|lint.html:9: warning|"
+check "one line per finding, in line order, with the file and the level" "$(printf '%s\n' "$out" | cut -d: -f1-3 | tr '\n' '|')" "lint.html:3: warning|lint.html:6: error|lint.html:7: error|lint.html:8: warning|lint.html:9: warning|"
 check "an unknown class gets a suggestion from the vocabulary" "$(printf '%s\n' "$out" | grep -c 'faint. styles nothing: did you mean .\.muted.?')" "1"
 check "a collision names both sides and a rename from the page's title" "$(printf '%s\n' "$out" | grep -c 'draft. is styled by this page and by the kit.*\.estimate-draft')" "1"
-check "a colour and a radius written out are warnings naming the tokens" "$(printf '%s\n' "$out" | grep -c 'written out.*var(--bridge-')" "3"
+check "own colours without a dark variant, and a colour inline, are warnings; a radius is the page's own" "$(printf '%s\n' "$out" | grep -c 'no dark variant')" "2"
 check "a hand-spaced pre is pointed at table.data; real code is left alone" "$(printf '%s\n' "$out" | grep -c 'columns spaced by hand')" "1"
 check "the kit's own classes raise nothing" "$(printf '%s\n' "$out" | grep -c 'card\|between\|\.num')" "0"
 bridge --lint "$ROOT/harness/fixtures/gallery.html" > "$CASE_DIR/gallery.out"; check "the gallery is clean, exit 0" "$? $(wc -l < "$CASE_DIR/gallery.out" | tr -d ' ')" "0 0"

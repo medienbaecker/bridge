@@ -125,8 +125,8 @@ import Foundation
     let texts = findings.map(\.text)
     #expect(texts.contains { $0.hasPrefix("`.faint` styles nothing: did you mean `.muted`?") })
     #expect(texts.contains { $0.hasPrefix("`.draft` is styled by this page and by the kit") && $0.contains("`.editor-draft`") })
-    #expect(texts.contains { $0.contains("a colour written out (#333)") })
-    #expect(texts.contains { $0.contains("a radius written out (3px)") })
+    #expect(texts.contains { $0.hasPrefix("colours of your own and no dark variant") })
+    #expect(!texts.contains { $0.contains("radius") })
     #expect(texts.filter { $0.contains("columns spaced by hand") }.count == 1)
     #expect(!texts.contains { $0.contains("`.card`") })
     #expect(findings.filter { $0.level == .error }.count == 2)
@@ -180,10 +180,14 @@ import Foundation
     try? fm.removeItem(at: root)
 }
 
-@Test func lintLeavesAPillAlone() {
-    let page = #"<style>.chip { border-radius: 999px } .tag { border-radius: 99px } .box { border-radius: 12px }</style>"#
-    let texts = Lint(kitCSS: "").run(html: page).map(\.text)
-    #expect(texts.filter { $0.contains("a radius written out") } == ["a radius written out (12px): use var(--bridge-radius), the kit's one"])
+@Test func lintLetsAPageChooseColoursThatHaveADarkVariant() {
+    let palette = ".lane { background: oklch(0.62 0.17 145); border-radius: 4px }"
+    let lone = "<style>\(palette)</style><div class=\"lane\"></div>"
+    let paired = "<style>\(palette) @media (prefers-color-scheme: dark) { .lane { background: oklch(0.7 0.16 145) } }</style><div class=\"lane\"></div>"
+    #expect(Lint(kitCSS: "").run(html: lone).map(\.text).filter { $0.hasPrefix("colours of your own and no dark variant") }.count == 1)
+    #expect(Lint(kitCSS: "").run(html: paired).isEmpty)
+    let inline = paired + "<span style=\"background: #c33\"></span><span style=\"width: 30%\"></span>"
+    #expect(Lint(kitCSS: "").run(html: inline).map(\.text) == ["a colour in a style attribute (#c33): no dark variant can reach it; set a custom property from your <style> instead"])
 }
 
 @Test func lintNamesABlobWorklet() {
@@ -232,6 +236,22 @@ private let kitOfShapes = ".options { } .draft { } .bars { } .bar { }"
     let found = Lint(kitCSS: kitOfShapes).run(html: plain).filter { $0.text.hasPrefix("option cards that are only text") }
     #expect(found.count == 1 && found.first?.line == 2)
     #expect(!Lint(kitCSS: kitOfShapes).run(html: shown).contains { $0.text.hasPrefix("option cards that are only text") })
+    #expect(Lint(kitCSS: kitOfShapes).run(html: short).isEmpty)
+}
+
+@Test func lintNamesTextOnlyCheckboxAndRadioCards() {
+    let prose = "Nothing references it and the README already says so. It is still compiled into every build."
+    let checkboxes = "<body><div data-record=\"cuts\" class=\"options stack\">\n<label><input type=\"checkbox\" value=\"logo\"><strong>Logo</strong> \(prose)</label>\n<label><input type=\"checkbox\" value=\"alpha\"><strong>Alpha</strong> \(prose)</label>\n</div>"
+    let radios = "<body><fieldset class=\"options\">\n<div><input type=\"radio\" name=\"c\" id=\"a\" value=\"a\" data-record=\"c\"><label for=\"a\">A</label><span>\(prose)</span></div>\n</fieldset>"
+    for page in [checkboxes, radios] {
+        let found = Lint(kitCSS: kitOfShapes).run(html: page).filter { $0.text.hasPrefix("option cards that are only text") }
+        #expect(found.count == 1 && found.first?.line == 2)
+    }
+    let shown = checkboxes.replacingOccurrences(of: "</strong>", with: "</strong><img src=\"/a.png\" alt=\"\">")
+    #expect(!Lint(kitCSS: kitOfShapes).run(html: shown).contains { $0.text.hasPrefix("option cards that are only text") })
+    let diffed = checkboxes.replacingOccurrences(of: "</strong>", with: "</strong><pre><code class=\"language-diff\">- let logo = load()</code></pre>")
+    #expect(!Lint(kitCSS: kitOfShapes).run(html: diffed).contains { $0.text.hasPrefix("option cards that are only text") })
+    let short = "<body><div data-record=\"cuts\" class=\"options\"><label><input type=\"checkbox\" value=\"a\"><strong>Logo</strong> unused, 4 lines</label><label><input type=\"checkbox\" value=\"b\"><strong>Alpha</strong> two knobs</label></div>"
     #expect(Lint(kitCSS: kitOfShapes).run(html: short).isEmpty)
 }
 

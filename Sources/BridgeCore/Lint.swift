@@ -50,23 +50,18 @@ public struct Lint {
             }
         }
 
-        let cssBits = styles.map { (String(html[$0.inner]), html.distance(from: html.startIndex, to: $0.inner.lowerBound)) }
-            + Self.ranges(#"(?i)\sstyle\s*=\s*"([^"]*)""#, in: html).filter { !Self.escaped(html, at: $0.whole.lowerBound) }.map { (String(html[$0.inner]), html.distance(from: html.startIndex, to: $0.inner.lowerBound)) }
-        for (css, base) in cssBits {
-            for m in Self.ranges(#"(?i)(?:^|[\s;{])(color|background(?:-color)?|border(?:-color)?|border-top|border-bottom|border-left|border-right|outline|box-shadow|fill|stroke)\s*:\s*([^;}]*)"#, in: css) {
-                let value = String(css[m.inner])
-                guard value.range(of: #"(?i)#[0-9a-f]{3,8}\b|\b(rgba?|hsla?|oklch|oklab)\("#, options: .regularExpression) != nil else { continue }
-                let line = lineOf(base + css.distance(from: css.startIndex, to: m.whole.lowerBound))
-                out.append(Finding(line: line, level: .warning, text: "a colour written out (\(value.trimmingCharacters(in: .whitespaces))): use var(--bridge-accent), var(--bridge-muted), var(--bridge-line), var(--bridge-panel), or a system colour (Canvas, CanvasText), so it holds in dark mode"))
-            }
-            for m in Self.ranges(#"(?i)border-radius\s*:\s*([^;}]*)"#, in: css) {
-                let value = String(css[m.inner]).trimmingCharacters(in: .whitespaces)
-                guard value.range(of: #"^\d*\.?\d+(px|rem|em)$"#, options: .regularExpression) != nil, !value.hasPrefix("0") else { continue }
-                // 999px is a pill, fully round whatever the height: a shape, not a choice of radius.
-                if value.hasSuffix("px"), let px = Double(value.dropLast(2)), px >= 99 { continue }
-                let line = lineOf(base + css.distance(from: css.startIndex, to: m.whole.lowerBound))
-                out.append(Finding(line: line, level: .warning, text: "a radius written out (\(value)): use var(--bridge-radius), the kit's one"))
-            }
+        let colour = #"(?i)(?:^|[\s;{])(?:color|background(?:-color)?|border(?:-color)?|border-top|border-bottom|border-left|border-right|outline|box-shadow|fill|stroke|stop-color)\s*:\s*([^;}]*(?:#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|oklch|oklab)\()[^;}]*)"#
+        let dark = html.range(of: #"(?i)prefers-color-scheme\s*:\s*dark|light-dark\("#, options: .regularExpression) != nil
+        if !dark, let (css, base) = styles.map({ (String(html[$0.inner]), html.distance(from: html.startIndex, to: $0.inner.lowerBound)) }).first(where: { !Self.ranges(colour, in: $0.0).isEmpty }),
+           let m = Self.ranges(colour, in: css).first {
+            let line = lineOf(base + css.distance(from: css.startIndex, to: m.whole.lowerBound))
+            out.append(Finding(line: line, level: .warning, text: "colours of your own and no dark variant: add them again under @media (prefers-color-scheme: dark), or the page breaks when the system is dark"))
+        }
+        for attr in Self.ranges(#"(?i)\sstyle\s*=\s*"([^"]*)""#, in: html) where !Self.escaped(html, at: attr.whole.lowerBound) {
+            let css = String(html[attr.inner])
+            guard let m = Self.ranges(colour, in: css).first else { continue }
+            let line = lineOf(html.distance(from: html.startIndex, to: attr.inner.lowerBound))
+            out.append(Finding(line: line, level: .warning, text: "a colour in a style attribute (\(String(css[m.inner]).trimmingCharacters(in: .whitespaces))): no dark variant can reach it; set a custom property from your <style> instead"))
         }
 
         for m in Self.ranges(#"(?is)<pre[^>]*>(.*?)</pre>"#, in: html) {
@@ -105,10 +100,20 @@ public struct Lint {
         let offset = { (i: String.Index) in text.distance(from: text.startIndex, to: i) }
         var out: [Finding] = []
 
-        let cards = Self.ranges(#"(?i)<(?!input\b|option\b)(\w+)\b[^>]*\sdata-value\b[^>]*>"#, in: text).compactMap { m -> (whole: Range<String.Index>, open: String, words: Int)? in
+        let valued = Self.ranges(#"(?i)<(?!input\b|option\b)(\w+)\b[^>]*\sdata-value\b[^>]*>"#, in: text).compactMap { m -> (whole: Range<String.Index>, open: String, words: Int, recorded: Bool)? in
             guard let whole = Self.element(in: text, at: m.whole, tag: String(text[m.inner])) else { return nil }
-            return (whole, String(text[m.whole]), Self.words(String(text[whole])))
+            let open = String(text[m.whole])
+            return (whole, open, Self.words(String(text[whole])), open.range(of: #"(?i)\sdata-record\b"#, options: .regularExpression) != nil)
         }
+        let choices = Self.ranges(#"(?i)<input\b[^>]*\stype\s*=\s*["']?(?:checkbox|radio)\b[^>]*>"#, in: text).map(\.whole.lowerBound)
+        let holders = Self.ranges(#"(?i)<(label|div)\b[^>]*>"#, in: text).compactMap { m -> (whole: Range<String.Index>, open: String, words: Int, recorded: Bool)? in
+            guard let whole = Self.element(in: text, at: m.whole, tag: String(text[m.inner])),
+                  choices.filter(whole.contains).count == 1,
+                  !valued.contains(where: { $0.whole.contains(whole.lowerBound) }) else { return nil }
+            return (whole, String(text[m.whole]), Self.words(String(text[whole])), true)
+        }
+        let held = holders.filter { outer in !holders.contains { $0.whole != outer.whole && outer.whole.contains($0.whole.lowerBound) } }
+        let cards = (valued + held).sorted { $0.whole.lowerBound < $1.whole.lowerBound }
         var walls = cards.filter { $0.words > Self.blockWords }.map(\.whole)
         for m in Self.ranges(#"(?is)<(p|li)\b[^>]*>.*?</\1>"#, in: text) where !walls.contains(where: { $0.contains(m.whole.lowerBound) }) {
             if Self.words(String(text[m.whole])) > Self.blockWords { walls.append(m.whole) }
@@ -117,12 +122,13 @@ public struct Lint {
             out.append(Finding(line: lineOf(offset(wall.lowerBound)), level: .warning, text: "\(Self.words(String(text[wall]))) words in one block: show it instead (pages.md, Screenshots, Swatches, Evidence: code, diffs, bars) or cut it to one line"))
         }
 
+        let code = Self.ranges(#"(?i)<pre\b"#, in: html).map { html.distance(from: html.startIndex, to: $0.whole.lowerBound) }
         let plain = cards.filter { card in
             let inside = (offset(card.whole.lowerBound) + card.open.count)..<offset(card.whole.upperBound)
-            return card.open.range(of: #"(?i)\sdata-record\b"#, options: .regularExpression) != nil && !drawn.marks.contains { inside.contains($0) }
+            return card.recorded && !(drawn.marks + code).contains { inside.contains($0) }
         }
         if let first = plain.first, let most = plain.map(\.words).max(), most > Self.cardWords {
-            out.append(Finding(line: lineOf(offset(first.whole.lowerBound)), level: .warning, text: "option cards that are only text (up to \(most) words): put the evidence in the card, a rendered preview, the real screenshot or a swatch, and keep the words to one line (pages.md, Decision)"))
+            out.append(Finding(line: lineOf(offset(first.whole.lowerBound)), level: .warning, text: "option cards that are only text (up to \(most) words): put the evidence in the card, a rendered preview, the real screenshot, a swatch or the diff, and keep the words to one line (pages.md, Decision)"))
         }
 
         let total = Self.words(text)

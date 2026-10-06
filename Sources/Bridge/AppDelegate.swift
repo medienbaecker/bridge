@@ -185,6 +185,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                     reply(.error("\(Flavor.appName) may not capture its own window: allow it in System Settings, Privacy & Security, Screen & System Audio Recording, then relaunch it. (\(error.localizedDescription))"))
                 } catch { reply(.error("\(error)")) }
             }
+        case .render(let loc, let path, let width):
+            Task { @MainActor in
+                do {
+                    let w = width.map { CGFloat($0) } ?? model.selectedPage.map { $0.webView.bounds.width }.flatMap { $0 > 0 ? $0 : nil } ?? 760
+                    let size = try await Preview.render(loc, model: model, width: w, to: path)
+                    reply(.ok(.object(["path": .string(path), "width": .number(Double(size.width)), "height": .number(Double(size.height))])))
+                } catch { reply(.error("\(error)")) }
+            }
         case .snapshot(let path):
             guard Env.test else { reply(.error("test mode only")); return }
             Task { @MainActor in

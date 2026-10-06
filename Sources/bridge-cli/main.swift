@@ -14,9 +14,10 @@ bridge-dev --cross  <file>              done with it: take it off their list
 bridge-dev --uncross <file>             bring it back
 bridge-dev --remove <file>              remove from the list entirely
 bridge-dev --reset  <file>              remove it and forget their record (answers, history, notes): the next present is version 1
-bridge-dev --lint   <file> [more files]   check a page before presenting it: unknown or colliding classes, colours and radii written out, a pre that is really a table
+bridge-dev --lint   <file> [more files]   check a page before presenting it: unknown or colliding classes, colours with no dark variant, a pre that is really a table
 bridge-dev --state                      what the running app is showing right now, JSON
 bridge-dev --shot <out.png>             a picture of the app's window
+bridge-dev --shot <file> <out.png> [--width N]   the page rendered off-screen as the window would show it, without presenting it
 bridge-dev --waiters                    the agent processes waiting for an answer, with their age and memory, JSON
 bridge-dev --pins   <file>              open notes with their threads
 bridge-dev --reply  <file> <id> <text>
@@ -387,7 +388,12 @@ case "--lint":
     exit(errors > 0 ? 1 : 0)
 
 case "--shot":
-    guard args.count >= 2 else { fail("--shot <out.png> [--screen]") }
+    guard args.count >= 2 else { fail("--shot <out.png> [--screen] | --shot <file> <out.png> [--width N]") }
+    if args.count >= 3, !args[2].hasPrefix("--") {
+        let width = args.firstIndex(of: "--width").flatMap { $0 + 1 < args.count ? Double(args[$0 + 1]) : nil }
+        print(json: check(send(.render(location: location(args[1]), path: Paths.resolve(args[2], relativeTo: cwd), width: width), launching: true)))
+        exit(0)
+    }
     print(json: check(send(.shot(path: Paths.resolve(args[1], relativeTo: cwd), screen: args.contains("--screen")))))
 
 case "--quit":

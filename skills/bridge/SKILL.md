@@ -1,6 +1,6 @@
 ---
 name: bridge
-description: Show the user something in a native window next to their terminal and read their answer back as JSON. Load it whenever you are about to hand the user more than a few lines to read, or anything they would understand faster by seeing or touching it: a choice between options, a value to judge by eye (spacing, colour, shadow, timing), what changed in their code, how some code behaves, a plan, findings with numbers, a draft they will paste, or a question they cannot answer well from a terminal. Also when they say "show me", "let me see it", "make a prototype" or "let me point at it". Not for a short factual answer, and not for a site they can open in their own browser. Never use pbcopy to hand over text; use a Bridge page with a Copy button.
+description: Show the user something in a native window next to their terminal and read their answer back as JSON. Load it before you write any answer longer than a few lines, and whenever they would understand faster by seeing or touching it: a choice between options, a value to judge by eye (spacing, colour, shadow, timing), what changed in their code, how some code behaves, findings with numbers, a draft they will paste (a reply to a client, a message), or a question they cannot answer well from a terminal. Topics that are not visual count too: a schedule or plan across days, what to offer a client with effort and price, money, a timeline, who waits on whom; each of these has a shape worth drawing. Also when they say "show me", "let me see it", "make a prototype" or "let me point at it". Not for a short factual answer, and not for a site they can open in their own browser. Never use pbcopy to hand over text; use a Bridge page with a Copy button.
 ---
 
 # Bridge
@@ -17,9 +17,9 @@ bridge --read decision.html   # what they answered so far, JSON, returns at once
 
 Lint while you still hold the file. It knows the kit's real vocabulary and
 says what a guessed class should have been, names a class the page and the
-kit both style, flags a colour or radius written out where a `--bridge-*`
-token exists, a `pre` that is really a table, and text walls. Errors exit 1; fix them
-before they see the page. Warnings exit 0; read them.
+kit both style, a colour with no dark-mode variant, a `pre` that is really a
+table, and text walls. Errors exit 1; fix them before they see the page.
+Warnings exit 0; read them.
 
 ## What goes wrong between you and the user
 
@@ -62,8 +62,41 @@ you hand them something comes from treating their time as cheaper than yours:
 - Forms bring your vocabulary. "Layer 2 opacity" is your model of the problem;
   "too heavy" is theirs.
 
-A page is your chance to close that gap. Work out which of these is in the way
-for this particular thing, and build what removes it; pages.md has the parts.
+A page is your chance to close that gap. Before you write it, answer two
+things: what are they judging, and what do they have to see to judge it? Not
+your account of it: the thing itself, or a picture of it.
+
+How eyes work, whatever the topic:
+
+- A difference is seen where it happens: the same spot, real size, switched
+  back and forth. Side by side shrinks it; a grid of thumbnails hides it.
+- Shape, size, colour and position are read before any word. A number to
+  compare is a length, time is a line, a part of a whole is a filled bar,
+  overlap is things stacked, who or what is a colour that stays the same
+  across the page.
+- One thing changes at a time, and the control sits on or next to what it
+  changes. Controls speak their words ("heavier"), not your parameters.
+- Pictures are remembered; paragraphs are not. A small illustration or an
+  icon for each person, project or option makes a page they can find their
+  way around at a glance.
+
+So draw. Every topic has a shape, also the ones that are not visual: a mail
+thread, a quote, a schedule, a pile of findings. Make illustrations, icons and
+diagrams in SVG or CSS, choose a palette that suits the topic, give each thing
+its own colour and keep it. The kit styles the parts that ask (buttons,
+options, inputs, drafts, notes) so answering always feels the same;
+everything else on the page is yours to design. Write your colours with a
+dark variant (`prefers-color-scheme: dark`); the window follows the system.
+
+Words carry only what cannot be shown: a name and one line of consequence per
+option. When a card needs a paragraph, the picture is missing.
+
+**Look before they do.** `bridge --shot page.html /tmp/…/page.png` renders the
+page off-screen, the way the window would, without presenting it. Read the
+image and ask: where does my eye land first? Can I see what they are judging
+without reading? What would I have to read to answer? Fix it until the picture
+answers. Then lint, present, and say in one line that it is in Bridge, without
+repeating it in the chat.
 
 ## When to use it, and when not
 
@@ -240,5 +273,5 @@ unread: that is how you say "I need you on this again".
 - Cross it when you are done with it.
 - When the user reports a display bug, inspect their actual window with
   `bridge --state` rather than a fresh one.
-- Code, diffs and compared numbers have components (pages.md "Evidence");
-  do not hand-roll them.
+- Code and diffs have components (pages.md "Evidence"); use them rather
+  than hand-rolling a highlighter.
