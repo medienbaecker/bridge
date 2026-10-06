@@ -16,7 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         buildMenu()
         if !Env.test, Bundle.main.bundleIdentifier != nil { UNUserNotificationCenter.current().delegate = self }
         window = MainWindow(model: model)
-        window.showWindow(nil)
+        if ProcessInfo.processInfo.environment["BRIDGE_LAUNCH_HIDDEN"] == nil { window.showWindow(nil) }
         // The socket opens only once there is a window: building the toolbar spins the
         // run loop, and a present arriving in that gap was handled against no window.
         if let reason = server.start() {

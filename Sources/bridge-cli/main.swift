@@ -56,7 +56,7 @@ func appExecutable() -> String? {
     return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
 }
 
-func launchApp() -> pid_t {
+func launchApp(hidden: Bool = false) -> pid_t {
     guard let exe = appExecutable() else { fail("\(Flavor.appName).app not found; set BRIDGE_DEV_APP") }
     try? FileManager.default.removeItem(at: Paths.launchError)
     var attr: posix_spawnattr_t?
@@ -73,6 +73,7 @@ func launchApp() -> pid_t {
     let argv: [UnsafeMutablePointer<CChar>?] = [strdup(exe), nil]
     var envp: [UnsafeMutablePointer<CChar>?] = ProcessInfo.processInfo.environment.map { strdup("\($0.key)=\($0.value)") }
     envp.append(strdup("BRIDGE_LAUNCHED_BY_CLI=1"))
+    if hidden { envp.append(strdup("BRIDGE_LAUNCH_HIDDEN=1")) }
     envp.append(nil)
     let rc = posix_spawn(&pid, exe, &actions, &attr, argv, envp)
     posix_spawn_file_actions_destroy(&actions)
@@ -81,10 +82,10 @@ func launchApp() -> pid_t {
     return pid
 }
 
-func send(_ request: Request, launching: Bool = false) -> Response {
+func send(_ request: Request, launching: Bool = false, hidden: Bool = false) -> Response {
     if let r = try? Client.send(request) { return r }
     guard launching else { return .error("app not running") }
-    let pid = launchApp()
+    let pid = launchApp(hidden: hidden)
     for _ in 0..<100 {
         usleep(50_000)
         if let r = try? Client.send(request) { return r }
@@ -391,7 +392,7 @@ case "--shot":
     guard args.count >= 2 else { fail("--shot <out.png> [--screen] | --shot <file> <out.png> [--width N]") }
     if args.count >= 3, !args[2].hasPrefix("--") {
         let width = args.firstIndex(of: "--width").flatMap { $0 + 1 < args.count ? Double(args[$0 + 1]) : nil }
-        print(json: check(send(.render(location: location(args[1]), path: Paths.resolve(args[2], relativeTo: cwd), width: width), launching: true)))
+        print(json: check(send(.render(location: location(args[1]), path: Paths.resolve(args[2], relativeTo: cwd), width: width), launching: true, hidden: true)))
         exit(0)
     }
     print(json: check(send(.shot(path: Paths.resolve(args[1], relativeTo: cwd), screen: args.contains("--screen")))))
