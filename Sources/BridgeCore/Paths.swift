@@ -80,7 +80,7 @@ public enum Paths {
         let isURL = location.hasPrefix("http://") || location.hasPrefix("https://")
         // Keyed by the file itself, not the spelling of its path: `/tmp/x` and
         // `/private/tmp/x` are one page and must be one record.
-        let key = isURL ? location : URL(fileURLWithPath: location).standardizedFileURL.resolvingSymlinksInPath().path
+        let key = isURL ? location : canonical(location)
         let name = isURL ? id(for: key) : (key as NSString).lastPathComponent + "-" + id(for: key)
         let url = dir.appendingPathComponent(name + ".bridge.json")
         if migrates, !FileManager.default.fileExists(atPath: url.path) {
@@ -108,7 +108,16 @@ public enum Paths {
         if path.hasPrefix("http://") || path.hasPrefix("https://") { return path }
         let url = path.hasPrefix("/") ? URL(fileURLWithPath: path)
             : URL(fileURLWithPath: cwd).appendingPathComponent(path)
-        return url.standardizedFileURL.resolvingSymlinksInPath().path
+        return canonical(url.path)
+    }
+
+    static func canonical(_ path: String) -> String {
+        var dir = URL(fileURLWithPath: path).standardizedFileURL, rest: [String] = []
+        while dir.path != "/", !FileManager.default.fileExists(atPath: dir.path) {
+            rest.insert(dir.lastPathComponent, at: 0)
+            dir.deleteLastPathComponent()
+        }
+        return rest.reduce(dir.resolvingSymlinksInPath()) { $0.appendingPathComponent($1) }.path
     }
 }
 

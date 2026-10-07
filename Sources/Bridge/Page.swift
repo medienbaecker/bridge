@@ -144,15 +144,17 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         // The page reads the record through a document-start script, which is a
         // snapshot taken at injection: re-inject on every load, or a reload sees stale answers.
         installScripts()
+        if kind != .url {
+            missing = !FileManager.default.fileExists(atPath: location)
+            if missing {
+                loadDocument("<!doctype html><html><head><title>\(title)</title></head><body><p class=\"muted\">This page's file is gone. What was answered is kept in the record.</p></body></html>")
+                return
+            }
+        }
         switch kind {
         case .url:
             if let url = URL(string: location) { webView.load(URLRequest(url: url)) }
         case .html:
-            missing = !FileManager.default.fileExists(atPath: location)
-            if missing {
-                loadDocument("<!doctype html><html><head><title>\(title)</title></head><body><p class=\"muted\">This page's file is gone. What was answered is kept in the record.</p></body></html>")
-                break
-            }
             lastContent = try? Data(contentsOf: URL(fileURLWithPath: location))
             if versionContent == nil { versionContent = lastContent }
             loadDocument(String(decoding: lastContent ?? Data(), as: UTF8.self))
@@ -211,6 +213,11 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
             do { sidecar = try Sidecar.load(sidecarURL); unreadable = nil } catch { unreadable = "\(error)" }
             pushNotes()
             model.onChange()
+        }
+        if FileManager.default.fileExists(atPath: location) == missing {
+            load()
+            model.onChange()
+            return
         }
         if kind == .jsx {
             if let data = try? Data(contentsOf: Paths.dataFile(for: location)), data != lastData {

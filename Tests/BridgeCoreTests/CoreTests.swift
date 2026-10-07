@@ -110,6 +110,12 @@ import Foundation
     #expect(a == b && b == c)
 }
 
+@Test func aGonePageResolvesLikeOneThatExists() {
+    let gone = "spell-\(UUID().uuidString)/page.md"
+    #expect(Paths.resolve("/private/tmp/" + gone, relativeTo: "/") == "/tmp/" + gone)
+    #expect(Paths.resolve("/tmp/" + gone, relativeTo: "/") == "/tmp/" + gone)
+}
+
 @Test func lintNamesTheFourFaults() {
     let kit = ".muted { color: red } .card { border: 0 } .row { display: flex } .row.between { } .num { } .draft { padding: 14px } .bar::after { } .token.comment { } .bridge-pin { }"
     let page = """

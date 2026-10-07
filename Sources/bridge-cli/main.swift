@@ -290,6 +290,7 @@ case "--wait":
 
 case "--cross", "--uncross", "--remove", "--reset":
     let loc = location(args.dropFirst().first)
+    if first != "--reset", Listing.load().entry(loc) == nil { fail("not in the list: \(loc)") }
     let request: Request = switch first {
     case "--cross": .cross(location: loc)
     case "--uncross": .uncross(location: loc)
