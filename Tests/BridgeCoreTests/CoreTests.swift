@@ -34,12 +34,12 @@ import Foundation
 }
 
 @Test func requestRoundTrip() throws {
-    let r = Request.present(locations: ["/x.html"], cwd: "/x", session: "tty", ground: Ground(repo: "/x", branch: "main", commit: "abc"), links: "window")
+    let r = Request.present(locations: ["/x.html"], cwd: "/x", session: "tty", ground: Ground(repo: "/x", branch: "main", commit: "abc"), links: "window", site: "http://example.test")
     let data = try JSON.compact.encode(r)
     let back = try JSON.decoder.decode(Request.self, from: data)
-    if case .present(let l, _, _, let g, let links) = back { #expect(l == ["/x.html"]); #expect(g?.commit == "abc"); #expect(links == "window") } else { Issue.record("wrong case") }
+    if case .present(let l, _, _, let g, let links, let site) = back { #expect(l == ["/x.html"]); #expect(g?.commit == "abc"); #expect(links == "window"); #expect(site == "http://example.test") } else { Issue.record("wrong case") }
     let older = Data(#"{"present":{"locations":["/x.html"],"cwd":"/x","session":"tty"}}"#.utf8)
-    if case .present(_, _, _, _, let links) = try JSON.decoder.decode(Request.self, from: older) { #expect(links == nil) } else { Issue.record("wrong case") }
+    if case .present(_, _, _, _, let links, _) = try JSON.decoder.decode(Request.self, from: older) { #expect(links == nil) } else { Issue.record("wrong case") }
 }
 
 @Test func responseRoundTrip() throws {

@@ -15,12 +15,17 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         let web = Bundle.module.url(forResource: "web", withExtension: nil)!
         return (try? String(contentsOf: web.appendingPathComponent("page-api.js"), encoding: .utf8)) ?? ""
     }()
+    static let frameScroll: String = {
+        let web = Bundle.module.url(forResource: "web", withExtension: nil)!
+        return (try? String(contentsOf: web.appendingPathComponent("frame-scroll.js"), encoding: .utf8)) ?? ""
+    }()
 
     let location: String
     let kind: Kind
     let preview: Bool
     unowned let model: Model
     let webView: WKWebView
+    let files: LocalFiles?
     let sidecarURL: URL
     var sidecar: Sidecar
     var title: String
@@ -63,6 +68,11 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
         // For pages without a charset.
         config.preferences.setValue("utf-8", forKey: "defaultTextEncodingName")
+        files = kind == .html ? LocalFiles(folder: URL(fileURLWithPath: location).deletingLastPathComponent().path) : nil
+        if let files {
+            config.setURLSchemeHandler(files, forURLScheme: LocalFiles.scheme)
+            LocalFiles.register(in: config)
+        }
         webView = WKWebView(frame: .zero, configuration: config)
         webView.isInspectable = true
         super.init()
@@ -87,6 +97,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
             let answers = JSON.string(JSONValue.object(sidecar.answers), pretty: false)
             let api = JSON.string(JSONValue.array(sidecar.questions.map { .string($0) }), pretty: false)
             let defaults = JSON.string(JSONValue.array(sidecar.defaults.map { .string($0) }), pretty: false)
+            if site != nil { controller.addUserScript(WKUserScript(source: Page.frameScroll, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: .page)) }
             controller.addUserScript(WKUserScript(source: "window.__bridgeAnswers = \(answers);\nwindow.__bridgeApi = \(api);\nwindow.__bridgeDefaults = \(defaults);\n" + Page.pageAPI, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: .page))
         }
     }
@@ -235,8 +246,9 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         let previous = lastContent
         lastContent = data
         guard viewingVersion == nil else { return }
-        let html = kind == .html ? String(decoding: data, as: UTF8.self) : wrapped(data)
-        let before = kind == .html ? String(decoding: previous ?? Data(), as: UTF8.self) : wrapped(previous)
+        var html = kind == .html ? String(decoding: data, as: UTF8.self) : wrapped(data)
+        var before = kind == .html ? String(decoding: previous ?? Data(), as: UTF8.self) : wrapped(previous)
+        if site != nil, let files { html = files.rewrite(html); before = files.rewrite(before) }
         Task { @MainActor in
             let result = try? await run("return __bridge.patch(html, previous)", ["html": html, "previous": before], in: Page.world)
             if result?["reload"]?.boolValue == true {
@@ -490,6 +502,10 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
     // Everything goes through loadFileURL because it is the only load that grants
     // the web content process read access to local files (images by absolute path).
     func loadDocument(_ html: String) {
+        if let site, let files {
+            webView.loadHTMLString(files.rewrite(html), baseURL: site)
+            return
+        }
         let file = URL(fileURLWithPath: location)
         if kind == .html && html == String(decoding: lastContent ?? Data(), as: UTF8.self) {
             webView.loadFileURL(file, allowingReadAccessTo: URL(fileURLWithPath: "/"))
@@ -649,6 +665,10 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         return (.useCredential, URLCredential(trust: trust))
     }
 
+    var site: URL? {
+        kind == .html ? model.listing.entry(location)?.site.flatMap(URL.init(string:)) : nil
+    }
+
     var links: Links {
         model.listing.entry(location)?.links.flatMap(Links.init) ?? (kind == .url ? .external : .browser)
     }
@@ -656,6 +676,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
     static var openedExternally: [URL] = []
 
     static func openExternally(_ url: URL) {
+        let url = url.scheme == LocalFiles.scheme ? URL(fileURLWithPath: url.path) : url
         if Env.test { openedExternally.append(url) } else { NSWorkspace.shared.open(url) }
     }
 

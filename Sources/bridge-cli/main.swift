@@ -6,6 +6,7 @@ let me = (CommandLine.arguments[0] as NSString).lastPathComponent
 let usage = """
 bridge-dev <file|url> [more files]      present; a URL opens the live site
 bridge-dev --links <mode> <file|url>    where its links open: window (in Bridge), browser, or external (other hosts in the browser; a URL's default)
+bridge-dev --site <url> <file.html>     run the page as part of that site: its imports and frames are the site's
 bridge-dev --read   <file>              what they have answered so far, JSON, no blocking
 bridge-dev --sidecar <file>             where their record for that page lives (in the app's store)
 bridge-dev --seed-from <flavour>        once, into an empty flavour: copy that flavour's list and records here
@@ -408,12 +409,19 @@ default:
         links = args[i + 1]
         args.removeSubrange(i...(i + 1))
     }
+    var site: String?
+    if let i = args.firstIndex(of: "--site") {
+        guard i + 1 < args.count, args[i + 1].hasPrefix("http://") || args[i + 1].hasPrefix("https://"), URL(string: args[i + 1]) != nil else { fail("--site <http(s) url> <file.html>") }
+        site = args[i + 1]
+        args.removeSubrange(i...(i + 1))
+    }
     if args.first?.hasPrefix("--") ?? true { fail(usage) }
     let locations = args.map { location($0) }
+    if site != nil, let other = locations.first(where: { Kind.of($0) != .html }) { fail("--site is for .html pages: \(other)") }
     for loc in locations where Kind.of(loc) != .url && !FileManager.default.fileExists(atPath: loc) {
         fail("no such file: \(loc)")
     }
-    _ = check(send(.present(locations: locations, cwd: cwd, session: Session.current, ground: Ground.current(in: cwd), links: links), launching: true))
+    _ = check(send(.present(locations: locations, cwd: cwd, session: Session.current, ground: Ground.current(in: cwd), links: links, site: site), launching: true))
     // The agent that wrote the page sees this in its tool result; nothing else
     // would tell it that classes it made up style nothing.
     for loc in locations where Kind.of(loc) != .url {

@@ -373,6 +373,13 @@ bundling first: `npx esbuild src/rope.js --bundle --format=esm --outfile=rope.js
 <iframe src="http://site.test/archive" style="width:100%;height:520px;border:1px solid var(--bridge-line);border-radius:8px"></iframe>
 ```
 
+A page that explains a site's code should run the site's real modules. Present
+it with `bridge learn.html --site http://site.test`: the page then has the
+site's origin, so `import … from '/assets/js/menu.js'` loads from the site and
+a frame of the site is same-origin, its document yours to reach into. Files
+beside the page (`helper.js`, `shot.png`) and paths on disk still load from
+disk; any other path is the site's. Never write your own proxy for this.
+
 The frame earns its place by what is around it. For a site the user should
 only look at, give them the URL in your reply; present it directly
 (`bridge http://site.test/archive`) only when they should pin spots on it.

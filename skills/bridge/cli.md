@@ -3,6 +3,7 @@
 ```sh
 bridge <file|url> [more files]         present; html, jsx, md, txt, images, svg, pdf, or a URL; the first is selected
 bridge --links <mode> <file|url>       where its links open: window (in Bridge), browser, or external (other hosts in the browser)
+bridge --site <url> <file.html>        run the page as part of a local site: it imports the site's modules and reaches into its frames
 bridge --read   <file>                 what they have answered so far, JSON, no blocking
 bridge --wait   <file> --timeout 900   block until they click Send (or close), then print
 bridge --cross  <file>                 done with it: it folds away under "Crossed"

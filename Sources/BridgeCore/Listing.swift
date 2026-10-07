@@ -34,6 +34,7 @@ public struct BridgeEntry: Codable, Equatable, Sendable, Identifiable {
     public var crossed: Bool
     public var session: String
     public var links: String?
+    public var site: String?
 
     public init(location: String, project: String, session: String, at: Date = Date()) {
         self.id = Paths.id(for: location)

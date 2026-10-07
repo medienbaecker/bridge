@@ -122,9 +122,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     func handle(_ request: Request, reply: @escaping @Sendable (Response) -> Void) {
         switch request {
-        case .present(let locations, let cwd, let session, let ground, let links):
+        case .present(let locations, let cwd, let session, let ground, let links, let site):
             let wasActive = NSApp.isActive
-            model.present(locations, cwd: cwd, session: session, ground: ground, links: links)
+            model.present(locations, cwd: cwd, session: session, ground: ground, links: links, site: site)
             if !Env.test { NSApp.activate() }
             window.showWindow(nil)
             if !Env.test, !wasActive, let loc = locations.first { Notify.arrived(model.listing.entry(loc)) }
