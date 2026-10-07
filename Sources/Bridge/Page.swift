@@ -560,6 +560,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
     func reply(to id: String, text: String, by: String = "agent") {
         guard let i = sidecar.comments.firstIndex(where: { $0.id == id }) else { return }
         sidecar.comments[i].said.append(Say(by: by, text: text))
+        if by == "user", sidecar.comments[i].state == "done" { sidecar.comments[i].state = "open" }
         save(); pushNotes(); model.onChange()
         if by == "agent" { model.markUnread(location) }
     }

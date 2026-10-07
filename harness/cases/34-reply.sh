@@ -1,6 +1,7 @@
 #!/bin/bash
 # A reply on a note's thread: filed once, the box empties, the reply shows in
 # the open thread, and pressing Reply again with nothing typed files nothing.
+# On a done note, Reopen keeps what was typed, and a reply reopens it.
 source "$(dirname "$0")/../lib.sh"
 page="$CASE_DIR/pages/reply.html"
 printf '<!doctype html><title>Reply</title><p id="para">A paragraph the user will pin and then reply on.</p>' > "$page"
@@ -22,4 +23,14 @@ js "document.querySelector('.bridge-thread:popover-open [data-act=reply]').click
 check "Reply again with nothing typed files nothing" "$(said)" '["eine Antwort"]'
 js "document.querySelector('.bridge-thread:popover-open textarea').dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', metaKey: true, bubbles: true})); return 1" >/dev/null; settle 0.4
 check "and so does ⌘⏎ on an empty box" "$(said)" '["eine Antwort"]'
+id=$(jq -r '.comments[0].id' "$(sidecar "$page")")
+state() { jq -r '.comments[0].state' "$(sidecar "$page")"; }
+bridge --done "$page" "$id"; settle 0.4
+js "document.querySelector('.bridge-thread:popover-open textarea').value = 'noch eine Frage'; document.querySelector('.bridge-thread:popover-open [data-act=reopen]').click(); return 1" >/dev/null; settle 0.5
+check "Reopen on a done note reopens it" "$(state)" "open"
+check_json "and keeps what was typed" "$(js "return document.querySelector('.bridge-thread:popover-open textarea').value")" '.' "noch eine Frage"
+bridge --done "$page" "$id"; settle 0.4
+js "document.querySelector('.bridge-thread:popover-open [data-act=reply]').click(); return 1" >/dev/null; settle 0.5
+check "a reply on a done note files it" "$(said)" '["eine Antwort","noch eine Frage"]'
+check "and reopens the note" "$(state)" "open"
 finish

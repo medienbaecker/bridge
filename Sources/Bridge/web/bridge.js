@@ -786,9 +786,11 @@ function __bridgeInit(options) {
     const list = await post('note', { id, action, text });
     // render() keeps the box's contents as the draft, so a filed reply left in
     // it would look unsent and a second press would file it twice.
-    const box = thread?.querySelector('textarea');
-    if (box) box.value = '';
-    notes.drafts[id] = '';
+    if (action === 'reply') {
+      const box = thread?.querySelector('textarea');
+      if (box) box.value = '';
+      notes.drafts[id] = '';
+    }
     if (action === 'delete') { thread.hidePopover(); notes.set(list); return; }
     notes.set(list);
     notes.render(id);
