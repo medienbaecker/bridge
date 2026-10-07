@@ -6,6 +6,7 @@
 # this installer placed may be removed. A stale file left behind would still
 # read as authoritative to an agent.
 set -e
+export LC_ALL=C
 dest="$1"
 [ -n "$dest" ] || { echo "install-skill.sh <dir>" >&2; exit 1; }
 here="$(cd "$(dirname "$0")/.." && pwd)"
@@ -17,7 +18,7 @@ cp "$here"/skills/bridge/*.md "$dest/"
 ships="$dest/.installed.new"
 (cd "$here/skills/bridge" && ls *.md) | sort > "$ships"
 if [ -f "$dest/.installed" ]; then
-  comm -23 "$dest/.installed" "$ships" | while IFS= read -r gone; do
+  sort "$dest/.installed" | comm -23 - "$ships" | while IFS= read -r gone; do
     [ -n "$gone" ] || continue
     [ -e "$dest/$gone" ] || continue
     rm -f "$dest/$gone"
