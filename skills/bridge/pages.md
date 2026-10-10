@@ -379,6 +379,9 @@ site's origin, so `import … from '/assets/js/menu.js'` loads from the site and
 a frame of the site is same-origin, its document yours to reach into. Files
 beside the page (`helper.js`, `shot.png`) and paths on disk still load from
 disk; any other path is the site's. Never write your own proxy for this.
+Check it first with `bridge --shot learn.html out.png --site http://site.test`.
+After changing the site's CSS or templates, `bridge --reload learn.html`: the
+window does not reload a frame on its own.
 
 The frame earns its place by what is around it. For a site the user should
 only look at, give them the URL in your reply; present it directly

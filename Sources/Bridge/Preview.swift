@@ -6,8 +6,21 @@ import BridgeCore
 // so the page gets a borderless one far off every screen.
 @MainActor
 enum Preview {
-    static func render(_ location: String, model: Model, width: CGFloat, to path: String) async throws -> NSSize {
+    static let framesLoaded = """
+        const loaded = (f) => new Promise((done) => {
+          let doc = null
+          try { doc = f.contentDocument } catch {}
+          if (!f.getAttribute('src') && !f.srcdoc) return done()
+          if (doc && doc.URL !== 'about:blank' && doc.readyState === 'complete') return done()
+          f.addEventListener('load', done, { once: true })
+        })
+        await Promise.race([Promise.all([...document.querySelectorAll('iframe')].map(loaded)), new Promise((r) => setTimeout(r, 10000))])
+        await new Promise((r) => setTimeout(r, 200))
+        """
+
+    static func render(_ location: String, model: Model, width: CGFloat, site: URL?, to path: String) async throws -> NSSize {
         let page = Page(location: location, model: model, preview: true)
+        page.siteOverride = site
         let window = NSWindow(contentRect: NSRect(x: -30000, y: -30000, width: width, height: 900), styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.appearance = NSApp.effectiveAppearance
@@ -20,6 +33,7 @@ enum Preview {
         while !page.ready, Date() < deadline { try await Task.sleep(for: .milliseconds(50)) }
         guard page.ready else { throw Shot.Failure("the page did not finish loading in 15 s") }
         _ = try? await page.run("await document.fonts.ready", [:], in: .page)
+        _ = try? await page.run(Self.framesLoaded, [:], in: .page)
         try await Task.sleep(for: .milliseconds(100))
         var height: CGFloat = 900
         if case .number(let h) = try await page.run("return Math.ceil(document.documentElement.scrollHeight)", [:], in: .page) { height = min(max(CGFloat(h), 200), 8000) }

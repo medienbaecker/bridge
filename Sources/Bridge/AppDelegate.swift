@@ -1,6 +1,7 @@
 import AppKit
 import BridgeCore
 import UserNotifications
+import WebKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     let model = Model()
@@ -185,11 +186,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                     reply(.error("\(Flavor.appName) may not capture its own window: allow it in System Settings, Privacy & Security, Screen & System Audio Recording, then relaunch it. (\(error.localizedDescription))"))
                 } catch { reply(.error("\(error)")) }
             }
-        case .render(let loc, let path, let width):
+        case .reload(let loc):
+            guard let page = model.pages[loc] else { reply(.ok(.null)); return }
+            Task { @MainActor in
+                if page.ready, case .string(let typed)? = try? await page.evaluate("return document.querySelector('.bridge-thread:popover-open textarea')?.value || ''"), !typed.isEmpty {
+                    reply(.error("they are writing a note on it; reload later")); return
+                }
+                await WKWebsiteDataStore.default().removeData(ofTypes: [WKWebsiteDataTypeDiskCache, WKWebsiteDataTypeMemoryCache], modifiedSince: .distantPast)
+                page.load()
+                reply(.ok(.null))
+            }
+        case .render(let loc, let path, let width, let site):
             Task { @MainActor in
                 do {
                     let w = width.map { CGFloat($0) } ?? model.selectedPage.map { $0.webView.bounds.width }.flatMap { $0 > 0 ? $0 : nil } ?? 760
-                    let size = try await Preview.render(loc, model: model, width: w, to: path)
+                    let size = try await Preview.render(loc, model: model, width: w, site: site.flatMap(URL.init(string:)), to: path)
                     reply(.ok(.object(["path": .string(path), "width": .number(Double(size.width)), "height": .number(Double(size.height))])))
                 } catch { reply(.error("\(error)")) }
             }

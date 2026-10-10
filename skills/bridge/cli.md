@@ -12,7 +12,8 @@ bridge --remove <file>                 take it off their list entirely (rare)
 bridge --reset <file>                  remove it and forget their answers, history and notes: the next present is version 1
 bridge --state                         what the app is showing right now, JSON
 bridge --shot <out.png>                a picture of the app's window, to check what they see
-bridge --shot <file> <out.png> [--width N]   the page rendered off-screen, as the window would show it, without presenting it
+bridge --shot <file> <out.png> [--width N] [--site <url>]   the page rendered off-screen, as the window would show it, without presenting it; waits for its frames
+bridge --reload <file>                 reload the page and its frames from scratch, e.g. after the site's CSS changed
 bridge --waiters                       agent processes waiting for an answer, with age and memory, JSON
 bridge --pins   <file>                 open notes with their threads
 bridge --reply  <file> <id> <text>

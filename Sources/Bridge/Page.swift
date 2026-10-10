@@ -665,8 +665,10 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         return (.useCredential, URLCredential(trust: trust))
     }
 
+    var siteOverride: URL?
+
     var site: URL? {
-        kind == .html ? model.listing.entry(location)?.site.flatMap(URL.init(string:)) : nil
+        kind == .html ? siteOverride ?? model.listing.entry(location)?.site.flatMap(URL.init(string:)) : nil
     }
 
     var links: Links {

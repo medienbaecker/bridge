@@ -8,9 +8,22 @@ source "$(dirname "$0")/../lib.sh"
 site="$CASE_DIR/site"; mkdir -p "$site/assets/js"
 echo 'export const answer = "from the site";' > "$site/assets/js/menu.js"
 printf '<!doctype html><title>Site</title><p id="menu">real menu</p>' > "$site/index.html"
+printf '<!doctype html><style>html,body{margin:0;height:100%%;background:rgb(255,0,0)}</style>' > "$site/red.html"
+echo '#tone { color: rgb(255, 0, 0) }' > "$site/theme.css"
+printf '<!doctype html><link rel="stylesheet" href="/theme.css"><p id="tone">tone</p>' > "$site/tone.html"
 printf '<!doctype html><body style="height:3000px"><p id="far" style="margin-top:2000px">far</p><script>window.go = () => document.getElementById("far").scrollIntoView()</script></body>' > "$site/far.html"
 port=$((20000 + RANDOM % 20000)); sport=$((port + 1))
-python3 -m http.server "$port" -d "$site" >/dev/null 2>&1 &
+python3 - "$port" "$site" >/dev/null 2>&1 <<'PY' &
+import functools, http.server, sys, time
+class Site(http.server.SimpleHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/red.html': time.sleep(1)
+        super().do_GET()
+    def end_headers(self):
+        if self.path.endswith('.css'): self.send_header('Cache-Control', 'max-age=3600')
+        super().end_headers()
+http.server.ThreadingHTTPServer(('127.0.0.1', int(sys.argv[1])), functools.partial(Site, directory=sys.argv[2])).serve_forever()
+PY
 server=$!
 openssl req -x509 -newkey rsa:2048 -nodes -days 2 -keyout "$CASE_DIR/key.pem" -out "$CASE_DIR/cert.pem" -subj "/CN=127.0.0.1" -addext "subjectAltName=IP:127.0.0.1" >/dev/null 2>&1
 python3 "$ROOT/harness/tls-server.py" "$sport" "$CASE_DIR/cert.pem" "$CASE_DIR/key.pem" "$site" >/dev/null 2>&1 &
@@ -63,4 +76,23 @@ bridge --do point >/dev/null
 bridge --js "$beside" "const el = document.querySelector('#styled'); const r = el.getBoundingClientRect(); el.dispatchEvent(new MouseEvent('click', {bubbles: true, clientX: r.left + 5, clientY: r.top + 5})); return 1" >/dev/null; settle 0.3
 bridge --js "$beside" "const t = document.querySelector('.bridge-thread:popover-open textarea'); t.value = 'why this colour'; t.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', metaKey: true, bubbles: true})); return 1" >/dev/null; settle 0.4
 check_json "a note pinned on a site page is recorded" "$(bridge --pins "$beside")" '.[0] | "\(.text) | \(.target)"' 'why this colour | p "styled"'
+shotme="$CASE_DIR/pages/shotme.html"
+printf '<!doctype html><title>Shot</title><style>body{margin:0}iframe{display:block;border:0;width:400px;height:150px}</style><iframe id="f"></iframe><script>document.getElementById("f").src = "/red.html"</script>' > "$shotme"
+r=$(bridge --shot "$shotme" "$CASE_DIR/shots/shotme.png" --width 600 --site "http://127.0.0.1:$port/")
+check_json "--shot renders a page that was never presented as part of the site" "$r" '.width' "600"
+check "and waits for the frame its script loads" "$(python3 "$ROOT/harness/measure.py" "$CASE_DIR/shots/shotme.png" 100 | grep -c ' 255 0 0$' | tr -d ' ')" "1"
+check "--shot refuses --site for a page that is not html" "$(bridge --shot "$CASE_DIR/pages/notes.md" "$CASE_DIR/shots/x.png" --site "http://127.0.0.1:$port/" 2>&1)" "--site is for .html pages: $CASE_DIR/pages/notes.md"
+tone="$CASE_DIR/pages/tone.html"
+printf '<!doctype html><title>Tone</title><iframe id="f" src="/tone.html"></iframe>' > "$tone"
+(cd "$CASE_DIR/pages" && bridge tone.html --site "http://127.0.0.1:$port/"); wait_ready; settle 1
+colour() { bridge --js "$tone" "return getComputedStyle(document.getElementById('f').contentDocument.getElementById('tone')).color"; }
+check_json "the frame shows the site's colour" "$(colour)" '.' "rgb(255, 0, 0)"
+echo '#tone { color: rgb(0, 0, 255) }' > "$site/theme.css"
+bridge --reload "$tone"; wait_ready; settle 1
+check_json "--reload shows the site's changed CSS" "$(colour)" '.' "rgb(0, 0, 255)"
+bridge --do point >/dev/null
+bridge --js "$tone" "const el = document.querySelector('iframe'); const r = el.getBoundingClientRect(); el.parentElement.dispatchEvent(new MouseEvent('click', {bubbles: true, clientX: r.left + 5, clientY: r.top + 5})); return 1" >/dev/null; settle 0.3
+bridge --js "$tone" "document.querySelector('.bridge-thread:popover-open textarea').value = 'halb geschrieben'; return 1" >/dev/null
+check "--reload refuses while they are writing a note" "$(bridge --reload "$tone" 2>&1)" "they are writing a note on it; reload later"
+check "--reload refuses a page that is not listed" "$(bridge --reload "$CASE_DIR/pages/never.html" 2>&1)" "not in the list: $CASE_DIR/pages/never.html"
 finish

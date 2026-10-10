@@ -18,7 +18,8 @@ bridge-dev --reset  <file>              remove it and forget their record (answe
 bridge-dev --lint   <file> [more files]   check a page before presenting it: unknown or colliding classes, colours with no dark variant, a pre that is really a table
 bridge-dev --state                      what the running app is showing right now, JSON
 bridge-dev --shot <out.png>             a picture of the app's window
-bridge-dev --shot <file> <out.png> [--width N]   the page rendered off-screen as the window would show it, without presenting it
+bridge-dev --shot <file> <out.png> [--width N] [--site <url>]   the page rendered off-screen as the window would show it, without presenting it
+bridge-dev --reload <file>              reload the page and its frames from scratch, e.g. after the site's CSS changed
 bridge-dev --waiters                    the agent processes waiting for an answer, with their age and memory, JSON
 bridge-dev --pins   <file>              open notes with their threads
 bridge-dev --reply  <file> <id> <text>
@@ -391,13 +392,21 @@ case "--lint":
     exit(errors > 0 ? 1 : 0)
 
 case "--shot":
-    guard args.count >= 2 else { fail("--shot <out.png> [--screen] | --shot <file> <out.png> [--width N]") }
+    guard args.count >= 2 else { fail("--shot <out.png> [--screen] | --shot <file> <out.png> [--width N] [--site <url>]") }
     if args.count >= 3, !args[2].hasPrefix("--") {
         let width = args.firstIndex(of: "--width").flatMap { $0 + 1 < args.count ? Double(args[$0 + 1]) : nil }
-        print(json: check(send(.render(location: location(args[1]), path: Paths.resolve(args[2], relativeTo: cwd), width: width), launching: true, hidden: true)))
+        let site = args.firstIndex(of: "--site").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil }
+        if let site, !(site.hasPrefix("http://") || site.hasPrefix("https://")) { fail("--site <http(s) url>") }
+        if site != nil, Kind.of(location(args[1])) != .html { fail("--site is for .html pages: \(location(args[1]))") }
+        print(json: check(send(.render(location: location(args[1]), path: Paths.resolve(args[2], relativeTo: cwd), width: width, site: site), launching: true, hidden: true)))
         exit(0)
     }
     print(json: check(send(.shot(path: Paths.resolve(args[1], relativeTo: cwd), screen: args.contains("--screen")))))
+
+case "--reload":
+    let loc = location(args.dropFirst().first)
+    if Listing.load().entry(loc) == nil { fail("not in the list: \(loc)") }
+    if Client.appIsRunning { _ = check(send(.reload(location: loc))) }
 
 case "--quit":
     _ = send(.quit)
