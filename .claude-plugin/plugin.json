@@ -1,7 +1,7 @@
 {
   "name": "bridge",
   "displayName": "Bridge",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Show the user something in a native macOS window next to the terminal and read their answer back as JSON",
   "author": { "name": "Thomas Günther", "url": "https://medienbaecker.com" },
   "homepage": "https://github.com/medienbaecker/bridge",
