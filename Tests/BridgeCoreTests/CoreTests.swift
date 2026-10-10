@@ -139,19 +139,21 @@ import Foundation
     #expect(Lint(kitCSS: kit).vocabulary == ["muted", "card", "row", "between", "num", "draft", "bar"])
 }
 
-@Test func defaultsIsAbsentOnEveryEarlierRecordAndSurvivesARoundTrip() throws {
-    // A record as every build before this one wrote it: no defaults key.
+@Test func theUsersAnswersAreKeptApartFromThePagesProposals() throws {
+    // A record as builds before defaults wrote it comes out byte-identical.
     let earlier = #"{"answers":{"layout":"grid","radius":8},"comments":[],"history":[],"questions":["layout","radius"],"status":"open","version":1}"#
     let s = try JSON.decoder.decode(Sidecar.self, from: Data(earlier.utf8))
-    #expect(s.defaults.isEmpty)
-    #expect(s.answers["layout"] == .string("grid"))
-    let again = String(decoding: try JSON.compact.encode(s), as: UTF8.self)
-    #expect(again == earlier)
-    // Written by this build, the key is there; an older build files it under extra and carries it.
-    var d = s; d.defaults = ["radius"]
-    let written = String(decoding: try JSON.compact.encode(d), as: UTF8.self)
-    #expect(written.contains(#""defaults":["radius"]"#))
-    #expect(try JSON.decoder.decode(Sidecar.self, from: Data(written.utf8)).defaults == ["radius"])
+    #expect(s.defaults.isEmpty && s.answers["layout"] == .string("grid"))
+    #expect(String(decoding: try JSON.compact.encode(s), as: UTF8.self) == earlier)
+    // A record that listed defaults among the answers moves them to the page's proposals.
+    let listed = #"{"answers":{"layout":"grid","radius":8},"defaults":["radius"],"questions":["layout","radius"],"status":"open","version":1}"#
+    let m = try JSON.decoder.decode(Sidecar.self, from: Data(listed.utf8))
+    #expect(m.answers == ["layout": .string("grid")])
+    #expect(m.defaults == ["radius": .number(8)])
+    // Proposals, the answers at Send and what was withdrawn survive a round trip.
+    var d = m; d.answers = [:]; d.sentAnswers = ["layout": .string("grid")]; d.withdrawn = ["layout"]
+    let back = try JSON.decoder.decode(Sidecar.self, from: try JSON.compact.encode(d))
+    #expect(back.proposed == ["radius": .number(8)] && back.sentAnswers == ["layout": .string("grid")] && back.withdrawn == ["layout"])
 }
 
 @Test func scratchpadNamesTheProjectItCameFrom() throws {

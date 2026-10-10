@@ -159,7 +159,7 @@ bridge --read page.html
 ```
 
 ```json
-{ "status": "open", "version": 1, "answers": { "layout": "grid", "radius": 12 },
+{ "status": "open", "version": 1, "answers": { "layout": "grid", "radius": 12 }, "defaults": { "size": "m" },
   "comments": [ { "id": "3f9a1c2b", "text": "too heavy at phone width", "target": "a.link \"Link text\"",
                   "state": "open", "said": [ { "by": "agent", "at": "…", "text": "…" } ] } ],
   "ground": { "repo": "…", "branch": "main", "commit": "cfa73c0", "headMoved": 0 } }
@@ -171,6 +171,10 @@ bridge --read page.html
 - `answers` is what they have clicked or typed so far, keyed by `data-record`
   (or recorded by the page's own script through `bridge.set`; see
   [pages.md](pages.md)). Answers before Send are real and you may act on them.
+  Only what they chose is there: a control they left at the page's value is
+  under `defaults` with that value, and the window tags it "default". They can
+  take an answer back (a second click, or setting it back); after a Send,
+  `withdrawn` names what they took back.
 - `headMoved` counts commits since they answered. If it is large, re-read the
   answer with that in mind.
 - Only the session that presented a bridge gets its answers. Another session

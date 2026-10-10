@@ -27,7 +27,7 @@ function __bridgeInit(options) {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', announce); else announce();
     return;
   }
-  const state = { answers: {}, status: 'open', readOnly: false, pointing: false, notes: [], previous: null, timers: {}, patches: 0, refused: {} };
+  const state = { answers: {}, proposed: {}, status: 'open', readOnly: false, pointing: false, notes: [], previous: null, timers: {}, patches: 0, refused: {} };
   const root = document.documentElement;
 
   const style = document.createElement('style');
@@ -58,18 +58,75 @@ function __bridgeInit(options) {
     }
   }
 
-  function record(key, value, delay) {
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const empty = (v) => v === '' || v === null || v === undefined || (Array.isArray(v) && !v.length);
+
+  function record(key, value, delay, fromScript) {
     if (state.readOnly) return;
+    const proposed = state.proposed || {};
+    if (!fromScript && (key in proposed ? same(value, proposed[key]) : empty(value))) { clear(key); return; }
     state.answers[key] = value;
     markAnswered(key, true);
+    markDefaults();
     if (state.status === 'sent') setStatus('open');
     clearTimeout(state.timers[key]);
     if (delay) state.timers[key] = setTimeout(() => post('record', { key, value }), 150);
     else post('record', { key, value });
   }
 
-  function select(el) {
-    const key = el.dataset.record;
+  function clear(key) {
+    clearTimeout(state.timers[key]);
+    if (state.readOnly || !(key in state.answers)) return;
+    delete state.answers[key];
+    markAnswered(key, false);
+    markDefaults();
+    if (state.status === 'sent') setStatus('open');
+    post('record', { key, clear: true });
+  }
+
+  const labelOf = (input) => (input.id && document.querySelector(`label[for="${CSS.escape(input.id)}"]`)) || input.closest('label');
+
+  function markDefaults() {
+    for (const t of document.querySelectorAll('bridge-default')) t.remove();
+    for (const el of document.querySelectorAll('[data-default], [data-default-tag]')) { el.removeAttribute('data-default'); el.removeAttribute('data-default-tag'); }
+    if (state.readOnly) return;
+    const tag = (after, inside) => {
+      if (inside) { after.setAttribute('data-default-tag', ''); return; }
+      const t = document.createElement('bridge-default');
+      t.className = 'bridge-default';
+      t.textContent = 'default';
+      t.title = "The page's value; you have not changed it";
+      after.insertAdjacentElement('afterend', t);
+    };
+    for (const key of Object.keys(state.proposed || {})) {
+      if (key in state.answers) continue;
+      for (const el of document.querySelectorAll(`[data-record="${CSS.escape(key)}"]`)) {
+        if (ours(el)) continue;
+        const dial = el.closest('.dial');
+        if (dial) dial.setAttribute('data-default', '');
+        else if (el.matches('input[type=radio], input[type=checkbox]')) { if (el.type === 'checkbox' || el.checked) { const label = labelOf(el); if (label) tag(label, true); else tag(el); } }
+        else if (el.matches('input, select, textarea, .color')) { el.setAttribute('data-default', ''); tag(el); }
+        else {
+          const radio = el.querySelector('input[type=radio]:checked');
+          if (radio) { const label = labelOf(radio); if (label) tag(label, true); else tag(radio); }
+          else if (el.querySelector('input[type=checkbox]')) { const legend = el.querySelector('legend'); tag(legend || el, true); }
+        }
+      }
+    }
+  }
+
+  function unanswerRadio(radio) {
+    const key = radio.dataset.record || radio.closest('[data-record]')?.dataset.record;
+    if (!key || state.readOnly || !(key in state.answers)) return;
+    radio.checked = false;
+    const proposed = (state.proposed || {})[key];
+    if (proposed !== undefined && radio.name) {
+      for (const other of document.querySelectorAll(`input[type=radio][name="${CSS.escape(radio.name)}"]`)) other.checked = other.value === String(proposed);
+    }
+    clear(key);
+  }
+
+  function select(el, key = el.dataset.record) {
     for (const sibling of document.querySelectorAll(`[data-record="${CSS.escape(key)}"][data-value]`)) {
       const on = sibling === el;
       sibling.toggleAttribute('data-selected', on);
@@ -81,10 +138,8 @@ function __bridgeInit(options) {
     for (const el of document.querySelectorAll('[data-record][data-value][data-selected]:not(.color)')) {
       if (!(el.dataset.record in answers)) { el.removeAttribute('data-selected'); el.setAttribute('aria-pressed', 'false'); }
     }
-    // The page world's __bridgeDefaults is not visible from this world; the app sends them.
-    const proposed = new Set(state.defaults || []);
     for (const [key, value] of Object.entries(answers)) {
-      markAnswered(key, !proposed.has(key));
+      markAnswered(key, true);
       const els = document.querySelectorAll(`[data-record="${CSS.escape(key)}"]`);
       for (const el of els) {
         if (el.classList.contains('color')) color.set(el, String(value));
@@ -173,12 +228,13 @@ function __bridgeInit(options) {
 
   function apply(payload) {
     state.answers = payload.answers || {};
-    state.defaults = payload.defaults || [];
+    state.proposed = payload.proposed || {};
     state.readOnly = payload.readOnly;
     state.previous = payload.previous;
     setStatus(payload.status);
     root.toggleAttribute('data-bridge-readonly', payload.readOnly);
     applyAnswers(state.answers);
+    markDefaults();
     applyDials();
     applyPrevious(payload.previous);
     frameRefused();
@@ -200,7 +256,11 @@ function __bridgeInit(options) {
     if (swatch) { e.preventDefault(); swatches.pick(swatch); return; }
     const option = e.target.closest('[data-record][data-value]:not(.color)');
     if (option) {
-      if (!state.readOnly) { select(option); record(option.dataset.record, option.dataset.value); }
+      if (!state.readOnly) {
+        const key = option.dataset.record;
+        if (option.hasAttribute('data-selected') && key in state.answers && !option.matches('[data-send]')) { select(null, key); clear(key); }
+        else { select(option); record(key, option.dataset.value); }
+      }
       if (option.matches('[data-send]')) { e.preventDefault(); send(); }
       return;
     }
@@ -229,9 +289,21 @@ function __bridgeInit(options) {
     const radio = card && card.querySelector(':scope > input[type=radio]');
     if (!radio || e.target === radio || e.target.closest('label, a, button, input, select, textarea, [contenteditable]')) return;
     if (getSelection()?.toString()) return;
-    if (radio.checked) return;
+    if (radio.checked) { unanswerRadio(radio); return; }
     radio.checked = true;
     radio.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+
+  let pressedRadio = null;
+  document.addEventListener('pointerdown', (e) => {
+    const label = e.target.closest?.('label');
+    const radio = e.target.matches?.('input[type=radio]') ? e.target : label?.control?.type === 'radio' ? label.control : null;
+    pressedRadio = radio && radio.checked ? radio : null;
+  }, true);
+  document.addEventListener('click', (e) => {
+    if (state.pointing || !e.target.matches?.('input[type=radio]') || e.target !== pressedRadio) return;
+    pressedRadio = null;
+    unanswerRadio(e.target);
   });
 
   function onInput(e, delayed) {
@@ -513,6 +585,7 @@ function __bridgeInit(options) {
     const s = shape();
     const payload = await post('shape', s);
     apply(payload);
+    propose(proposals(doc));
     notes.place();
     return { reload: false };
   }
@@ -884,9 +957,10 @@ function __bridgeInit(options) {
   document.addEventListener('bridge:record', () => {
     try {
       const { key, value } = JSON.parse(root.dataset.bridgeRecord);
-      record(key, value, true);
+      record(key, value, true, true);
     } catch (e) { /* malformed */ }
   });
+  document.addEventListener('bridge:clear', () => clear(root.dataset.bridgeClear));
   document.addEventListener('bridge:send', send);
   document.addEventListener('bridge:error', () => post('error', { text: root.dataset.bridgeError }));
   document.addEventListener('bridge:rendered', async () => {
@@ -937,34 +1011,32 @@ function __bridgeInit(options) {
     return { unknown: [...unknown], both: [...both] };
   }
 
-  // A control that shows a value from its markup (a checked radio, a checkbox,
-  // a range, a select) is recorded as a default, so the record matches what the
-  // page shows: clicking an already-checked radio fires nothing. Answered keys
-  // and read-only pages are left alone.
-  function recordDefaults(answers) {
-    if (state.readOnly) return;
-    // A proposal, not an answer: it does not reopen a sent page, and the record names it as a default.
-    const propose = (key, value) => { state.answers[key] = value; post('record', { key, value, default: true }); };
-    const done = new Set(Object.keys(answers));
-    for (const el of document.querySelectorAll('input[data-record], select[data-record], textarea[data-record]')) {
+  function proposals(doc) {
+    const out = {};
+    for (const el of doc.querySelectorAll('input[data-record], select[data-record], textarea[data-record]')) {
       const key = el.dataset.record;
-      if (done.has(key) || ours(el)) continue;
-      let value;
-      if (el.type === 'radio') { if (!el.checked) continue; value = el.value; }
-      else if (el.type === 'checkbox') value = el.checked;
-      else if (el.type === 'range' || el.type === 'number') { if (el.value === '') continue; value = valueOf(el); }
-      else { if (!el.value) continue; value = valueOf(el); }
-      done.add(key);
-      propose(key, value);
+      if (key in out || ours(el)) continue;
+      if (el.type === 'radio') { if (el.checked) out[key] = el.value; }
+      else if (el.type === 'checkbox') out[key] = el.checked;
+      else if (el.type === 'range' || el.type === 'number') { if (el.value !== '') out[key] = valueOf(el); }
+      else if (el.value) out[key] = valueOf(el);
     }
-    for (const group of document.querySelectorAll('[data-record]:not(input):not(select):not(textarea):not([data-value]):not(.color):not(.swatches)')) {
+    for (const group of doc.querySelectorAll('[data-record]:not(input):not(select):not(textarea):not([data-value]):not(.color):not(.swatches)')) {
       const key = group.dataset.record;
-      if (done.has(key) || ours(group)) continue;
+      if (key in out || ours(group)) continue;
       const boxes = [...group.querySelectorAll('input[type=checkbox]')];
       const radio = group.querySelector('input[type=radio]:checked');
-      if (radio) { done.add(key); propose(key, radio.value); }
-      else if (boxes.length) { done.add(key); propose(key, boxes.length === 1 ? boxes[0].checked : boxes.filter((i) => i.checked).map((i) => i.value)); }
+      if (radio) out[key] = radio.value;
+      else if (boxes.length) out[key] = boxes.length === 1 ? boxes[0].checked : boxes.filter((i) => i.checked).map((i) => i.value);
     }
+    return out;
+  }
+
+  function propose(values) {
+    if (state.readOnly) return;
+    state.proposed = values;
+    markDefaults();
+    post('propose', { values });
   }
 
   let started = false;
@@ -980,9 +1052,10 @@ function __bridgeInit(options) {
       const report = () => post('size', { width: picture.naturalWidth, height: picture.naturalHeight });
       if (picture.complete && picture.naturalWidth) report(); else picture.addEventListener('load', report, { once: true });
     }
+    const proposed = proposals(document);
     const payload = await post('ready', { title: document.title, classes: auditClasses(), ...shape() });
     apply(payload);
-    recordDefaults(payload.answers || {});
+    propose(proposed);
   }
   // A page using bridge.ready() restores itself in its callbacks; hash it after
   // that, so the keys it read are questions from the first fingerprint on.

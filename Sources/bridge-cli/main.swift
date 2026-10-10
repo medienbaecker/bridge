@@ -134,8 +134,8 @@ func readOut(_ loc: String) -> JSONValue {
     }
     if s.answered { collect(loc) }
     out["answers"] = .object(s.answers)
-    // The answers the page proposed and the user left, so a reader can tell them apart.
-    out["defaults"] = .array(s.defaults.map { .string($0) })
+    out["defaults"] = .object(s.defaults)
+    if !s.withdrawn.isEmpty { out["withdrawn"] = .array(s.withdrawn.map { .string($0) }) }
     if let t = s.sentAt { out["sent"] = .string(ISO8601DateFormatter().string(from: t)) }
     out["comments"] = .array(s.comments.map { c in
         .object([
@@ -150,7 +150,7 @@ func readOut(_ loc: String) -> JSONValue {
         out["ground"] = .object(ground)
     }
     if !s.history.isEmpty {
-        out["history"] = .array(s.history.map { .object(["version": .number(Double($0.n)), "answers": .object($0.answers)]) })
+        out["history"] = .array(s.history.map { .object(["version": .number(Double($0.n)), "answers": .object(Sidecar.own($0))]) })
     }
     return .object(out)
 }
@@ -220,6 +220,9 @@ func hook(_ event: String) -> Never {
         let answers = JSON.string(JSONValue.object(s.answers), pretty: false)
         reason = again ? "Bridge: The user wrote more on \(file) since you read it (version \(s.version)): \(answers)."
                        : "Bridge: The user answered \(file) (version \(s.version)): \(answers)."
+        if !s.withdrawn.isEmpty { reason += " They withdrew their answer to \(s.withdrawn.joined(separator: ", "))." }
+        let left = s.defaults.count
+        if left > 0 { reason += " \(left) control\(left == 1 ? " was" : "s were") left at the page's default (`defaults` in --read)." }
         let open = s.openComments.count
         // Name the CLI serving the hook: another flavour's command may not be installed.
         if open > 0 { reason += " They also left \(open) note\(open == 1 ? "" : "s"); read them with `\(me) --pins \(file)`." }

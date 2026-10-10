@@ -29,12 +29,12 @@ repo
 # checked box in the group, the range's and the select's values, before the user touches
 # anything. A click on the already-checked radio fires nothing, and need not.
 first=$(bridge --read "$page")
-check_json "a control showing a value at ready has recorded it" "$first" '"\(.answers.hours) \(.answers.rate) \(.answers.days) \(.answers.size) \(.answers.money) \(.answers.tags | join(","))"' "mid 5 3 s false a"
-check_json "an empty text or textarea records nothing yet" "$first" '[.answers | has("name"), has("note"), has("verdict")] | join(",")' "false,false,false"
-check_json "and the record names them as the page's defaults, not the user's choices" "$first" '.defaults | sort | join(",")' "days,hours,money,rate,size,tags"
+check_json "a control showing a value at ready has it recorded as the page's default" "$first" '"\(.defaults.hours) \(.defaults.rate) \(.defaults.days) \(.defaults.size) \(.defaults.money) \(.defaults.tags | join(","))"' "mid 5 3 s false a"
+check_json "an empty text or textarea records nothing yet" "$first" '[(.answers, .defaults) | has("name"), has("note"), has("verdict")] | join(",")' "false,false,false,false,false,false"
+check_json "and none of them is among the user's answers" "$first" '.answers | length' "0"
 js() { bridge --js "$page" "$1" >/dev/null; }
 js "document.getElementById('h-mid').click()"; settle 0.4
-check_json "clicking the already-checked radio changes nothing and loses nothing" "$(bridge --read "$page")" '.answers.hours' "mid"
+check_json "clicking the already-checked radio changes nothing and loses nothing" "$(bridge --read "$page")" '"\(.answers.hours) \(.defaults.hours)"' "null mid"
 fire() { js "const el = document.getElementById('$1'); $2; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true }))"; }
 js "document.getElementById('range-desc').click()"
 fire money "el.checked = true"
@@ -54,7 +54,7 @@ check_json "text, textarea and select record their strings" "$record" '"\(.answe
 check_json "a checkbox group records the checked values as a list" "$record" '.answers.tags | join(",")' "a,b"
 check_json "the div shape records its value" "$record" '.answers.verdict' "send"
 check_json "every declared question has an answer" "$record" '[.answers | keys[]] | sort | join(",")' "days,hours,money,name,note,rate,size,tags,verdict"
-check_json "touching a control promotes its default to the user's answer" "$record" '.defaults | join(",")' ""
+check_json "touching a control makes it the user's answer" "$record" '.defaults | keys | join(",")' ""
 # Reopened, the record keeps the user's answers: a default never overwrites an answer.
 bridge --quit >/dev/null 2>&1; sleep 0.5; (cd "$CASE_DIR/pages" && bridge controls.html 2>/dev/null); wait_ready; settle 0.8
 check_json "reopening the page keeps what the user answered over the page's defaults" "$(bridge --read "$page")" '"\(.answers.hours) \(.answers.rate) \(.answers.money) \(.version)"' "range 7 true 1"

@@ -60,11 +60,9 @@ public struct Sidecar: Codable, Equatable, Sendable {
     public var fingerprint: String?
     public var questions: [String] = []
     public var answers: [String: JSONValue] = [:]
-    /// Keys whose answer is the page's own proposal (a checked radio, a range's
-    /// value). They are recorded so the record says what the page shows, and
-    /// listed here so a reader can tell a choice from an untouched default. A key
-    /// leaves the list once the user touches its control or a script sets it.
-    public var defaults: [String] = []
+    public var proposed: [String: JSONValue] = [:]
+    public var sentAnswers: [String: JSONValue]?
+    public var withdrawn: [String] = []
     public var sentAt: Date?
     public var closedAt: Date?
     public var collectedAt: Date?
@@ -93,7 +91,7 @@ public struct Sidecar: Codable, Equatable, Sendable {
     }
 
     private static let known: Set<String> = [
-        "status", "version", "fingerprint", "questions", "answers", "defaults", "sentAt", "closedAt",
+        "status", "version", "fingerprint", "questions", "answers", "defaults", "proposed", "sentAnswers", "withdrawn", "sentAt", "closedAt",
         "collectedAt", "collectedBy", "comments", "history", "presented", "page",
     ]
 
@@ -113,7 +111,11 @@ public struct Sidecar: Codable, Equatable, Sendable {
         fingerprint = try optional("fingerprint")
         questions = try field("questions", or: [])
         answers = try field("answers", or: [:])
-        defaults = try field("defaults", or: [])
+        proposed = try field("proposed", or: [:])
+        sentAnswers = try optional("sentAnswers")
+        withdrawn = try field("withdrawn", or: [])
+        let defaults: [String] = try field("defaults", or: [])
+        for key in defaults { if let v = answers.removeValue(forKey: key) { proposed[key] = v } }
         sentAt = try optional("sentAt")
         closedAt = try optional("closedAt")
         collectedAt = try optional("collectedAt")
@@ -134,7 +136,9 @@ public struct Sidecar: Codable, Equatable, Sendable {
         try c.encodeIfPresent(fingerprint, forKey: .named("fingerprint"))
         try c.encode(questions, forKey: .named("questions"))
         try c.encode(answers, forKey: .named("answers"))
-        if !defaults.isEmpty { try c.encode(defaults, forKey: .named("defaults")) }
+        if !proposed.isEmpty { try c.encode(proposed, forKey: .named("proposed")) }
+        try c.encodeIfPresent(sentAnswers, forKey: .named("sentAnswers"))
+        if !withdrawn.isEmpty { try c.encode(withdrawn, forKey: .named("withdrawn")) }
         try c.encodeIfPresent(sentAt, forKey: .named("sentAt"))
         try c.encodeIfPresent(closedAt, forKey: .named("closedAt"))
         try c.encodeIfPresent(collectedAt, forKey: .named("collectedAt"))
@@ -180,6 +184,10 @@ public struct Sidecar: Codable, Equatable, Sendable {
     public var openComments: [Comment] { comments.filter { $0.state != "done" } }
 
     public var answered: Bool { status == "sent" || status == "closed" }
+
+    public var defaults: [String: JSONValue] { proposed.filter { answers[$0.key] == nil } }
+
+    public static func own(_ v: Version) -> [String: JSONValue] { v.answers.filter { !(v.defaults ?? []).contains($0.key) } }
     public var stale: Bool { (sentAt ?? closedAt).map { Date().timeIntervalSince($0) > 2 * 3600 } ?? false }
 
     /// A note or a Send after the agent collected makes the bridge collectable

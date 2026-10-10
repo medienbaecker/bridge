@@ -189,6 +189,10 @@ table.data { width: auto; }
 /* Once it holds an answer, a dot at the readout says so. */
 .dial:has(input[data-answered]) > output::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--bridge-accent); vertical-align: 1px; }
 :is(input:not([type=range]):not([type=checkbox]):not([type=radio]), textarea, select)[data-answered] { box-shadow: inset 2px 0 0 var(--bridge-accent); }
+:is(input, textarea, select)[data-default] { color: var(--bridge-muted); }
+bridge-default, [data-default-tag]::after { display: inline-block; margin-inline-start: 6px; padding: 0 6px; border: 1px solid currentColor; border-radius: 999px; color: var(--bridge-muted); font-size: 11px; font-weight: 400; line-height: 16px; vertical-align: middle; white-space: nowrap; }
+[data-default-tag]::after { content: "default"; }
+.dial[data-default] > output::after { content: "default"; margin-inline-start: 6px; padding: 0 5px; border: 1px solid currentColor; border-radius: 999px; font-size: 10px; }
 .dial:focus-within { outline: 2px solid color-mix(in srgb, var(--bridge-accent) 45%, transparent); outline-offset: 1px; }
 
 .bridge-color { display: grid; grid-template-columns: 56px 1fr; gap: 10px 12px; align-items: start; }

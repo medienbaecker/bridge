@@ -45,8 +45,12 @@ scripts get `window.bridge`:
 - `bridge.set(key, value)` records like a `data-record` control (debounced;
   `--read` shows it under `answers`). A third argument is accepted and
   ignored.
-- `bridge.get(key)` returns what the record holds; call it inside `bridge.ready`.
-  A page that restores its state must ask for the user's values only:
+- `bridge.clear(key)` takes the user's answer back, as if they had never
+  answered. Use it for a "reset" control rather than setting a value that
+  means "nothing chosen".
+- `bridge.get(key)` returns their answer, or else the page's own value; call it
+  inside `bridge.ready`. A page that restores its state must ask for the user's
+  values only:
   `bridge.get(key, { own: true })` is `undefined` for a value the page itself
   proposed (a checked radio, a range's value) and they never touched, and
   `bridge.isDefault(key)` says which it is. Restoring a default as if they had
@@ -121,10 +125,11 @@ card is marked by the browser:
 Both shapes record the `value`; do not switch a page from one to the other
 after the user has answered it (that changes what the page asks).
 
-Do not pre-check an option. A `checked` radio or checkbox looks like their
-answer and is recorded as one from the moment they see the page (named under
-`defaults` until they touch it). A range or select starts at today's value,
-so what they leave alone means "keep it".
+Do not pre-check an option. A `checked` radio or checkbox looks like a choice
+even with the "default" tag the window gives it, and `--read` shows it under
+`defaults`, not `answers`, until they change it. A range or select starts at
+today's value, so what they leave alone means "keep it". A second click on a
+chosen card or radio takes the answer back.
 
 ### Key and value
 

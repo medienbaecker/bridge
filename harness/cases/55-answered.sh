@@ -23,7 +23,7 @@ check_json "and says so at its readout, a 6 px dot" "$(js "const d = $dot; retur
 check_json "the preview-only dial moved and answers nothing" "$(js "const d = $dot; return d('[data-drive=\"--pad\"]')")" '.' "auto"
 check_json "the field the user typed in is edged" "$(js "return getComputedStyle(document.querySelector('[data-record=label]')).boxShadow.includes('inset')")" '.' "true"
 check_json "the page's proposal is not the user's" "$(js "return document.querySelector('[data-record=weight]').hasAttribute('data-answered')")" '.' "false"
-check_json "the record agrees" "$(bridge --read "$page")" '"\(.answers.radius) \(.answers.label) \(.defaults | join(","))"' "14 Jetzt anfragen weight"
+check_json "the record agrees" "$(bridge --read "$page")" '"\(.answers.radius) \(.answers.label) \(.defaults | keys | join(","))"' "14 Jetzt anfragen weight"
 
 bridge --quit; settle 0.5
 (cd "$CASE_DIR/pages" && bridge tune-answers.html) >/dev/null; wait_ready

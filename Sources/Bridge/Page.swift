@@ -96,9 +96,9 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         if kind != .url {
             let answers = JSON.string(JSONValue.object(sidecar.answers), pretty: false)
             let api = JSON.string(JSONValue.array(sidecar.questions.map { .string($0) }), pretty: false)
-            let defaults = JSON.string(JSONValue.array(sidecar.defaults.map { .string($0) }), pretty: false)
+            let proposed = JSON.string(JSONValue.object(sidecar.proposed), pretty: false)
             if site != nil { controller.addUserScript(WKUserScript(source: Page.frameScroll, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: .page)) }
-            controller.addUserScript(WKUserScript(source: "window.__bridgeAnswers = \(answers);\nwindow.__bridgeApi = \(api);\nwindow.__bridgeDefaults = \(defaults);\n" + Page.pageAPI, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: .page))
+            controller.addUserScript(WKUserScript(source: "window.__bridgeAnswers = \(answers);\nwindow.__bridgeApi = \(api);\nwindow.__bridgeProposed = \(proposed);\n" + Page.pageAPI, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: .page))
         }
     }
 
@@ -309,9 +309,12 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
             replyHandler(nil, nil)
         case "record":
             if let key = body["key"] as? String {
-                if body["default"] as? Bool == true { recordDefault(key, JSONValue(any: body["value"] ?? NSNull())) }
+                if body["clear"] as? Bool == true { clear(key) }
                 else { record(key, JSONValue(any: body["value"] ?? NSNull())) }
             }
+            replyHandler(nil, nil)
+        case "propose":
+            if case .object(let values) = JSONValue(any: body["values"] ?? NSNull()) { propose(values) }
             replyHandler(nil, nil)
         case "send":
             send()
@@ -351,9 +354,9 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
 
     func readyPayload() -> [String: Any] {
         var answers = sidecar.answers
-        if let v = viewingVersion, let h = sidecar.history.first(where: { $0.n == v }) { answers = h.answers }
+        if let v = viewingVersion, let h = sidecar.history.first(where: { $0.n == v }) { answers = Sidecar.own(h) }
         var previous: [String: JSONValue]? = nil
-        if viewingVersion == nil, sidecar.version > 1, let last = sidecar.history.last { previous = last.answers.filter { !(last.defaults ?? []).contains($0.key) } }
+        if viewingVersion == nil, sidecar.version > 1, let last = sidecar.history.last { previous = Sidecar.own(last) }
         return [
             "answers": any(.object(answers)),
             "previous": previous.map { any(.object($0)) } ?? NSNull(),
@@ -362,7 +365,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
             "pointing": pointing,
             "notes": notesJSON(),
             "version": sidecar.version,
-            "defaults": sidecar.defaults,
+            "proposed": any(.object(sidecar.proposed)),
         ]
     }
 
@@ -375,10 +378,9 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
 
     /// Defaults are kept apart from the user's own answers and never change the
     /// status, so opening a page alone records nothing.
-    func recordDefault(_ key: String, _ value: JSONValue) {
-        guard viewingVersion == nil, sidecar.answers[key] == nil else { return }
-        sidecar.answers[key] = value
-        if !sidecar.defaults.contains(key) { sidecar.defaults.append(key) }
+    func propose(_ values: [String: JSONValue]) {
+        guard viewingVersion == nil, values != sidecar.proposed else { return }
+        sidecar.proposed = values
         save()
         model.onChange()
     }
@@ -387,10 +389,21 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         guard viewingVersion == nil else { return }
         note = nil
         sidecar.answers[key] = value
-        sidecar.defaults.removeAll { $0 == key }
-        if sidecar.status != "open" { sidecar.status = "open"; sidecar.sentAt = nil; sidecar.collectedAt = nil; sidecar.collectedBy = nil }
+        reopen()
         save()
         model.onChange()
+    }
+
+    func clear(_ key: String) {
+        guard viewingVersion == nil, sidecar.answers.removeValue(forKey: key) != nil else { return }
+        note = nil
+        reopen()
+        save()
+        model.onChange()
+    }
+
+    func reopen() {
+        if sidecar.status != "open" { sidecar.status = "open"; sidecar.sentAt = nil; sidecar.collectedAt = nil; sidecar.collectedBy = nil }
     }
 
     var sendLabel: String {
@@ -408,6 +421,8 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         guard viewingVersion == nil else { return }
         sidecar.status = "sent"
         sidecar.sentAt = Date()
+        sidecar.withdrawn = (sidecar.sentAnswers ?? [:]).keys.filter { sidecar.answers[$0] == nil }.sorted()
+        sidecar.sentAnswers = sidecar.answers
         sidecar.collectedAt = nil
         sidecar.collectedBy = nil
         changeSummary = nil
@@ -444,7 +459,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         try? versionContent?.write(to: dir.appendingPathComponent("\(sidecar.version).html"))
         versionContent = lastContent
         let old = Version(n: sidecar.version, fingerprint: sidecar.fingerprint ?? "", at: sidecar.history.last?.at ?? sidecar.presented?.at ?? Date(),
-                          answers: sidecar.answers, sentAt: sidecar.sentAt, questions: sidecar.questions, defaults: sidecar.defaults)
+                          answers: sidecar.answers, sentAt: sidecar.sentAt, questions: sidecar.questions)
         sidecar.history.append(old)
         let added = questions.filter { !old.questions.contains($0) }
         let removed = old.questions.filter { !questions.contains($0) }
@@ -458,7 +473,8 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         sidecar.fingerprint = fp
         sidecar.questions = questions
         sidecar.answers = [:]
-        sidecar.defaults = []
+        sidecar.sentAnswers = nil
+        sidecar.withdrawn = []
         sidecar.sentAt = nil
         sidecar.collectedAt = nil
         sidecar.collectedBy = nil

@@ -58,7 +58,8 @@ broken in the user's window; fix it before they look.
   "status": "open | sent | closed",
   "version": 2,
   "answers": { "layout": "grid", "radius": 12 },
-  "defaults": [ "radius" ],                                           // in answers, but the page's proposal, not the user's
+  "defaults": { "size": "m" },                                        // the page's values the user left untouched; never in answers
+  "withdrawn": [ "tone" ],                                            // answered at the last Send, taken back since; only when there is one
   "sent": "2026-09-20T13:31:32Z",
   "comments": [
     { "id": "3f9a1c2b", "text": "too heavy at phone width", "target": "strong \"List\"",
@@ -71,11 +72,13 @@ broken in the user's window; fix it before they look.
 }
 ```
 
-A key under `defaults` is in `answers` because the page showed that value, not
-because the user chose it: the control was pre-checked or pre-filled and they
-never touched it. "They picked one number" and "the page defaulted to one
-number and they never looked" are different facts; act on the second as a
-proposal, not a decision.
+`answers` holds only what the user chose. A key under `defaults` is there
+because the page showed that value and they never changed it: the control was
+pre-checked or pre-filled. "They picked one number" and "the page defaulted to
+one number and they never looked" are different facts; act on the second as a
+proposal, not a decision. Setting a control back to the page's value, a second
+click on the chosen card or radio, or emptying a field takes the answer back,
+so a key can leave `answers` again.
 
 If another session presented the bridge you get `{ "status", "heldBy", "note" }`
 and no answers, until the answer is two hours old. Presenting the file yourself

@@ -18,9 +18,9 @@ state=$(bridge --do select "$page")
 check_json "selecting it in the sidebar marks it read" "$state" '.sidebar[0].bridges[0].row' "Card layout for the archive · now · waiting"
 
 read=$(bridge --read "$page")
-# What the page proposed (a control's default) is named under defaults and is not the user's answer.
-check_json "read: open, no answers of the user's own" "$read" '.status + " " + ((.answers | length) - (.defaults | length) | tostring)' "open 0"
-check_json "the range's value is there from the start, named as the page's default" "$read" '"\(.answers.radius) \(.defaults | join(","))"' "8 radius"
+# What the page proposed (a control's default) is under defaults, with its value, and not among the answers.
+check_json "read: open, no answers of the user's own" "$read" '.status + " " + (.answers | length | tostring)' "open 0"
+check_json "the range's value is there from the start, as the page's default" "$read" '"\(.answers.radius) \(.defaults.radius)"' "null 8"
 check_json "read: ground has a commit" "$read" '.ground.commit | length > 0' "true"
 check_json "read: head has not moved" "$read" '.ground.headMoved' "0"
 
