@@ -363,6 +363,9 @@ How a piece of code works, shown by running it and letting the user move it:
   result at three settings side by side.
 - Slow down what is too fast to see: record one cycle, then a step button
   and a scrubber over it, not autoplay.
+- One function turns the state into everything shown: the picture, the
+  readouts and the text for screen readers. Each control changes the state
+  and calls it, so a readout can never disagree with the picture.
 - Labels and readouts sit next to what they describe, axes are labelled.
 - Silent by default; any sound starts only after a click.
 - Anything they drag gets `user-select: none` and `preventDefault()` on

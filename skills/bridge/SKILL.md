@@ -88,6 +88,14 @@ options, inputs, drafts, notes) so answering always feels the same;
 everything else on the page is yours to design. Write your colours with a
 dark variant (`prefers-color-scheme: dark`); the window follows the system.
 
+When a drawing shows how something works and one part is the point, make
+that part the loudest thing in it: keep the page's palette, but turn the other
+parts down (softer, lighter, less saturated) so the eye lands on the one that
+matters. Four equally strong colours in a pipeline give the eye four places to
+land. This is about your own drawings only. A palette, a design, a screenshot
+or the real site keeps every colour it has; never mute the thing they are
+judging.
+
 Words carry only what cannot be shown: a name and one line of consequence per
 option. When a card needs a paragraph, the picture is missing.
 
