@@ -1,5 +1,6 @@
 @property --bridge-flow { syntax: "<length>"; inherits: false; initial-value: 12px; }
 
+@layer bridge {
 :root {
   color-scheme: light dark;
   --bridge-accent: AccentColor;
@@ -25,9 +26,6 @@ body {
 }
 
 :where(h1, h2, h3, h4, h5, h6, p, ul, ol, dl, figure, blockquote, pre, hr, fieldset) { margin: 0; }
-/* Specificity 0,0,1, like an element rule: a page's `* { margin: 0 }` keeps the
-   flow, its own `p { margin: … }` replaces it. A style or script before the
-   first block does not push that block down. */
 :where(body, .card, [data-record][data-value], .evidence, .draft, details, .bridge-md, blockquote, li, .compare > *) > :where(:not(script, style, template)) ~ :not(script, style, template) { margin-top: var(--bridge-flow); }
 :is(h1, h2, h3, summary) + * { --bridge-flow: 8px; }
 hr, hr + * { --bridge-flow: 24px; }
@@ -49,6 +47,7 @@ th { font-weight: 600; color: var(--bridge-muted); font-size: 12px; }
 small, .muted { color: var(--bridge-muted); }
 
 label { display: block; }
+}
 input, select, textarea, button {
   font: inherit;
   color: inherit;
@@ -109,6 +108,8 @@ html[data-bridge-status="sent"] [data-send], html[data-bridge-readonly] [data-se
 [data-record][data-value] > img + * { --bridge-flow: 0; }
 [data-record][data-value] > :is(strong, b) + * { --bridge-flow: 2px; }
 
+@layer bridge {
+.stack:not(.options) { display: flex; flex-direction: column; gap: var(--bridge-gap, 12px); }
 .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 /* Values sit right on the label's first baseline so a column of them reads down. */
 .row.between { justify-content: space-between; align-items: baseline; flex-wrap: nowrap; }
@@ -129,6 +130,7 @@ table.data { width: auto; }
    panel get a Field background so they do not sink into it. */
 :is(.evidence, .draft) :is(pre, .draft, .evidence) { background: none; padding: 0; border-radius: 0; --bridge-flow: 6px; }
 :is(.evidence, .draft) code:not(pre code) { background: none; padding: 0 4px; border: 1px solid var(--bridge-line); }
+}
 :is(.evidence, .draft) :is(input[type=text], input[type=number], input[type=url], input[type=email], input[type=search], textarea, button, .button) { background: Field; border-color: var(--bridge-line); }
 
 .bridge-previous {
@@ -141,14 +143,19 @@ table.data { width: auto; }
 .dials > .bridge-previous { margin: 0 0 4px 10px; }
 .bridge-frame-refused { color: var(--bridge-muted); font-size: 12px; }
 
+@layer bridge {
 .bridge-md blockquote { padding: 2px 14px; border-left: 3px solid var(--bridge-line); color: var(--bridge-muted); }
+}
 .bridge-md input[type=checkbox] { margin-right: 6px; }
 
+@layer bridge {
 .wipe { position: relative; display: block; --wipe: 50%; }
 .wipe img { display: block; width: 100%; margin: 0; }
 .wipe img + img { position: absolute; inset: 0; clip-path: inset(0 0 0 var(--wipe)); }
 .wipe::after { content: ""; position: absolute; top: 0; bottom: 0; left: var(--wipe); width: 2px; margin-left: -1px; background: var(--bridge-accent); pointer-events: none; }
+}
 .wipe input[type=range] { position: absolute; inset: auto 0 0 0; width: 100%; margin: 0; opacity: 0; height: 100%; top: 0; cursor: ew-resize; }
+@layer bridge {
 .shots { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 .shots img { border: 1px solid var(--bridge-line); }
 
@@ -178,6 +185,7 @@ table.data { width: auto; }
 .bar > b { grid-column: 3; order: 2; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--bridge-muted); }
 .bar[data-muted]::after { background: var(--bridge-line); }
 
+}
 .dials { display: grid; gap: 4px; }
 .dial { position: relative; display: grid; grid-template-columns: 1fr auto; align-items: center; height: 28px; padding: 0 10px; border-radius: 6px; background: var(--bridge-panel); overflow: hidden; --fill: 0%; }
 .dial::before { content: ""; position: absolute; inset: 0; width: var(--fill); background: color-mix(in srgb, var(--bridge-accent) 24%, transparent); pointer-events: none; }
@@ -227,6 +235,7 @@ fieldset.options { border: 0; padding: 0; min-width: 0; }
 .options > :has(> input[type=radio]) > label { display: block; font-weight: 600; margin: 0 0 2px; }
 .options > :has(> input[type=radio]) > label + span { display: block; }
 
+@layer bridge {
 .metrics { display: grid; gap: 2px; max-width: 460px; }
 .metrics > div { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; padding: 5px 0; border-bottom: 1px solid var(--bridge-line); font-size: 12px; }
 .metrics dt { color: var(--bridge-muted); }
@@ -237,6 +246,7 @@ fieldset.options { border: 0; padding: 0; min-width: 0; }
 
 details > summary { font-weight: 600; cursor: default; }
 
+}
 .swatches { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .swatches [data-color] { width: 26px; height: 26px; padding: 0; border: 1px solid var(--bridge-line); border-radius: 6px; cursor: default; }
 .swatches [data-color][aria-pressed="true"] { box-shadow: 0 0 0 2px Canvas, 0 0 0 4px var(--bridge-accent); }

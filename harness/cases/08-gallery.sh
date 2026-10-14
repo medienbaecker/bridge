@@ -13,7 +13,7 @@ for sel in $documented; do
 done
 for cls in $(grep -o 'class="[^"]*"' "$ROOT/harness/fixtures/gallery.html" | sed 's/class="//; s/"//' | tr ' ' '\n' | sort -u); do
   case "$cls" in language-*) pattern='^\.language-\*$';; *) pattern="^\.([a-z-]+\.)?$cls\$";; esac
-  check "gallery uses .$cls: pages.md documents it" "$(printf '%s\n' "$documented" | grep -c -E "$pattern")" "1"
+  check "gallery uses .$cls: pages.md documents it" "$(printf '%s\n' "$documented" | grep -m1 -c -E "$pattern")" "1"
 done
 
 # Mantine: component names in the mantine.md table must be imported by the gallery, and vice versa

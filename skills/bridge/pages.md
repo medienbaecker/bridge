@@ -439,10 +439,19 @@ use those, or `Canvas`/`CanvasText` for surface and text.
 Blocks on the page, in a `.card` and in an option card are spaced by one
 rule: each gets `margin-top: var(--bridge-flow)` (12px) from the one before.
 Give your own elements no outer margins; set `--bridge-flow` on one if it
-needs more or less room above it.
+needs more or less room above it. That rule is for text and cards. A drawing
+built from positioned pieces goes in a plain `div` of its own, never a
+`.card`: positioned children of the page or a card get the margin too and
+move down by it. To space a column of your own pieces, use `.stack` (a flex
+column with `gap`; set `--bridge-gap` on it, 12px by default).
+
+The kit's look (type, spacing, tables, panels, bars) sits in a cascade layer,
+so any rule the page writes wins over it, whatever its specificity. The parts
+that ask (inputs, buttons, option cards, dials) stay outside the layer, so
+answering looks the same on every page.
 
 `h1 h2 h3 p ul ol table pre code img figure figcaption hr small .muted`,
-`.options` (grid of option cards), `.options.stack`, `.row` (flex row),
+`.options` (grid of option cards), `.options.stack`, `.stack` (flex column with gap), `.row` (flex row),
 `.row.between` with `.num` (label and value on one line), `.card` (bordered
 box), `.actions` (button row with top margin), `.compare` (two columns),
 `.evidence` (quiet panel for a factual line or two), `.draft` (pre-wrapped
