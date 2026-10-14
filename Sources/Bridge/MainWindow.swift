@@ -22,6 +22,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered, defer: false)
         window.title = "Bridge"
+        window.tabbingMode = .disallowed
         window.titleVisibility = .hidden
         window.toolbarStyle = .unified
         window.titlebarSeparatorStyle = .automatic
@@ -94,6 +95,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
             case "uncross": for t in targets { model.cross(t, false) }
             case "remove": for t in targets { model.remove(t) }
             case "reveal": if let t = targets.first { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: t)]) }
+            case "window": for t in targets { openWindow(t) }
             default: break
             }
             refresh()
@@ -104,6 +106,14 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
             if let loc { model.markRead(loc) }
             refresh()
         }
+        sidebar.onDragOut = { [weak self] locations, topLeft in
+            for (i, location) in locations.enumerated() {
+                self?.openWindow(location, at: NSPoint(x: topLeft.x + CGFloat(i) * 24, y: topLeft.y - CGFloat(i) * 24))
+            }
+        }
+        sidebar.onDragBegan = { [weak self] locations in self?.takeSnapshots(locations) }
+        sidebar.windowPreview = { [weak self] location in self?.windowPreview(location) }
+        sidebar.hasSnapshot = { [weak self] location in self?.snapshots[location] != nil }
         model.onChange = { [weak self] in self?.refresh() }
     }
 
@@ -128,11 +138,99 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
 
     var bannerText: String? { model.selectedPage?.bannerText }
 
+    var windows: [String: PageWindow] = [:]
+    var snapshots: [String: NSImage] = [:]
+
+    func takeSnapshots(_ locations: [String]) {
+        for location in locations {
+            let web = model.page(for: location).webView
+            guard web.window != nil, web.bounds.width > 0 else { continue }
+            web.takeSnapshot(with: nil) { [weak self] image, _ in self?.snapshots[location] = image }
+        }
+    }
+
+    func windowPreview(_ location: String) -> NSImage? {
+        let title = model.listing.entry(location)?.title ?? (location as NSString).lastPathComponent
+        let snapshot = snapshots[location]
+        let width: CGFloat = 300, bar: CGFloat = 26
+        let aspect = snapshot.map { min(max($0.size.height / max($0.size.width, 1), 0.5), 1.1) } ?? 0.75
+        let body = NSSize(width: width, height: (width * aspect).rounded() + bar)
+        let pad = SidebarController.previewPadding
+        let appearance = window?.effectiveAppearance ?? NSApp.effectiveAppearance
+        return NSImage(size: NSSize(width: body.width + pad * 2, height: body.height + pad * 2), flipped: true) { _ in
+            appearance.performAsCurrentDrawingAppearance {
+                let frame = NSRect(x: pad, y: pad, width: body.width, height: body.height)
+                let shape = NSBezierPath(roundedRect: frame, xRadius: 10, yRadius: 10)
+                NSGraphicsContext.saveGraphicsState()
+                let shadow = NSShadow()
+                shadow.shadowColor = NSColor.black.withAlphaComponent(0.35)
+                shadow.shadowBlurRadius = 14
+                shadow.shadowOffset = NSSize(width: 0, height: -5)
+                shadow.set()
+                NSColor.windowBackgroundColor.setFill()
+                shape.fill()
+                NSGraphicsContext.restoreGraphicsState()
+                NSGraphicsContext.saveGraphicsState()
+                shape.addClip()
+                NSColor.underPageBackgroundColor.setFill()
+                NSRect(x: frame.minX, y: frame.minY, width: frame.width, height: bar).fill()
+                let pageRect = NSRect(x: frame.minX, y: frame.minY + bar, width: frame.width, height: frame.height - bar)
+                NSColor.textBackgroundColor.setFill()
+                pageRect.fill()
+                if let snapshot {
+                    let scale = pageRect.width / snapshot.size.width
+                    let source = NSRect(x: 0, y: max(snapshot.size.height - pageRect.height / scale, 0), width: snapshot.size.width, height: min(pageRect.height / scale, snapshot.size.height))
+                    snapshot.draw(in: NSRect(x: pageRect.minX, y: pageRect.minY, width: pageRect.width, height: source.height * scale), from: source, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+                }
+                NSGraphicsContext.restoreGraphicsState()
+                for (i, color) in [NSColor.systemRed, .systemYellow, .systemGreen].enumerated() {
+                    color.setFill()
+                    NSBezierPath(ovalIn: NSRect(x: frame.minX + 10 + CGFloat(i) * 18, y: frame.minY + bar / 2 - 6, width: 12, height: 12)).fill()
+                }
+                let style = NSMutableParagraphStyle()
+                style.alignment = .center
+                style.lineBreakMode = .byTruncatingTail
+                (title as NSString).draw(in: NSRect(x: frame.minX + 64, y: frame.minY + bar / 2 - 8, width: frame.width - 128, height: 16),
+                    withAttributes: [.font: NSFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: NSColor.labelColor, .paragraphStyle: style])
+                NSColor.separatorColor.setStroke()
+                shape.lineWidth = 0.5
+                shape.stroke()
+            }
+            return true
+        }
+    }
+
+    func openWindow(_ location: String, at topLeft: NSPoint? = nil) {
+        if let open = windows[location] {
+            if let topLeft { open.window?.setFrameTopLeftPoint(topLeft) }
+            open.showWindow(nil)
+            return
+        }
+        let page = model.page(for: location)
+        let pageWindow = PageWindow(page: page)
+        pageWindow.onClose = { [weak self] in
+            self?.windows[location] = nil
+            self?.refresh()
+        }
+        windows[location] = pageWindow
+        model.markRead(location)
+        refresh()
+        pageWindow.refresh()
+        pageWindow.showWindow(nil)
+        if let topLeft { pageWindow.window?.setFrameTopLeftPoint(topLeft) }
+    }
+
+    var shownPage: Page? { model.selectedPage.flatMap { windows[$0.location] == nil ? $0 : nil } }
+
     func refresh() {
         projects.reload()
         sidebar.reload()
+        for (location, pageWindow) in windows where model.listing.entry(location) == nil { pageWindow.close() }
         let page = model.selectedPage
-        content.show(page: page)
+        let away = page.flatMap { windows[$0.location] }
+        content.show(page: away == nil ? page : nil)
+        content.showAway(away.map { w in { w.showWindow(nil) } })
+        for w in windows.values { w.refresh() }
         window?.subtitle = page?.bannerText ?? ""
         notes.page = page
         if notesPopover.isShown { notes.reload(); notesPopover.contentSize = notes.fittingSize }
@@ -218,7 +316,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
     }
 
     func validateToolbarItem(_ item: NSToolbarItem) -> Bool {
-        let page = model.selectedPage
+        let page = shownPage
         switch item.itemIdentifier {
         case Self.point:
             let on = page?.pointing ?? false
@@ -254,7 +352,8 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         case "remove": return entry != nil
         case "point", "send": return toolbarItems.first { $0.itemIdentifier.rawValue == command }.map(validateToolbarItem) ?? false
         case "reveal": return page.map { $0.kind != .url } ?? false
-        case "zoom-in", "zoom-out", "zoom-reset": return page != nil
+        case "zoom-in", "zoom-out", "zoom-reset": return shownPage != nil
+        case "window": return page != nil
         case "previous": return page.map { ($0.viewingVersion ?? $0.sidecar.version) > 1 } ?? false
         case "next": return page?.viewingVersion != nil
         default: return true
@@ -277,14 +376,20 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
             guard let w = argument.flatMap(Double.init) else { return false }
             split.splitViewItems[0].minimumThickness = w; split.splitViewItems[0].maximumThickness = w; window?.layoutIfNeeded()
             return true
+        case "dragout":
+            let parts = (argument ?? "").split(separator: " ").map(String.init)
+            guard parts.count == 3, let x = Double(parts[1]), let y = Double(parts[2]) else { return false }
+            sidebar.onDragOut([parts[0]], NSPoint(x: x, y: y)); return true
+        case "closewindow": guard let w = argument.flatMap({ windows[$0] }) else { return false }; w.close(); return true
         case "project": model.scope = Scope(key: argument ?? "waiting"); model.settleSelection(); refresh(); return true
         case "crossed": model.showCrossed = argument == nil ? !model.showCrossed : argument == "show"; model.settleSelection(); refresh(); return true
         default: break
         }
         guard let page = model.selectedPage else { return false }
         switch command {
-        case "point": page.setPointing(!page.pointing)
-        case "send": page.send()
+        case "window": openWindow(page.location); return true
+        case "point": guard windows[page.location] == nil else { return false }; page.setPointing(!page.pointing)
+        case "send": guard windows[page.location] == nil else { return false }; page.send()
         case "notes": if !toggleNotes() { return false }
         case "cross": for t in targets(page) { model.cross(t, true) }
         case "uncross": for t in targets(page) { model.cross(t, false) }
@@ -317,7 +422,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
             guard let argument else { return false }
             let row = sidebar.row(for: argument)
             guard row >= 0, let menu = sidebar.contextMenu(forRow: row) else { return false }
-            rowMenuTitles = menu.items.filter { !$0.isSeparatorItem }.map { $0.title + ($0.keyEquivalent.isEmpty ? "" : " (" + ($0.keyEquivalentModifierMask.contains(.shift) ? "⇧" : "") + "⌘" + ($0.keyEquivalent == "\u{8}" ? "⌫" : $0.keyEquivalent.uppercased()) + ")") }
+            rowMenuTitles = menu.items.filter { !$0.isSeparatorItem }.map { $0.title + ($0.keyEquivalent.isEmpty ? "" : " (" + ($0.keyEquivalentModifierMask.contains(.option) ? "⌥" : "") + ($0.keyEquivalentModifierMask.contains(.shift) ? "⇧" : "") + "⌘" + ($0.keyEquivalent == "\u{8}" ? "⌫" : $0.keyEquivalent.uppercased()) + ")") }
         case "close": window?.performClose(nil)
         case "zoom-in": page.zoom = min(3, page.zoom + 0.1)
         case "zoom-out": page.zoom = max(0.5, page.zoom - 0.1)
@@ -359,6 +464,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         model.selected = location
         model.markRead(location)
         refresh()
+        windows[location]?.showWindow(nil)
         return true
     }
 
@@ -391,6 +497,15 @@ final class ContentController: NSViewController {
     // same height, so nothing hides at scroll zero.
     let container = NSView()
     weak var shown: Page?
+    private let away = NSStackView()
+    private var bringBack: (() -> Void)?
+
+    func showAway(_ action: (() -> Void)?) {
+        bringBack = action
+        away.isHidden = action == nil
+    }
+
+    @objc private func bringBackClicked() { bringBack?() }
 
     override func loadView() {
         let root = NSView()
@@ -398,7 +513,20 @@ final class ContentController: NSViewController {
         root.translatesAutoresizingMaskIntoConstraints = false
         container.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(container)
+        let label = NSTextField(labelWithString: "Open in its own window")
+        label.textColor = .secondaryLabelColor
+        let button = NSButton(title: "Show Window", target: self, action: #selector(bringBackClicked))
+        button.bezelStyle = .push
+        away.orientation = .vertical
+        away.spacing = 10
+        away.addArrangedSubview(label)
+        away.addArrangedSubview(button)
+        away.isHidden = true
+        away.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(away)
         NSLayoutConstraint.activate([
+            away.centerXAnchor.constraint(equalTo: root.centerXAnchor),
+            away.centerYAnchor.constraint(equalTo: root.centerYAnchor),
             container.topAnchor.constraint(equalTo: root.topAnchor),
             container.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             container.trailingAnchor.constraint(equalTo: root.trailingAnchor),

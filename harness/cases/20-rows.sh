@@ -7,13 +7,13 @@ repo
 (cd "$CASE_DIR/pages" && bridge decision.html plan.html umlaut.html)
 wait_ready
 state=$(bridge --do rowmenu "$b")
-check_json "a row has a context menu" "$state" '.rowMenu | join(" / ")' "Cross (⌘E) / Reveal in Finder (⇧⌘R) / Remove from List (⌘⌫)"
+check_json "a row has a context menu" "$state" '.rowMenu | join(" / ")' "Open in New Window (⌥⌘O) / Cross (⌘E) / Reveal in Finder (⇧⌘R) / Remove from List (⌘⌫)"
 bridge --do select "$b" >/dev/null; bridge --do cross >/dev/null
-check_json "a crossed row offers Uncross" "$(bridge --do rowmenu "$b")" '.rowMenu[0]' "Uncross (⇧⌘E)"
+check_json "a crossed row offers Uncross" "$(bridge --do rowmenu "$b")" '.rowMenu[1]' "Uncross (⇧⌘E)"
 bridge --do uncross >/dev/null
 state=$(bridge --do select "$a"); state=$(bridge --do select-add "$b")
 check_json "two rows selected" "$state" '.selectedRows | length' "2"
-check_json "the menu names the count" "$(bridge --do rowmenu "$b")" '.rowMenu[0]' "Cross 2 Bridges (⌘E)"
+check_json "the menu names the count" "$(bridge --do rowmenu "$b")" '.rowMenu[0:2] | join(" / ")' "Open 2 Bridges in New Windows (⌥⌘O) / Cross 2 Bridges (⌘E)"
 state=$(bridge --do cross)
 check_json "⌘E crosses every selected row" "$state" '[.sidebar[].bridges[] | select(.crossed) | .title] | length' "2"
 check_json "and leaves the third alone" "$state" '[.sidebar[].bridges[] | select(.crossed | not) | .title][0]' "Umlaute — Test"

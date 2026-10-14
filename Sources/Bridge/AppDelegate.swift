@@ -281,6 +281,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         out["documentTitleX"] = .number(Double(window.docTitleView.convert(window.docTitleView.bounds, to: nil).minX))
         out["listEmptyFrame"] = .object(window.sidebar.emptyFrame)
         out["bridgesColumn"] = .array(model.shown().map { .string($0.location) })
+        out["pageWindows"] = .array(window.windows.sorted { $0.key < $1.key }.map { location, w in
+            .object(["location": .string(location), "title": .string(w.window?.title ?? ""), "visible": .bool(w.window?.isVisible ?? false),
+                     "showsPage": .bool(w.content.shown === w.page), "topLeft": .array([.number(Double(w.window?.frame.minX ?? 0)), .number(Double(w.window?.frame.maxY ?? 0))])])
+        })
+        out["contentShowsPage"] = .bool(window.content.shown != nil)
         out["quietRows"] = .array(model.shown().filter { model.isQuiet($0) }.map { .string($0.location) })
         out["toolbar"] = .array(window.toolbarItems.map {
             .object(["id": .string($0.itemIdentifier.rawValue), "label": .string($0.label), "enabled": .bool($0.isEnabled),
@@ -330,6 +335,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             i.keyEquivalentModifierMask = mods
             i.representedObject = command
         }
+        item("Open in New Window", "window", "o", [.command, .option])
+        bridge.addItem(.separator())
         item("Point", "point", "p", [.command, .shift])
         item("Send", "send", "\r", [.command, .shift])
         bridge.addItem(.separator())

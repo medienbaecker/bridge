@@ -24,6 +24,13 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
     var roots: [Node] = []
     var onSelect: (String?) -> Void = { _ in }
     var onRowCommand: (String, [String]) -> Void = { _, _ in }
+    var onDragOut: ([String], NSPoint) -> Void = { _, _ in }
+    var onDragBegan: ([String]) -> Void = { _ in }
+    var windowPreview: (String) -> NSImage? = { _ in nil }
+    var hasSnapshot: (String) -> Bool = { _ in false }
+    private var looksLikeWindow = false
+    private var snapshotsShown = 0
+    static let rowType = NSPasteboard.PasteboardType("com.medienbaecker.bridge.row")
     var reloading = false
 
     init(model: Model) {
@@ -51,6 +58,10 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         outline.dataSource = self
         outline.delegate = self
         outline.menuProvider = { [weak self] row in self?.contextMenu(forRow: row) }
+        outline.target = self
+        outline.doubleAction = #selector(openClicked)
+        outline.setDraggingSourceOperationMask(.move, forLocal: false)
+        outline.onDragMoved = { [weak self] session, point in self?.dragMoved(session, to: point) }
         outline.backgroundColor = .clear
         scroll.documentView = outline
         // With overlay scrollers the outline comes out 10 pt wider than its clip, and
@@ -91,7 +102,10 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         return ["x": .number(Double(f.minX)), "y": .number(Double(w.frame.height - f.maxY)), "width": .number(Double(f.width)), "height": .number(Double(f.height))]
     }
 
+    var dragging = false
+
     func reload() {
+        if dragging { return }
         reloading = true
         defer { reloading = false }
         let keep = selectedLocations
@@ -140,12 +154,20 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
             i.representedObject = [command, targets] as [Any]
         }
         let plural = targets.count > 1 ? " \(targets.count) Bridges" : ""
+        item(targets.count > 1 ? "Open\(plural) in New Windows" : "Open in New Window", "window", "o", [.command, .option])
+        menu.addItem(.separator())
         if entries.contains(where: { !$0.crossed }) { item("Cross" + plural, "cross", "e") }
         if entries.contains(where: { $0.crossed }) { item("Uncross" + plural, "uncross", "E", [.command, .shift]) }
         menu.addItem(.separator())
         if targets.count == 1, entries.first?.kind != .url { item("Reveal in Finder", "reveal", "R", [.command, .shift]) }
         item("Remove from List", "remove", "\u{8}")
         return menu
+    }
+
+    @objc func openClicked() {
+        let row = outline.clickedRow
+        guard row >= 0, case .bridge(let e) = (outline.item(atRow: row) as? Node)?.kind else { return }
+        onRowCommand("window", [e.location])
     }
 
     @objc func rowCommand(_ sender: NSMenuItem) {
@@ -187,6 +209,53 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
     }
 
     // MARK: Data source
+
+    func outlineView(_ outlineView: NSOutlineView, pasteboardWriterForItem item: Any) -> NSPasteboardWriting? {
+        guard case .bridge(let e) = (item as? Node)?.kind else { return nil }
+        let pasteboardItem = NSPasteboardItem()
+        pasteboardItem.setString(e.location, forType: Self.rowType)
+        return pasteboardItem
+    }
+
+    func outlineView(_ outlineView: NSOutlineView, draggingSession session: NSDraggingSession, willBeginAt screenPoint: NSPoint, forItems draggedItems: [Any]) {
+        session.animatesToStartingPositionsOnCancelOrFail = false
+        looksLikeWindow = false
+        snapshotsShown = 0
+        dragging = true
+        onDragBegan(Self.locations(in: session))
+    }
+
+    static func locations(in session: NSDraggingSession) -> [String] {
+        session.draggingPasteboard.pasteboardItems?.compactMap { $0.string(forType: rowType) } ?? []
+    }
+
+    static let windowOffset = NSPoint(x: -60, y: 12)
+    static let previewPadding: CGFloat = 18
+
+    func dragMoved(_ session: NSDraggingSession, to point: NSPoint) {
+        guard let window = outline.window else { return }
+        let locations = Self.locations(in: session)
+        let snapshotsNow = locations.filter(hasSnapshot).count
+        guard !looksLikeWindow || snapshotsNow != snapshotsShown else { return }
+        looksLikeWindow = true
+        snapshotsShown = snapshotsNow
+        session.enumerateDraggingItems(options: [], for: outline, classes: [NSPasteboardItem.self], searchOptions: [:]) { item, i, _ in
+            guard i < locations.count, let image = self.windowPreview(locations[i]) else { return }
+            let step = CGFloat(i) * 24
+            let topLeft = NSPoint(x: point.x + Self.windowOffset.x + step, y: point.y + Self.windowOffset.y - step)
+            let local = self.outline.convert(window.convertPoint(fromScreen: topLeft), from: nil)
+            let pad = Self.previewPadding
+            item.setDraggingFrame(NSRect(x: local.x - pad, y: local.y - pad, width: image.size.width, height: image.size.height), contents: image)
+        }
+    }
+
+    func outlineView(_ outlineView: NSOutlineView, draggingSession session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
+        dragging = false
+        guard operation == [], let window = outlineView.window, let list = outlineView.enclosingScrollView else { return }
+        if window.convertToScreen(list.convert(list.bounds, to: nil)).contains(screenPoint) { return }
+        let locations = Self.locations(in: session)
+        if !locations.isEmpty { onDragOut(locations, NSPoint(x: screenPoint.x + Self.windowOffset.x, y: screenPoint.y + Self.windowOffset.y)) }
+    }
 
     func outlineView(_ outlineView: NSOutlineView, numberOfChildrenOfItem item: Any?) -> Int {
         (item as? Node)?.children.count ?? roots.count
@@ -325,6 +394,11 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
 
 final class RowMenuOutlineView: NSOutlineView {
     var menuProvider: (Int) -> NSMenu? = { _ in nil }
+    var onDragMoved: (NSDraggingSession, NSPoint) -> Void = { _, _ in }
+
+    override func draggingSession(_ session: NSDraggingSession, movedTo screenPoint: NSPoint) {
+        onDragMoved(session, screenPoint)
+    }
 
     override func menu(for event: NSEvent) -> NSMenu? {
         let row = self.row(at: convert(event.locationInWindow, from: nil))
