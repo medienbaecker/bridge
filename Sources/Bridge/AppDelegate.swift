@@ -196,12 +196,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                 page.load()
                 reply(.ok(.null))
             }
-        case .render(let loc, let path, let width, let site):
+        case .render(let loc, let path, let width, let site, let crop, let scale, let zoom):
             Task { @MainActor in
                 do {
                     let w = width.map { CGFloat($0) } ?? model.selectedPage.map { $0.webView.bounds.width }.flatMap { $0 > 0 ? $0 : nil } ?? 760
-                    let size = try await Preview.render(loc, model: model, width: w, site: site.flatMap(URL.init(string:)), to: path)
-                    reply(.ok(.object(["path": .string(path), "width": .number(Double(size.width)), "height": .number(Double(size.height))])))
+                    let shot = try await Preview.render(loc, model: model, width: w, site: site.flatMap(URL.init(string:)), crop: crop, scale: scale.map { CGFloat($0) }, zoom: zoom.map { CGFloat($0) }, to: path)
+                    var out: [String: JSONValue] = ["path": .string(path), "width": .number(Double(shot.size.width)), "height": .number(Double(shot.size.height))]
+                    if crop != nil || scale != nil || zoom != nil {
+                        out["origin"] = .array([.number(Double(shot.origin.x)), .number(Double(shot.origin.y))])
+                        out["pixels"] = .array([.number(Double(shot.pixels.width)), .number(Double(shot.pixels.height))])
+                    }
+                    reply(.ok(.object(out)))
                 } catch { reply(.error("\(error)")) }
             }
         case .snapshot(let path):

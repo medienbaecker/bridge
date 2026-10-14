@@ -18,7 +18,9 @@ enum Preview {
         await new Promise((r) => setTimeout(r, 200))
         """
 
-    static func render(_ location: String, model: Model, width: CGFloat, site: URL?, to path: String) async throws -> NSSize {
+    struct Rendered { let size: NSSize; let origin: CGPoint; let pixels: NSSize }
+
+    static func render(_ location: String, model: Model, width: CGFloat, site: URL?, crop: [Double]? = nil, scale: CGFloat? = nil, zoom: CGFloat? = nil, to path: String) async throws -> Rendered {
         let page = Page(location: location, model: model, preview: true)
         page.siteOverride = site
         let window = NSWindow(contentRect: NSRect(x: -30000, y: -30000, width: width, height: 900), styleMask: [.borderless], backing: .buffered, defer: false)
@@ -40,19 +42,44 @@ enum Preview {
         window.setContentSize(NSSize(width: width, height: height))
         try await Task.sleep(for: .milliseconds(150))
 
-        let shot = try await page.webView.takeSnapshot(configuration: nil)
-        let scale: CGFloat = 2
-        guard let rep = Snapshot.transparentRep(NSSize(width: width, height: height), scale: scale) else { throw Shot.Failure("could not allocate the image") }
+        let full = NSRect(x: 0, y: 0, width: width, height: height)
+        var rect = full
+        if let crop {
+            rect = NSRect(x: crop[0], y: crop[1], width: crop[2], height: crop[3]).intersection(full)
+            guard !rect.isEmpty else { throw Shot.Failure("--crop lies outside the page, which is \(Int(width))×\(Int(height))") }
+        }
+        let density = scale ?? 2
+        let enlarge = zoom ?? 1
+        let pixels = NSSize(width: (rect.width * density * enlarge).rounded(), height: (rect.height * density * enlarge).rounded())
+        guard max(pixels.width, pixels.height) <= 16384 else { throw Shot.Failure("the image would be \(Int(pixels.width))×\(Int(pixels.height)) pixels; pass a smaller --crop") }
+
+        let config = WKSnapshotConfiguration()
+        config.rect = rect
+        if scale != nil { config.snapshotWidth = NSNumber(value: Double(rect.width * density / window.backingScaleFactor)) }
+        let shot = try await page.webView.takeSnapshot(configuration: config)
+        guard let rep = Snapshot.transparentRep(rect.size, scale: density) else { throw Shot.Failure("could not allocate the image") }
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
         window.effectiveAppearance.performAsCurrentDrawingAppearance {
             NSColor.windowBackgroundColor.setFill()
-            NSRect(x: 0, y: 0, width: width, height: height).fill()
+            NSRect(origin: .zero, size: rect.size).fill()
         }
-        shot.draw(in: NSRect(x: 0, y: 0, width: width, height: height))
+        shot.draw(in: NSRect(origin: .zero, size: rect.size))
         NSGraphicsContext.restoreGraphicsState()
-        guard let png = rep.representation(using: .png, properties: [:]) else { throw Shot.Failure("could not encode png") }
+
+        var out = rep
+        if enlarge > 1 {
+            guard let big = Snapshot.transparentRep(rect.size, scale: density * enlarge), let image = rep.cgImage else { throw Shot.Failure("could not allocate the image") }
+            NSGraphicsContext.saveGraphicsState()
+            let context = NSGraphicsContext(bitmapImageRep: big)
+            context?.imageInterpolation = .none
+            NSGraphicsContext.current = context
+            NSImage(cgImage: image, size: rect.size).draw(in: NSRect(origin: .zero, size: rect.size))
+            NSGraphicsContext.restoreGraphicsState()
+            out = big
+        }
+        guard let png = out.representation(using: .png, properties: [:]) else { throw Shot.Failure("could not encode png") }
         try png.write(to: URL(fileURLWithPath: path))
-        return NSSize(width: width, height: height)
+        return Rendered(size: rect.size, origin: rect.origin, pixels: NSSize(width: out.pixelsWide, height: out.pixelsHigh))
     }
 }

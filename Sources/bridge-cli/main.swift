@@ -395,13 +395,24 @@ case "--lint":
     exit(errors > 0 ? 1 : 0)
 
 case "--shot":
-    guard args.count >= 2 else { fail("--shot <out.png> [--screen] | --shot <file> <out.png> [--width N] [--site <url>]") }
+    guard args.count >= 2 else { fail("--shot <out.png> [--screen] | --shot <file> <out.png> [--width N] [--site <url>] [--crop x,y,w,h] [--scale N] [--zoom N]") }
     if args.count >= 3, !args[2].hasPrefix("--") {
         let width = args.firstIndex(of: "--width").flatMap { $0 + 1 < args.count ? Double(args[$0 + 1]) : nil }
         let site = args.firstIndex(of: "--site").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil }
         if let site, !(site.hasPrefix("http://") || site.hasPrefix("https://")) { fail("--site <http(s) url>") }
         if site != nil, Kind.of(location(args[1])) != .html { fail("--site is for .html pages: \(location(args[1]))") }
-        print(json: check(send(.render(location: location(args[1]), path: Paths.resolve(args[2], relativeTo: cwd), width: width, site: site), launching: true, hidden: true)))
+        func factor(_ flag: String) -> Double? {
+            guard let i = args.firstIndex(of: flag) else { return nil }
+            guard i + 1 < args.count, let n = Double(args[i + 1]), n >= 1, n <= 8 else { fail("\(flag) <1 to 8>") }
+            return n
+        }
+        var crop: [Double]?
+        if let i = args.firstIndex(of: "--crop") {
+            let parts = i + 1 < args.count ? args[i + 1].split(separator: ",").compactMap { Double($0) } : []
+            guard parts.count == 4, parts[0] >= 0, parts[1] >= 0, parts[2] > 0, parts[3] > 0 else { fail("--crop x,y,w,h (CSS pixels from the page's top left)") }
+            crop = parts
+        }
+        print(json: check(send(.render(location: location(args[1]), path: Paths.resolve(args[2], relativeTo: cwd), width: width, site: site, crop: crop, scale: factor("--scale"), zoom: factor("--zoom")), launching: true, hidden: true)))
         exit(0)
     }
     print(json: check(send(.shot(path: Paths.resolve(args[1], relativeTo: cwd), screen: args.contains("--screen")))))

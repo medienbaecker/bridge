@@ -106,7 +106,11 @@ starts at today's value.
 page off-screen, the way the window would, without presenting it. Read the
 image and ask: where does my eye land first? Can I see what they are judging
 without reading? What would I have to read to answer? Fix it until the picture
-answers. Then lint, present, and say in one line that it is in Bridge, without
+answers. Then look closer at whatever is fine detail (a border, a shadow, an
+icon, a line in a drawing): `--crop x,y,w,h --zoom 4` shows the pixels the
+window really draws, enlarged, so a line on a half pixel shows its blur;
+`--crop x,y,w,h --scale 4` paints the area again sharp, to read small detail.
+Then lint, present, and say in one line that it is in Bridge, without
 repeating it in the chat.
 
 ## When to use it, and when not

@@ -13,6 +13,9 @@ bridge --reset <file>                  remove it and forget their answers, histo
 bridge --state                         what the app is showing right now, JSON
 bridge --shot <out.png>                a picture of the app's window, to check what they see
 bridge --shot <file> <out.png> [--width N] [--site <url>]   the page rendered off-screen, as the window would show it, without presenting it; waits for its frames
+         [--crop x,y,w,h]               only that area, in CSS pixels from the page's top left
+         [--zoom N]                     the window's own pixels enlarged N times (1 to 8), unsmoothed: shows half-pixel blur
+         [--scale N]                    painted again at N pixels per CSS pixel (1 to 8, default 2): sharp detail
 bridge --reload <file>                 reload the page and its frames from scratch, e.g. after the site's CSS changed
 bridge --waiters                       agent processes waiting for an answer, with age and memory, JSON
 bridge --pins   <file>                 open notes with their threads
