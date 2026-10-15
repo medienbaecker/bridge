@@ -19,7 +19,8 @@ Lint while you still hold the file. It knows the kit's real vocabulary and
 says what a guessed class should have been, names a class the page and the
 kit both style, a colour with no dark-mode variant, a `pre` that is really a
 table, and text walls. Errors exit 1; fix them before they see the page.
-Warnings exit 0; read them.
+Warnings exit 0; read them. Presenting runs the same lint and refuses a page
+with errors.
 
 ## What goes wrong between you and the user
 
@@ -275,7 +276,8 @@ bridge --cross page.html
 ```
 
 Presenting the file again brings it back to the top of their list and marks it
-unread: that is how you say "I need you on this again".
+unread: that is how you say "I need you on this again". A page still open in
+their list does not come to the front again; a crossed one does.
 
 ## Rules
 

@@ -18,12 +18,12 @@ sleep 0.5
 page="$CASE_DIR/pages/tune.html"
 cat > "$page" <<HTML
 <!doctype html><html><head><title>Tune the hero</title>
-<style>.card{border-radius:var(--radius, 4px);padding:var(--pad, 8px);border:1px solid #ccc}</style></head>
+<style>.tune-card{border-radius:var(--radius, 4px);padding:var(--pad, 8px);border:1px solid #ccc}</style></head>
 <body>
 <h1>Tune the hero</h1>
-<label>Radius <input type="range" data-record="radius" data-drive="--radius" data-unit="px" data-target=".card" min="0" max="24" value="4"></label>
+<label>Radius <input type="range" data-record="radius" data-drive="--radius" data-unit="px" data-target=".tune-card" min="0" max="24" value="4"></label>
 <label>Padding <input type="range" data-record="pad" data-drive="--pad" data-unit="px" min="0" max="48" value="10"></label>
-<div class="card">A card on this page</div>
+<div class="tune-card">A card on this page</div>
 <iframe src="http://127.0.0.1:$port/" style="width:100%;height:200px"></iframe>
 </body></html>
 HTML
@@ -33,9 +33,9 @@ wait_ready
 js() { bridge --js "$page" "$1"; }
 set_range() { js "const r = document.querySelector('[data-record=$1]'); r.value = $2; r.dispatchEvent(new Event('input', {bubbles: true})); return 1" >/dev/null; }
 
-check_json "initial values are applied on load" "$(js "return getComputedStyle(document.querySelector('.card')).borderRadius")" '.' "4px"
+check_json "initial values are applied on load" "$(js "return getComputedStyle(document.querySelector('.tune-card')).borderRadius")" '.' "4px"
 set_range radius 16
-check_json "a slider drives the page's element live" "$(js "return getComputedStyle(document.querySelector('.card')).borderRadius")" '.' "16px"
+check_json "a slider drives the page's element live" "$(js "return getComputedStyle(document.querySelector('.tune-card')).borderRadius")" '.' "16px"
 settle 0.3
 check_json "and records the value" "$(bridge --read "$page")" '.answers.radius' "16"
 
@@ -50,6 +50,6 @@ bridge --quit; sleep 0.4
 (cd "$CASE_DIR/pages" && bridge tune.html)
 wait_ready
 settle 0.5
-check_json "recorded values drive the page after a restart" "$(js "return getComputedStyle(document.querySelector('.card')).borderRadius")" '.' "16px"
+check_json "recorded values drive the page after a restart" "$(js "return getComputedStyle(document.querySelector('.tune-card')).borderRadius")" '.' "16px"
 check_json "and the frame" "$(js "@frame return getComputedStyle(document.querySelector('.hero')).padding")" '.' "32px"
 finish

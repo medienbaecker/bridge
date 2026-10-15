@@ -6,8 +6,8 @@ source "$(dirname "$0")/../lib.sh"
 page="$CASE_DIR/pages/grid.html"
 python3 - "$page" <<'PY'
 import sys
-rows = "".join('<div class="row">' + "".join(f'<button>{r}.{c}</button>' for c in range(6)) + '</div>' for r in range(40))
-open(sys.argv[1], 'w').write(f'<!doctype html><title>Grid</title><style>body{{margin:0;padding:24px;font:15px system-ui}} .row{{display:flex;gap:12px;margin:0 0 18px}} button{{flex:1;height:44px;border:2px solid #333;border-radius:10px;background:#f4d35e;font:600 15px system-ui}}</style>{rows}')
+rows = "".join('<div class="grid-row">' + "".join(f'<button>{r}.{c}</button>' for c in range(6)) + '</div>' for r in range(40))
+open(sys.argv[1], 'w').write(f'<!doctype html><title>Grid</title><style>body{{margin:0;padding:24px;font:15px system-ui}} .grid-row{{display:flex;gap:12px;margin:0 0 18px}} button{{flex:1;height:44px;border:2px solid #333;border-radius:10px;background:#f4d35e;font:600 15px system-ui}}</style>{rows}')
 PY
 repo
 (cd "$CASE_DIR/pages" && bridge grid.html); wait_ready; settle 0.5

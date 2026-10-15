@@ -125,9 +125,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         switch request {
         case .present(let locations, let cwd, let session, let ground, let links, let site):
             let wasActive = NSApp.isActive
+            let alreadyOpen = locations.allSatisfy { model.listing.entry($0).map { !$0.crossed } ?? false }
             model.present(locations, cwd: cwd, session: session, ground: ground, links: links, site: site)
-            if !Env.test { NSApp.activate() }
-            window.showWindow(nil)
+            if !alreadyOpen {
+                if !Env.test { NSApp.activate() }
+                window.showWindow(nil)
+            }
             if !Env.test, !wasActive, let loc = locations.first { Notify.arrived(model.listing.entry(loc)) }
             reply(.ok(.null))
         case .state:

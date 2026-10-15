@@ -24,8 +24,8 @@
 .howto kbd { font: inherit; border: 1px solid var(--rule); border-radius: 4px; padding: 0 4px; }
 
   .tools { position: sticky; top: 0; z-index: 3; display: flex; gap: 8px; align-items: center; justify-content: flex-end; padding: 8px 0; background: var(--paper); border-bottom: 1px solid var(--rule); font-size: 12px; color: var(--ink-faint); }
-  .tools .bar { margin-left: auto; display: flex; gap: 14px; }
-  .tools .bar b { color: var(--ink); }
+  .tools .demo-bar { margin-left: auto; display: flex; gap: 14px; }
+  .tools .demo-bar b { color: var(--ink); }
   .page { max-width: 816px; padding-left: 56px; box-sizing: border-box; }
   #doc { position: relative; padding: 28px 0 45vh; font-size: 19px; line-height: 1.55; outline: none; }
   #doc p, #doc div { margin: 0 0 22px; min-height: 1.55em; contain: layout; }
@@ -49,12 +49,12 @@
   .th.broken .t { padding: 10px; font-size: 12px; color: var(--bad); }
   .th.state span { background: var(--ink); }
   .th.built span { background: var(--accent); color: var(--paper); }
-  .th.draft { border: 1.5px dashed var(--accent); background: transparent; transition: width .15s; }
-  .th.draft:focus-within { width: 100%; aspect-ratio: auto; min-height: 120px; display: block; margin: 6px 0; }
-  .th.draft:focus-within .t { font-size: 15px; line-height: 1.5; padding: 12px 14px 28px; height: auto; min-height: 96px; overflow: visible; }
-  .th.draft .t { padding: 8px 10px 22px; font-size: 12.5px; line-height: 1.35; white-space: pre-wrap; outline: none; height: 100%; overflow: auto; user-select: text; cursor: text; }
-  .th.draft .t:empty::before { content: 'what is in this item?'; color: var(--ink-faint); }
-  .th.draft span { background: var(--accent); color: var(--paper); }
+  .th.demo-draft { border: 1.5px dashed var(--accent); background: transparent; transition: width .15s; }
+  .th.demo-draft:focus-within { width: 100%; aspect-ratio: auto; min-height: 120px; display: block; margin: 6px 0; }
+  .th.demo-draft:focus-within .t { font-size: 15px; line-height: 1.5; padding: 12px 14px 28px; height: auto; min-height: 96px; overflow: visible; }
+  .th.demo-draft .t { padding: 8px 10px 22px; font-size: 12.5px; line-height: 1.35; white-space: pre-wrap; outline: none; height: 100%; overflow: auto; user-select: text; cursor: text; }
+  .th.demo-draft .t:empty::before { content: 'what is in this item?'; color: var(--ink-faint); }
+  .th.demo-draft span { background: var(--accent); color: var(--paper); }
   .th.dup { outline: 2px solid var(--warn); }
   .th.sel { outline: 2px solid var(--ink); }
   .big { position: fixed; inset: 0; z-index: 50; display: none; place-items: center; background: rgba(0,0,0,.88); cursor: zoom-out; }
@@ -80,7 +80,7 @@
     <kbd>⌘K</kbd> picks an item anywhere. Click an image to see it big, hover it for ×.</p>
   </details>
   <div class="tools">
-    <span class="bar" id="bar"></span>
+    <span class="demo-bar" id="bar"></span>
   </div>
   <div style="position: relative">
     <button type="button" class="plus" id="plus" aria-label="Insert">+</button>
@@ -130,7 +130,7 @@
     return f;
   }
   function blockNode(text) {
-    const f = document.createElement('figure'); f.className = 'th draft'; f.contentEditable = 'false'; f.draggable = true;
+    const f = document.createElement('figure'); f.className = 'th demo-draft'; f.contentEditable = 'false'; f.draggable = true;
     f.addEventListener('mousedown', e => { f.draggable = !e.target.closest('.t'); }, true);
     f.innerHTML = `<div class="t" contenteditable="plaintext-only" spellcheck="false"></div><span>block</span><b class="x" title="remove">×</b>`;
     f.querySelector('.t').textContent = text; return f;
@@ -159,7 +159,7 @@
     const out = [];
     const blockText = el => { let s = ''; el.childNodes.forEach(c => {
       if (c.nodeType === 3) s += c.textContent;
-      else if (c.classList && c.classList.contains('draft')) s += '[block: ' + c.querySelector('.t').innerText.replace(/\n+$/, '') + ']';
+      else if (c.classList && c.classList.contains('demo-draft')) s += '[block: ' + c.querySelector('.t').innerText.replace(/\n+$/, '') + ']';
       else if (c.classList && c.classList.contains('th')) s += '[' + c.dataset.n + ']';
       else if (c.tagName === 'BR') s += '\n';
       else s += blockText(c);
@@ -180,7 +180,7 @@
     const text = toText(); if (text === lastText) return; lastText = text;
     const seen = {}, order = [];
     doc.querySelectorAll('.th[data-n]').forEach(t => { const n = keyOfStr(t.dataset.n); seen[n] = (seen[n] || 0) + 1; order.push(n); t.classList.toggle('dup', seen[n] > 1); });
-    const used = new Set(Object.keys(seen).filter(k => !/^D/.test(k)).map(k => k.split('@')[0])).size, built = Object.keys(seen).filter(k => /^D/.test(k)).length, blocks = doc.querySelectorAll('.th.draft').length, words = (text.replace(REF, '').match(/\S+/g) || []).length;
+    const used = new Set(Object.keys(seen).filter(k => !/^D/.test(k)).map(k => k.split('@')[0])).size, built = Object.keys(seen).filter(k => /^D/.test(k)).length, blocks = doc.querySelectorAll('.th.demo-draft').length, words = (text.replace(REF, '').match(/\S+/g) || []).length;
     const dups = Object.values(seen).filter(c => c > 1).length;
     bar.innerHTML = `<span><b>${used}</b> of 67 items</span><span><b>${67 - used}</b> unused</span><span><b>${built}</b> built blocks</span><span><b>${blocks}</b> open blocks</span><span><b>${words}</b> words</span>` + (dups ? `<span style="color:var(--warn)"><b>${dups}</b> twice</span>` : '');
     clearTimeout(saveT); saveT = setTimeout(() => { if (window.bridge && bridge.set) { bridge.set('script', text, 'The document as written, with [n] item references and [block: …] placeholders'); bridge.set('items-in-order', order, 'Item numbers in the order the script uses them'); bridge.set('rev', REV, 'Revision of the text the agent last wrote into this page'); } }, 1200);
@@ -235,9 +235,9 @@
     if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); openPicker(null); }
   });
   doc.addEventListener('keydown', e => {
-    if (e.target.closest('.draft .t')) { e.stopPropagation(); if (e.key === 'Escape') e.target.blur(); }
+    if (e.target.closest('.demo-draft .t')) { e.stopPropagation(); if (e.key === 'Escape') e.target.blur(); }
   });
-  doc.addEventListener('input', e => { if (e.target.closest && e.target.closest('.draft .t')) update(); });
+  doc.addEventListener('input', e => { if (e.target.closest && e.target.closest('.demo-draft .t')) update(); });
   doc.addEventListener('paste', e => { e.preventDefault(); const t = (e.clipboardData || window.clipboardData).getData('text/plain'); document.execCommand('insertText', false, t); });
 
   let dragEl = null; const mark = document.createElement('span'); mark.className = 'drop-mark'; mark.contentEditable = 'false';

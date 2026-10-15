@@ -3,8 +3,8 @@
 # a .card of .row.between rows keeps its .num values on one right edge and on
 # the label's first baseline (from geometry and from the pixels of a real
 # frame); a table.data aligns its cells with a quiet .remark; a class nothing
-# defines is named on stderr by the CLI invocation that presented the page,
-# while a class the page styles itself is not; and an empty list says so.
+# defines makes presenting refuse the page and name it, while a class the
+# page styles itself is not named; and an empty list says so.
 source "$(dirname "$0")/../lib.sh"
 page="$CASE_DIR/pages/estimate.html"
 cat > "$page" <<'HTML'
@@ -30,8 +30,10 @@ cat > "$CASE_DIR/pages/own.html" <<'HTML'
 </body></html>
 HTML
 repo
-(cd "$CASE_DIR/pages" && bridge estimate.html 2> "$CASE_DIR/present.err"); wait_ready; settle 0.4
-check "the presenting invocation names the classes nothing defines, on stderr" "$(sed 's/^bridge-dev: //' "$CASE_DIR/present.err")" "unknown classes on estimate.html: faint, zebra: see pages.md, What the base stylesheet gives you"
+(cd "$CASE_DIR/pages" && bridge estimate.html 2> "$CASE_DIR/present.err"); code=$?
+check "presenting refuses a page with classes nothing defines, and names them (exit $code)" "$code $(grep -o '`\.[a-z]*` styles nothing' "$CASE_DIR/present.err" | tr '\n' ' ')$(grep -c 'not presented' "$CASE_DIR/present.err")" "1 \`.faint\` styles nothing \`.zebra\` styles nothing 1"
+sed -i '' 's/ class="faint"/ class="muted"/; s/row between zebra/row between/' "$page"
+(cd "$CASE_DIR/pages" && bridge estimate.html 2>/dev/null); wait_ready; settle 0.4
 js() { bridge --js "$page" "$1"; }
 check_json "each value sits on its row's right edge, one edge for all three" "$(js "const rs = [1,2,3].map((i) => { const r = document.getElementById('r' + i); const n = r.querySelector('.num').getBoundingClientRect(); return [Math.round(r.getBoundingClientRect().right - n.right), Math.round(n.right)] }); return { flush: rs.map((r) => r[0]), edges: new Set(rs.map((r) => r[1])).size }")" '"\(.flush | join(",")) \(.edges)"' "0,0,0 1"
 check_json "a value sits on the first line of a two-line label, not between its lines" "$(js "const r = document.getElementById('r1'); const l = r.firstElementChild.getBoundingClientRect(); const n = r.querySelector('.num').getBoundingClientRect(); return { top: Math.abs(Math.round(n.top - l.top)), tall: l.height > n.height * 1.5 }")" '(.top <= 1) and .tall' "true"

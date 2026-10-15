@@ -30,7 +30,7 @@ check "a hand-spaced pre is pointed at table.data; real code is left alone" "$(p
 check "the kit's own classes raise nothing" "$(printf '%s\n' "$out" | grep -c 'card\|between\|\.num')" "0"
 bridge --lint "$ROOT/harness/fixtures/gallery.html" > "$CASE_DIR/gallery.out"; check "the gallery is clean, exit 0" "$? $(wc -l < "$CASE_DIR/gallery.out" | tr -d ' ')" "0 0"
 bridge --lint "$ROOT/harness/fixtures/editor-script.html" > "$CASE_DIR/editor.out"; code=$?
-check "the editor script: .draft and .bar collide, nothing else is an error (exit $code)" "$code $(grep -c ': error: ' "$CASE_DIR/editor.out") $(grep -o '`\.[a-z]*` is styled by this page' "$CASE_DIR/editor.out" | sort | tr '\n' ' ')" "1 2 \`.bar\` is styled by this page \`.draft\` is styled by this page "
+check "the editor script has no errors (exit $code)" "$code $(grep -c ': error: ' "$CASE_DIR/editor.out")" "0 0"
 # A page that loads a stylesheet from elsewhere cannot be checked for unknown classes: nothing is called unknown.
 printf '<title>x</title><link rel="stylesheet" href="https://example.com/a.css"><div class="wa-card">y</div>' > "$CASE_DIR/pages/ext.html"
 check "a page on another stylesheet raises no unknown class" "$(bridge --lint "$CASE_DIR/pages/ext.html" | wc -l | tr -d ' ')" "0"

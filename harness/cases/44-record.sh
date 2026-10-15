@@ -10,8 +10,8 @@ page="$CASE_DIR/pages/controls.html"
 cat > "$page" <<'HTML'
 <!doctype html><html><head><title>Controls</title></head><body>
 <fieldset class="options">
-  <div class="option"><input type="radio" name="hours" id="h-mid" value="mid" data-record="hours" checked><label for="h-mid">Around 15 units</label><span id="mid-desc">Lorem ipsum dolor.</span></div>
-  <div class="option" id="card-range"><input type="radio" name="hours" id="h-range" value="range" data-record="hours"><label for="h-range">10 to 20 units</label><span id="range-desc">Sit amet, consectetur adipiscing.</span></div>
+  <div><input type="radio" name="hours" id="h-mid" value="mid" data-record="hours" checked><label for="h-mid">Around 15 units</label><span id="mid-desc">Lorem ipsum dolor.</span></div>
+  <div id="card-range"><input type="radio" name="hours" id="h-range" value="range" data-record="hours"><label for="h-range">10 to 20 units</label><span id="range-desc">Sit amet, consectetur adipiscing.</span></div>
 </fieldset>
 <label><input type="checkbox" data-record="money" id="money"> Include extras</label>
 <label>Rate <input type="range" data-record="rate" id="rate" min="0" max="10" step="1" value="5"></label>

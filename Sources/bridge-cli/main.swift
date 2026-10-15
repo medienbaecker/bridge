@@ -58,6 +58,15 @@ func appExecutable() -> String? {
     return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
 }
 
+// Read the stylesheet from the app rather than ship a copy that could drift.
+func kitLint() -> Lint? {
+    guard let exe = appExecutable(),
+          let css = try? String(contentsOfFile: URL(fileURLWithPath: exe).deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Resources/bridge_Bridge.bundle/Contents/Resources/web/page.css").path, encoding: .utf8)
+    else { return nil }
+    return Lint(kitCSS: css)
+}
+
 func launchApp(hidden: Bool = false) -> pid_t {
     guard let exe = appExecutable() else { fail("\(Flavor.appName).app not found; set BRIDGE_DEV_APP") }
     try? FileManager.default.removeItem(at: Paths.launchError)
@@ -377,14 +386,9 @@ case "--snap":
     print(json: check(send(.snapshot(path: Paths.resolve(args[1], relativeTo: cwd)))))
 
 case "--lint":
-    // Read the stylesheet from the app rather than ship a copy that could drift.
     let files = args.dropFirst().map { location($0) }
     guard !files.isEmpty else { fail("--lint <file> [more files]") }
-    guard let exe = appExecutable(),
-          let css = try? String(contentsOfFile: URL(fileURLWithPath: exe).deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("Resources/bridge_Bridge.bundle/Contents/Resources/web/page.css").path, encoding: .utf8)
-    else { fail("\(Flavor.appName).app not found, so the kit's stylesheet is not either; set BRIDGE_DEV_APP") }
-    let lint = Lint(kitCSS: css)
+    guard let lint = kitLint() else { fail("\(Flavor.appName).app not found, so the kit's stylesheet is not either; set BRIDGE_DEV_APP") }
     var errors = 0
     for file in files {
         guard let html = try? String(contentsOfFile: file, encoding: .utf8) else { fail("cannot read \(file)") }
@@ -443,6 +447,17 @@ default:
     if site != nil, let other = locations.first(where: { Kind.of($0) != .html }) { fail("--site is for .html pages: \(other)") }
     for loc in locations where Kind.of(loc) != .url && !FileManager.default.fileExists(atPath: loc) {
         fail("no such file: \(loc)")
+    }
+    if let lint = kitLint() {
+        var errors = 0
+        for loc in locations where Kind.of(loc) == .html {
+            guard let html = try? String(contentsOfFile: loc, encoding: .utf8) else { continue }
+            for f in lint.run(html: html) where f.level == .error {
+                FileHandle.standardError.write(Data("\((loc as NSString).lastPathComponent):\(f.description)\n".utf8))
+                errors += 1
+            }
+        }
+        if errors > 0 { fail("not presented: fix the lint errors above, then present again") }
     }
     _ = check(send(.present(locations: locations, cwd: cwd, session: Session.current, ground: Ground.current(in: cwd), links: links, site: site), launching: true))
     // The agent that wrote the page sees this in its tool result; nothing else

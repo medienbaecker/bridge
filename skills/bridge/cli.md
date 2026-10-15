@@ -45,9 +45,10 @@ colours of the page's own with no dark variant, or a colour in a `style`
 attribute, which no dark variant can reach; a `pre`
 whose lines are columns spaced by hand, or `language-*` on text that is not
 that language. A page that loads a stylesheet from elsewhere is not checked
-for unknown classes, since that sheet may define anything. The same checks
-run once more when the page is presented, on the live DOM, and print to the
-presenting command's stderr; lint is the one that arrives in time.
+for unknown classes, since that sheet may define anything. Presenting runs
+the same lint first: a page with errors is not presented (exit 1) and the
+window stays where it is; warnings do not stop it. The
+checks run once more on the live DOM after it opens and print there too.
 
 What the page's scripts throw while it loads (an uncaught error, an unhandled
 rejection, a throw inside `bridge.ready`) prints there too, as
