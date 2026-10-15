@@ -29,7 +29,10 @@ body {
 :where(body, .card, [data-record][data-value], .evidence, .draft, details, .bridge-md, blockquote, li, .compare > *) > :where(:not(script, style, template)) ~ :not(script, style, template) { margin-top: var(--bridge-flow); }
 :is(h1, h2, h3, summary) + * { --bridge-flow: 8px; }
 hr, hr + * { --bridge-flow: 24px; }
-label + label { --bridge-flow: 6px; }
+label:has(> :is([type=checkbox], [type=radio])) + label { --bridge-flow: 6px; }
+label + :is(input, select, textarea) { --bridge-flow: 4px; }
+label > textarea { margin-top: 4px; }
+label:not(.dial) > :is(input:not([type=checkbox], [type=radio]), select) { margin-left: 4px; }
 
 h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; --bridge-flow: 28px; }
 h2 { font-size: 15px; font-weight: 600; --bridge-flow: 28px; }
@@ -194,9 +197,8 @@ table.data { width: auto; }
 .dial > input[type=range] { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: ew-resize; -webkit-appearance: none; }
 /* A dial that records wears the accent at rest; one that only drives a preview is grey. */
 .dial:not(:has(input[data-record]))::before { background: color-mix(in srgb, var(--bridge-muted) 22%, transparent); }
-/* Once it holds an answer, a dot at the readout says so. */
-.dial:has(input[data-answered]) > output::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--bridge-accent); vertical-align: 1px; }
-:is(input:not([type=range]):not([type=checkbox]):not([type=radio]), textarea, select)[data-answered] { box-shadow: inset 2px 0 0 var(--bridge-accent); }
+.dial:has(input[data-answered]) > output::before, .bridge-answered-dot { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--bridge-accent); vertical-align: 1px; }
+.bridge-answered-dot { margin-left: 6px; }
 :is(input, textarea, select)[data-default] { color: var(--bridge-muted); }
 bridge-default, [data-default-tag]::after { display: inline-block; margin-inline-start: 6px; padding: 0 6px; border: 1px solid currentColor; border-radius: 999px; color: var(--bridge-muted); font-size: 11px; font-weight: 400; line-height: 16px; vertical-align: middle; white-space: nowrap; }
 [data-default-tag]::after { content: "default"; }

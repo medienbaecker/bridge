@@ -54,6 +54,14 @@ function __bridgeInit(options) {
     const k = CSS.escape(key);
     for (const el of document.querySelectorAll(`input[data-record="${k}"]:not([type=checkbox]):not([type=radio]), select[data-record="${k}"], textarea[data-record="${k}"], .color[data-record="${k}"]`)) {
       el.toggleAttribute('data-answered', on);
+      for (const label of el.labels || []) {
+        if (label.classList.contains('dial')) continue;
+        label.querySelector(':scope .bridge-answered-dot')?.remove();
+        if (!on) continue;
+        const dot = document.createElement('span');
+        dot.className = 'bridge-answered-dot';
+        if (el.tagName === 'TEXTAREA' && label.contains(el)) el.before(dot); else label.append(dot);
+      }
       (el.closest('.dial') || el).title = on ? 'Your answer' : '';
     }
   }
