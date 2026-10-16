@@ -32,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         model.selected = model.listing.bridges.contains { $0.location == remembered } ? remembered : nil
         model.settleSelection()
         model.changed()
+        if ProcessInfo.processInfo.environment["BRIDGE_LAUNCH_HIDDEN"] == nil { window.restoreWindows() }
         Timer.scheduledTimer(timeInterval: 30, target: self, selector: #selector(updateTick), userInfo: nil, repeats: true)
         Timer.scheduledTimer(timeInterval: 2, target: self, selector: #selector(waitersTick), userInfo: nil, repeats: true)
         pollWaiters()
@@ -118,6 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
     func applicationWillTerminate(_ notification: Notification) {
+        window.rememberWindows()
         server?.stop()
     }
 

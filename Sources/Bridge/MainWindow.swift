@@ -223,7 +223,18 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         }
     }
 
-    func openWindow(_ location: String, at topLeft: NSPoint? = nil) {
+    func rememberWindows() {
+        Model.remember(windows.map { ["location": $0.key, "frame": NSStringFromRect($0.value.window?.frame ?? .zero)] }, "windows")
+    }
+
+    func restoreWindows() {
+        for saved in Model.remembered("windows") as? [[String: String]] ?? [] {
+            guard let location = saved["location"], model.listing.entry(location) != nil else { continue }
+            openWindow(location, frame: saved["frame"].map(NSRectFromString))
+        }
+    }
+
+    func openWindow(_ location: String, at topLeft: NSPoint? = nil, frame: NSRect? = nil) {
         if let open = windows[location] {
             if let topLeft { open.window?.setFrameTopLeftPoint(topLeft) }
             open.showWindow(nil)
@@ -239,6 +250,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         model.markRead(location)
         refresh()
         pageWindow.refresh()
+        if let frame { pageWindow.window?.setFrame(frame, display: false) }
         pageWindow.showWindow(nil)
         if let topLeft { pageWindow.window?.setFrameTopLeftPoint(topLeft) }
     }
