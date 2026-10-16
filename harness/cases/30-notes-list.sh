@@ -45,13 +45,17 @@ check_json "the shot holds both windows whole: none missing, none cut by the dis
 # The dots sit 34 pt into the popover's window (13 of margin around the panel,
 # 10 of leading, 11 to the dot's middle): its x from the shot's own frames,
 # against the union's left edge.
-dotx=$(printf '%s' "$shotr" | jq -r '.frames | map(capture("\\((?<x>[0-9.]+), (?<y>[0-9.]+), (?<w>[0-9.]+), (?<h>[0-9.]+)\\)") | {x: (.x|tonumber), w: (.w|tonumber)}) | (min_by(.x).x) as $left | (min_by(.w).x - $left + 34) * 2 | floor')
+dotx=$(printf '%s' "$shotr" | jq -r '.frames | map(capture("\\((?<x>-?[0-9.]+), (?<y>-?[0-9.]+), (?<w>[0-9.]+), (?<h>[0-9.]+)\\)") | {x: (.x|tonumber), w: (.w|tonumber)}) | (min_by(.x).x) as $left | (min_by(.w).x - $left + 34) * 2 | floor')
 echo "  dot column x=$dotx" >&2
 gaps=$(python3 "$ROOT/harness/measure.py" "$png" column "$dotx" 90 480 1 | python3 -c '
 import sys
 runs = [l.split() for l in sys.stdin]
 panel = [r for r in runs if r[2:] == ["246", "246", "246"]]
-dots = [r for r in runs if int(r[4]) > 200 and int(r[2]) < 50]  # the core run of each dot, not its anti-aliased edges
+dots = []
+for r in runs:
+    if r[2:] == ["246", "246", "246"] or not (int(r[4]) > 200 and int(r[2]) < 200): continue
+    if dots and dots[-1][1] == r[0]: dots[-1] = [dots[-1][0], r[1]]
+    else: dots.append(r[:2])
 top, bottom = int(panel[0][0]), int(panel[-1][1])
 first = (int(dots[0][0]) + int(dots[0][1])) / 2; last = (int(dots[-1][0]) + int(dots[-1][1])) / 2
 print(len(dots), round(first - top), round(bottom - last))')
