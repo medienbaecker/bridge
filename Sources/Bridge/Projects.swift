@@ -27,7 +27,7 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
         scroll.hasVerticalScroller = true
         scroll.drawsBackground = false
         scroll.translatesAutoresizingMaskIntoConstraints = false
-        scroll.additionalSafeAreaInsets = NSEdgeInsets(top: 10, left: 0, bottom: 0, right: 0)
+        scroll.automaticallyAdjustsContentInsets = false
         let column = NSTableColumn(identifier: .init("main"))
         column.resizingMask = .autoresizingMask
         table.addTableColumn(column)
@@ -49,6 +49,13 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
         stack.spacing = 0
         stack.alignment = .width
         view = stack
+    }
+
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        guard let scroll = table.enclosingScrollView else { return }
+        let top = view.safeAreaInsets.top + 16
+        if scroll.contentInsets.top != top { scroll.contentInsets = NSEdgeInsets(top: top, left: 0, bottom: 0, right: 0) }
     }
 
     func reload() {
