@@ -51,7 +51,7 @@ final class PageWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.flexibleSpace, MainWindow.point, MainWindow.notesId, MainWindow.send]
+        [.flexibleSpace, MainWindow.point, MainWindow.notesId, .space, MainWindow.send]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -66,7 +66,7 @@ final class PageWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         switch id {
         case MainWindow.point: item.label = "Point"; item.image = MainWindow.pointImage(on: false)
         case MainWindow.notesId: item.label = "Notes"; item.image = MainWindow.symbol("text.bubble", "Notes")
-        case MainWindow.send: item.label = "Send"; item.image = MainWindow.sendImage("Send")
+        case MainWindow.send: MainWindow.styleSend(item, "Send")
         default: return nil
         }
         return item
@@ -79,8 +79,7 @@ final class PageWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
             return page.viewingVersion == nil && page.kind != .pdf
         case MainWindow.notesId: return !page.sidecar.comments.isEmpty
         case MainWindow.send:
-            item.label = page.sendLabel
-            item.image = MainWindow.sendImage(page.sendLabel)
+            MainWindow.styleSend(item, page.sendLabel)
             item.toolTip = page.sendToolTip
             return page.viewingVersion == nil
         default: return true

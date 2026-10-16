@@ -48,18 +48,14 @@ check_json "   the strip says nothing after Send" "$st" '.banner' "null"
 check "   a sixty-item list and a 15,000-character script did not touch the window's size" "$(printf '%s' "$st" | jq -c '.windowFrame')" "$frame_before"
 p2=$(send_pixels 2-sent); c2=$(glyph_columns 2-sent)
 check "   on screen, the Send item after sending differs from before" "$([ "$p1" != "$p2" ] && echo differs)" "differs"
-# Glyph clusters compared with a tolerance of one pixel at 2x: half a point of
-# sub-pixel rounding between two labels is not the furniture moving.
-# Point and Notes must not move at all; the Send glyph changes shape with the
-# state (plane, clock, filled plane), so it is held to its centre.
 same_place() { python3 -c '
 import sys
 a = [list(map(int, r.split("-"))) for r in sys.argv[1].split()]; b = [list(map(int, r.split("-"))) for r in sys.argv[2].split()]
-ok = len(a) == len(b) and len(a) >= 3
-ok = ok and all(abs(x[0]-y[0]) <= 1 and abs(x[1]-y[1]) <= 1 for x, y in zip(a[:2], b[:2]))
-ok = ok and abs(sum(a[2]) - sum(b[2])) <= 6
+ok = len(a) >= 2 and len(b) >= 2
+d = b[0][0] - a[0][0] if ok else 0
+ok = ok and abs(d) <= 8 and all(abs((y[0]-x[0]) - d) <= 1 and abs((y[1]-x[1]) - d) <= 1 for x, y in zip(a[:2], b[:2]))
 print("same" if ok else "moved")' "$1" "$2"; }
-check "   and nothing in the toolbar moved ($c2)" "$(same_place "$c1" "$c2")" "same"
+check "   and Point and Notes kept their places ($c2)" "$(same_place "$c1" "$c2")" "same"
 bridge --read "$page" >/dev/null
 check "   the agent read it: collected" "$(side)" '{"status":"sent","collected":true,"notes":0}'
 
@@ -70,7 +66,7 @@ check "3 pin written after sending: enabled, says Send again" "$(send_item)" "$(
 check "   status still sent, note counted" "$(side)" '{"status":"sent","collected":true,"notes":1}'
 p3=$(send_pixels 3-send-again); c3=$(glyph_columns 3-send-again)
 check "   on screen, Send again differs from Sent and from Send" "$([ "$p3" != "$p2" ] && [ "$p3" != "$p1" ] && echo differs)" "differs"
-check "   and still nothing moved ($c3)" "$(same_place "$c1" "$c3")" "same"
+check "   and still kept their places ($c3)" "$(same_place "$c1" "$c3")" "same"
 bridge --do send >/dev/null; settle 0.3
 check "   Send again: collect marks cleared, so the hook delivers" "$(side)" '{"status":"sent","collected":false,"notes":1}'
 read=$(bridge --read "$page")

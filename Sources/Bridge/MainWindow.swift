@@ -246,7 +246,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         // AppKit puts the window title after the sidebar separator, over the list, and
         // handing that identifier to the second divider hangs the toolbar. So the
         // window's title is hidden and the toolbar carries its own two titles.
-        [.toggleSidebar, .sidebarTrackingSeparator, Self.listName, Self.bridgesSeparator, Self.docTitle, .flexibleSpace, Self.point, Self.notesId, Self.send]
+        [.toggleSidebar, .sidebarTrackingSeparator, Self.listName, Self.bridgesSeparator, Self.docTitle, .flexibleSpace, Self.point, Self.notesId, .space, Self.send]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -281,8 +281,8 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
             item.label = "Notes"; item.toolTip = "Notes on this page"
             item.image = Self.symbol("text.bubble", "Notes")
         case Self.send:
-            item.label = "Send"; item.toolTip = "Send your answer"
-            item.image = Self.sendImage("Send")
+            item.toolTip = "Send your answer"
+            Self.styleSend(item, "Send")
         default: return nil
         }
         return item
@@ -310,9 +310,16 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
     static func sendImage(_ state: String) -> NSImage? {
         switch state {
         case "Sent": return symbol("clock", "Sent")
-        case "Send again": return symbol("paperplane.fill", "Send again", tint: .controlAccentColor)
+        case "Send again": return symbol("paperplane.fill", "Send again")
         default: return symbol("paperplane", "Send")
         }
+    }
+
+    static func styleSend(_ item: NSToolbarItem, _ state: String) {
+        item.label = state
+        item.title = state == "Sent" ? "Sent" : "Send"
+        item.image = sendImage(state)
+        item.style = state == "Sent" ? .plain : .prominent
     }
 
     func validateToolbarItem(_ item: NSToolbarItem) -> Bool {
@@ -326,8 +333,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         case Self.notesId: return page.map { !$0.sidecar.comments.isEmpty } ?? false
         case Self.send:
             let state = page?.sendLabel ?? "Send"
-            item.label = state
-            item.image = Self.sendImage(state)
+            Self.styleSend(item, state)
             item.toolTip = page?.sendToolTip ?? "Send your answer"
             return page.map { $0.viewingVersion == nil } ?? false
         default: return true
