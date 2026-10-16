@@ -77,16 +77,18 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         // the rows right without narrowing them, so the selection pill ran off the
         // edge. The list insets its own content instead (SidebarController.viewDidLayout).
         list.automaticallyAdjustsSafeAreaInsets = false
+        list.titlebarSeparatorStyle = .line
         let page = NSSplitViewItem(viewController: content)
         page.minimumThickness = 480
+        page.holdingPriority = NSLayoutConstraint.Priority(240)
         split.addSplitViewItem(side)
         split.addSplitViewItem(list)
         split.addSplitViewItem(page)
         window.contentViewController = split
         window.setContentSize(NSSize(width: 1180, height: 720))
         window.minSize = NSSize(width: 880, height: 400)
-        split.splitView.setPosition(190, ofDividerAt: 0)
-        split.splitView.setPosition(190 + 260, ofDividerAt: 1)
+        split.splitView.setPosition(200, ofDividerAt: 0)
+        split.splitView.setPosition(200 + 260, ofDividerAt: 1)
 
         let toolbar = NSToolbar(identifier: "Bridge.toolbar")
         toolbar.delegate = self
