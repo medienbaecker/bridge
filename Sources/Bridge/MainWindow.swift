@@ -50,9 +50,11 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         // would hand the harness frames cut at the display.
         if !Env.test { window.setFrameAutosaveName("Bridge.main") }
         window.center()
-        // In test mode the window is centred on the largest screen, whole: the key
-        // window's screen may be smaller or 1x, and the built-in one is too short.
-        if Env.test, let screen = NSScreen.screens.max(by: { $0.visibleFrame.width * $0.visibleFrame.height < $1.visibleFrame.width * $1.visibleFrame.height }) {
+        // In test mode the window is centred on BRIDGE_SCREEN, a virtual screen out of the
+        // user's way, or else on the largest screen, whole: the key window's screen may be
+        // smaller or 1x, and the built-in one is too short.
+        let named = NSScreen.screens.first { $0.localizedName == ProcessInfo.processInfo.environment["BRIDGE_SCREEN"] }
+        if Env.test, let screen = named ?? NSScreen.screens.max(by: { $0.visibleFrame.width * $0.visibleFrame.height < $1.visibleFrame.width * $1.visibleFrame.height }) {
             let f = screen.visibleFrame
             window.setFrameOrigin(NSPoint(x: f.midX - window.frame.width / 2, y: f.midY - window.frame.height / 2))
         }
