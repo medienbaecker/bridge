@@ -2,6 +2,26 @@ import AppKit
 import WebKit
 import BridgeCore
 
+final class SplitController: NSSplitViewController {
+    var optimalWidth: () -> CGFloat = { 0 }
+    private var snapped = false
+
+    override func splitView(_ splitView: NSSplitView, constrainSplitPosition proposedPosition: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat {
+        let position = proposedPosition
+        guard dividerIndex == 0, let side = splitViewItems.first, !side.isCollapsed else { return position }
+        let target = optimalWidth()
+        guard target >= side.minimumThickness, target <= side.maximumThickness, abs(position - target) < 10 else {
+            snapped = false
+            return position
+        }
+        if !snapped, [.leftMouseDown, .leftMouseDragged].contains(NSApp.currentEvent?.type) {
+            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+            snapped = true
+        }
+        return target
+    }
+}
+
 final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate, NSToolbarItemValidation, NSMenuItemValidation {
     let model: Model
     let sidebar: SidebarController
@@ -39,8 +59,9 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         super.init(window: window)
         window.delegate = self
 
-        let split = NSSplitViewController()
+        let split = SplitController()
         split.splitView.dividerStyle = .thin
+        split.optimalWidth = { [weak projects] in projects?.optimalWidth ?? 0 }
         self.split = split
         let side = NSSplitViewItem(sidebarWithViewController: projects)
         side.minimumThickness = 180

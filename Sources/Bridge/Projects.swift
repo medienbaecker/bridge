@@ -106,6 +106,15 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
                 "textWidth": .number(Double(update.label.intrinsicContentSize.width)), "text": .string(update.text)]
     }
 
+    var optimalWidth: CGFloat {
+        var widest: CGFloat = 0
+        for row in 0..<table.numberOfRows {
+            guard let cell = table.view(atColumn: 0, row: row, makeIfNecessary: true) else { continue }
+            widest = max(widest, cell.fittingSize.width + view.frame.width - cell.frame.width)
+        }
+        return widest.rounded(.up)
+    }
+
     func numberOfRows(in tableView: NSTableView) -> Int { rows.count }
 
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat { rows[row] == .heading ? 24 : 28 }
