@@ -19,7 +19,7 @@ becomes the window title.
 `decision.jsx`:
 
 ```jsx
-import { Title, Text, SimpleGrid, Card, Slider, Textarea, Button, Group, Stack } from '@mantine/core';
+import { Title, Text, SimpleGrid, Card, Slider, Textarea, Stack } from '@mantine/core';
 import { useRecord } from '@bridge';
 
 export default function Page({ data }) {
@@ -42,7 +42,6 @@ export default function Page({ data }) {
       <Title order={2}>Corner radius</Title>
       <Slider value={radius} onChange={setRadius} min={0} max={24} w={240} />
       <Textarea data-record="note" placeholder="Optional" autosize minRows={2} />
-      <Group><Button data-send>Send</Button></Group>
     </Stack>
   );
 }
@@ -91,7 +90,7 @@ that is not in this table has not been verified, so do not reach for it.
 | `Select` | `useRecord` (`value`/`onChange`) | the chosen value |
 | `Slider` | `useRecord` | number |
 | `Card`, any element as an option | `data-record` + `data-value` | chosen value; the chosen one gets `data-selected` |
-| `Button` with `data-send` | | Send |
+| `Button` as an option with `data-send` | `data-record` + `data-value` | chosen value, and sends |
 
 Layout and evidence, no recording: `Title`, `Text` (`c="dimmed"` for muted),
 `Stack`, `Group`, `SimpleGrid`, `Card` (`withBorder`), `Table`

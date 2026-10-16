@@ -21,8 +21,9 @@ below show how each kit part is written, not what a page should look like.
   `select multiple` as an array). Radio and checkbox groups: put `data-record`
   on the wrapper; radios record the chosen value, checkboxes an array.
 - `contenteditable` inside a `data-record` element records its text.
-- `data-send` on a button: pressing it is Send (the toolbar has one too).
-  On an option (`data-record` + `data-value`) it records the value and sends.
+- Send is in the toolbar; do not add a Send button to the page. `data-send`
+  on an option (`data-record` + `data-value`) records the value and sends in
+  one click, for answers that need nothing else.
 - `data-copy="#selector"` on a button copies that element's text (or a
   textarea's value) and shows "Copied".
 - Two rewrites with the same keys and offered values are the same version.
@@ -96,8 +97,6 @@ removed.
 
 <h2>Anything else</h2>
 <textarea data-record="note" placeholder="Optional"></textarea>
-
-<div class="actions"><button data-send>Send</button></div>
 </body>
 </html>
 ```
