@@ -9,7 +9,18 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         let web = Bundle.module.url(forResource: "web", withExtension: nil)!
         func read(_ name: String) -> String { (try? String(contentsOf: web.appendingPathComponent(name), encoding: .utf8)) ?? "" }
         let css = ["page": read("page.css"), "ui": read("ui.css")]
-        return "const __BRIDGE_CSS = \(JSON.string(css, pretty: false));\n" + read("idiomorph.js") + "\n" + read("marked.js") + "\n" + read("prism.js") + "\n" + read("bridge.js")
+        return "const __BRIDGE_CSS = \(JSON.string(css, pretty: false));\nconst __BRIDGE_ARROW = \(JSON.string(arrow, pretty: false));\n" + read("idiomorph.js") + "\n" + read("marked.js") + "\n" + read("prism.js") + "\n" + read("bridge.js")
+    }()
+    static let arrow: [String: JSONValue] = {
+        let cursor = NSCursor.arrow
+        var rect = NSRect(origin: .zero, size: cursor.image.size)
+        guard let cg = cursor.image.cgImage(forProposedRect: &rect, context: nil, hints: [.ctm: AffineTransform(scale: 2)]),
+              let png = NSBitmapImageRep(cgImage: cg).representation(using: .png, properties: [:]) else { return [:] }
+        return [
+            "url": .string("data:image/png;base64," + png.base64EncodedString()),
+            "width": .number(cursor.image.size.width), "height": .number(cursor.image.size.height),
+            "x": .number(cursor.hotSpot.x), "y": .number(cursor.hotSpot.y),
+        ]
     }()
     static let pageAPI: String = {
         let web = Bundle.module.url(forResource: "web", withExtension: nil)!

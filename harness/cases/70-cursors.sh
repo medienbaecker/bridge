@@ -29,8 +29,20 @@ PY
 settle 0.5
 check "after an edit moves the option down, her cursor follows it" "$(at | jq -c .)" "$(js "$centre" | jq -c .)"
 
+js "@bridge __bridge.cursors([{ person: 'yoshie', anchor: $anchor, color: '#2f9e44' }, { person: 'mika', anchor: $anchor }, { person: 'ren', anchor: $anchor }]); return 1" >/dev/null
+colours() { js "@bridge return [...document.querySelectorAll('.bridge-cursor')].map((c) => c.querySelector('span').textContent + ' ' + c.style.getPropertyValue('--bridge-cursor'))" | jq -r '.[]'; }
+check "a chosen colour is used as it is" "$(colours | grep yoshie)" "yoshie #2f9e44"
+check "people who chose none get different colours" "$(colours | grep -v yoshie | cut -d' ' -f2 | sort -u | wc -l | tr -d ' ')" "2"
+check "the cursor is the system arrow" "$(js "@bridge return getComputedStyle(document.querySelector('.bridge-cursor')).getPropertyValue('--bridge-arrow').startsWith('url(\"data:image/png')")" "true"
+snap colours "Three cursors on one option, one with a chosen colour"
+
 js "@bridge __bridge.cursors([{ person: 'yoshie', anchor: { tag: 'section', selector: 'section.gone', classes: ['gone'], index: 0, text: '', x: 0.5, y: 0.5 } }]); return 1" >/dev/null
 check "a cursor on something this page doesn't have hides" "$(at | jq -r .)" "hidden"
 js "@bridge __bridge.cursors([]); return 1" >/dev/null
 check "when she leaves, her cursor goes" "$(js "@bridge return document.querySelectorAll('.bridge-cursor').length")" "0"
+check "a Mac has no colour until one is chosen" "$(bridge --colour)" "none"
+check "a colour is saved in lowercase" "$(bridge --colour '#E8590C')" "#e8590c"
+check "and read back" "$(bridge --colour)" "#e8590c"
+check "nonsense is refused" "$(bridge --colour orange 2>&1 >/dev/null)" "a colour is a hex value like #e8590c, or none"
+check "none goes back to Bridge's pick" "$(bridge --colour none)" "none"
 finish

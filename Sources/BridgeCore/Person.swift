@@ -21,6 +21,29 @@ public enum Person {
         return kept.isEmpty ? nil : String(kept.prefix(32))
     }
 
+    public static var colourFile: URL { Paths.stateDir.appendingPathComponent("colour") }
+
+    public static var colour: String? {
+        (try? String(contentsOf: colourFile, encoding: .utf8)).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.flatMap(cleanColour)
+    }
+
+    public static func setColour(_ raw: String) throws -> String? {
+        if raw == "none" { try? FileManager.default.removeItem(at: colourFile); return nil }
+        guard let colour = cleanColour(raw) else { throw InvalidColour() }
+        try Data((colour + "\n").utf8).write(to: colourFile, options: .atomic)
+        return colour
+    }
+
+    public static func cleanColour(_ raw: String) -> String? {
+        let hex = raw.hasPrefix("#") ? String(raw.dropFirst()) : raw
+        guard hex.count == 6, hex.allSatisfy(\.isHexDigit) else { return nil }
+        return "#" + hex.lowercased()
+    }
+
+    public struct InvalidColour: Error, CustomStringConvertible {
+        public var description: String { "a colour is a hex value like #e8590c, or none" }
+    }
+
     public struct Invalid: Error, CustomStringConvertible {
         public var description: String { "a name needs at least one letter or digit" }
     }

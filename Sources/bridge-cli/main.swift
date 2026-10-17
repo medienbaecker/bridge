@@ -9,6 +9,7 @@ bridge-dev --links <mode> <file|url>    where its links open: window (in Bridge)
 bridge-dev --site <url> <file.html>     run the page as part of that site: its imports and frames are the site's
 bridge-dev --read   <file>              what they have answered so far, JSON, no blocking
 bridge-dev --name [name]                who answers on this Mac, as a shared page shows it; with a name, set it
+bridge-dev --colour [#hex|none]         your cursor's colour on shared pages; none lets Bridge pick
 bridge-dev --sidecar <file>             where their record for that page lives (in the app's store)
 bridge-dev --seed-from <flavour>        once, into an empty flavour: copy that flavour's list and records here
 bridge-dev --wait   <file> [--timeout 900]   block until they click Send, then print
@@ -271,6 +272,13 @@ case "--name":
         do { print(try Person.set(name)) } catch { fail("\(error)") }
     } else {
         print(Person.current)
+    }
+
+case "--colour":
+    if let raw = args.dropFirst().first {
+        do { print(try Person.setColour(raw) ?? "none") } catch { fail("\(error)") }
+    } else {
+        print(Person.colour ?? "none")
     }
 
 case "--sidecar":

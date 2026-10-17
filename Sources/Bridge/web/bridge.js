@@ -1031,9 +1031,10 @@ function __bridgeInit(options) {
   const cursorColors = ['#e8590c', '#1c7ed6', '#2f9e44', '#ae3ec9', '#f08c00', '#0c8599', '#d6336c', '#5c7cfa'];
   const cursors = { tracking: false, list: [], els: new Map(), sentAt: 0, timer: null, last: undefined };
 
-  function colorsFor(people) {
+  function colorsFor(list) {
     const taken = new Set(), out = new Map();
-    for (const person of [...people].sort()) {
+    for (const c of list) if (c.color) { out.set(c.person, c.color); const i = cursorColors.indexOf(c.color); if (i >= 0) taken.add(i); }
+    for (const person of list.filter((c) => !c.color).map((c) => c.person).sort()) {
       let h = 2166136261;
       for (const ch of person) h = Math.imul(h ^ ch.codePointAt(0), 16777619);
       let i = (h >>> 0) % cursorColors.length;
@@ -1063,14 +1064,20 @@ function __bridgeInit(options) {
 
   function placeCursors() {
     const seen = new Set();
-    const colors = colorsFor(cursors.list.map((c) => c.person));
+    const colors = colorsFor(cursors.list);
     for (const c of cursors.list) {
       seen.add(c.person);
       let el = cursors.els.get(c.person);
       if (!el) {
         el = document.createElement('div');
         el.className = 'bridge-cursor';
-        el.innerHTML = '<svg width="16" height="20" viewBox="0 0 16 20"><path d="M1 1 L1 16 L5 12 L8 19 L11 18 L8 11 L14 11 Z"/></svg><span></span>';
+        el.innerHTML = '<i></i><span></span>';
+        const arrow = typeof __BRIDGE_ARROW === 'object' ? __BRIDGE_ARROW : {};
+        el.style.setProperty('--bridge-arrow', `url("${arrow.url}")`);
+        el.style.setProperty('--bridge-arrow-w', `${arrow.width || 28}px`);
+        el.style.setProperty('--bridge-arrow-h', `${arrow.height || 40}px`);
+        el.style.setProperty('--bridge-arrow-x', `${arrow.x ?? 5}px`);
+        el.style.setProperty('--bridge-arrow-y', `${arrow.y ?? 5}px`);
         document.body.appendChild(el);
         cursors.els.set(c.person, el);
       }
