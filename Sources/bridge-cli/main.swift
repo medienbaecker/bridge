@@ -134,7 +134,14 @@ func collect(_ loc: String, as session: String = Session.current) {
     } catch {}
 }
 
+func claimIfShared(_ loc: String) {
+    guard loc.hasPrefix(Paths.shared.path + "/"), (try? Sidecar.load(Paths.sidecar(for: loc)))?.presented == nil else { return }
+    if Client.appIsRunning { _ = try? Client.send(.claim(location: loc, session: Session.current, cwd: cwd)); return }
+    modifyOffline(loc) { s in if s.presented == nil { s.presented = Presentation(session: Session.current, cwd: cwd, ground: Ground.current(in: cwd)) } }
+}
+
 func readOut(_ loc: String) -> JSONValue {
+    claimIfShared(loc)
     let s: Sidecar
     do { s = try Sidecar.load(Paths.sidecar(for: loc)) } catch { fail("\(error)") }
     var out: [String: JSONValue] = ["status": .string(s.status), "version": .number(Double(s.version))]
@@ -372,6 +379,7 @@ case "--state":
 
 case "--pins":
     let s: Sidecar
+    claimIfShared(location(args.dropFirst().first))
     do { s = try Sidecar.load(Paths.sidecar(for: location(args.dropFirst().first))) } catch { fail("\(error)") }
     print(json: JSONValue.array(s.openComments.map { c in
         var o: [String: JSONValue] = [

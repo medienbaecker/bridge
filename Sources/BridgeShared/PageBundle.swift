@@ -87,7 +87,7 @@ public struct Share: Codable, Equatable, Sendable {
 
 public enum Shares {
     public static var file: URL { Paths.stateDir.appendingPathComponent("shares.json") }
-    public static var folder: URL { Paths.stateDir.appendingPathComponent("shared") }
+    public static var folder: URL { Paths.shared }
 
     public static func load() -> [Share] {
         (try? Data(contentsOf: file)).flatMap { try? JSON.decoder.decode([Share].self, from: $0) } ?? []

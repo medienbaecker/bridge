@@ -54,6 +54,7 @@ final class Link {
     var connecting: Set<String> = []
     var nearby: [String: Bonjour.Endpoint] = [:]
     var seen: [Bonjour.Endpoint] = []
+    var rebrowsing = false
     var pairingUntil: Date?
     var pairingWith: String?
     var words: [String]?
@@ -120,6 +121,14 @@ final class Link {
 
     func saw(_ endpoints: [Bonjour.Endpoint]) {
         seen = endpoints
+        if endpoints.contains(where: { $0.txtRecord["id"] == nil }), !rebrowsing {
+            rebrowsing = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+                self?.rebrowsing = false
+                self?.browser?.cancel()
+                self?.browse()
+            }
+        }
         let unpaired = endpoints.filter { e in
             guard let id = e.txtRecord["id"], id != me, (e.txtRecord["group"] ?? "") == group else { return false }
             return !peers.contains { $0.id == id }

@@ -59,6 +59,7 @@ public enum Paths {
     public static var list: URL { stateDir.appendingPathComponent("list.json") }
     public static var versions: URL { stateDir.appendingPathComponent("versions") }
     public static var builds: URL { stateDir.appendingPathComponent("builds") }
+    public static var shared: URL { stateDir.appendingPathComponent("shared") }
 
     public static func id(for location: String) -> String {
         let digest = SHA256.hash(data: Data(location.utf8))

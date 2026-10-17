@@ -185,6 +185,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             reply(.ok(link.state))
         case .peers:
             reply(.ok(link.state))
+        case .claim(let loc, let session, let cwd):
+            guard model.listing.entry(loc) != nil else { reply(.ok(.null)); return }
+            let page = model.page(for: loc)
+            if page.sidecar.presented == nil {
+                page.presented(Presentation(session: session, cwd: cwd, ground: Ground.current(in: cwd)))
+                model.listing.update(loc) { $0.session = session }
+                model.changed()
+            }
+            reply(.ok(.null))
         case .share(let loc):
             do { reply(.ok(try sharing.share(loc))) } catch { reply(.error("\(error)")) }
         case .command(let name, let argument):

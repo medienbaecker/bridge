@@ -19,6 +19,7 @@ public enum Request: Codable, Sendable {
     case reload(location: String)
     case pair
     case share(location: String)
+    case claim(location: String, session: String, cwd: String)
     case peers
     case quit
 }
