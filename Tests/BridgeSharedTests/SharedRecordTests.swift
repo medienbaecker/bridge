@@ -114,3 +114,27 @@ func meet(_ a: SharedRecord, _ b: SharedRecord) throws {
     try meet(thomas, yoshie)
     #expect(try yoshie.people["thomas"] == nil)
 }
+
+@Test func aNoteEditedMovedOrDeletedByItsAuthorChangesOnBothMacs() throws {
+    let (thomas, yoshie) = try pair()
+    var page = Sidecar()
+    page.comments = [Comment(id: "n1", text: "too tall", target: "h1", anchor: .null, version: 1),
+                     Comment(id: "n2", text: "footer", target: "footer", anchor: .null, version: 1)]
+    try thomas.absorb(page)
+    try meet(thomas, yoshie)
+    var hers = Sidecar()
+    try yoshie.project(into: &hers)
+    hers.comments[0].text = "she cannot edit this"
+    #expect(try yoshie.absorb(hers) == false)
+
+    try thomas.project(into: &page)
+    page.comments[0].text = "far too tall"
+    page.comments[0].target = "h2"
+    page.comments.removeAll { $0.id == "n2" }
+    #expect(try thomas.absorb(page))
+    try meet(thomas, yoshie)
+    try yoshie.project(into: &hers)
+    #expect(hers.comments.map(\.id) == ["n1"])
+    #expect(hers.comments[0].text == "far too tall")
+    #expect(hers.comments[0].target == "h2")
+}

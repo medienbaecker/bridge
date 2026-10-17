@@ -82,7 +82,7 @@ public final class SharedRecord {
     public var comments: [Comment] {
         get throws {
             try doc.mapEntries(obj: map("notes")).compactMap { _, value -> Comment? in
-                guard case .Object(let note, .Map) = value, let raw = try string("comment", in: note) else { return nil }
+                guard case .Object(let note, .Map) = value, let raw = try string("comment", in: note), try string("deleted", in: note) == nil else { return nil }
                 var c = try Self.decode(Comment.self, raw)
                 c.state = try string("state", in: note) ?? c.state
                 if case .Object(let said, .List) = try doc.get(obj: note, key: "said") {
@@ -121,6 +121,20 @@ public final class SharedRecord {
                 changed = true
             }
             if comment.state != there.state { try setState(comment.id, comment.state); changed = true }
+            if there.person == person, comment.text != there.text || comment.target != there.target || comment.anchor != there.anchor || comment.lost != there.lost {
+                var stored = comment
+                stored.person = person
+                stored.said = []
+                try doc.put(obj: map(comment.id, in: map("notes")), key: "comment", value: .String(Self.encode(stored)))
+                doc.commitWith(message: "edit \(comment.id)")
+                changed = true
+            }
+        }
+        let present = Set(sidecar.comments.map(\.id))
+        for (id, there) in known where there.person == person && !present.contains(id) {
+            try doc.put(obj: map(id, in: map("notes")), key: "deleted", value: .String("yes"))
+            doc.commitWith(message: "delete \(id)")
+            changed = true
         }
         return changed
     }
