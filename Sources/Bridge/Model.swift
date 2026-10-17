@@ -135,6 +135,17 @@ final class Model {
     }
 
     var projectNames: [String: String] = [:]
+    var projectRoots: [String: String] = [:]
+    var showAllProjects: Bool = Model.remembered("showAllProjects") as? Bool ?? false { didSet { Self.remember(showAllProjects, "showAllProjects") } }
+
+    func projectRoot(of session: String, cwd: String) -> String? {
+        let dir = cwd.isEmpty ? (about(session).cwd ?? "") : cwd
+        guard !dir.isEmpty else { return nil }
+        if let root = projectRoots[dir] { return root }
+        let root = Ground.projectRoot(for: dir)
+        projectRoots[dir] = root
+        return root
+    }
     var abouts: [String: ClaudeSessions.About] = [:]
 
     func about(_ session: String) -> ClaudeSessions.About {

@@ -15,7 +15,7 @@ printf '{"session_id":"older-agent","hook_event_name":"SessionStart"}' | bridge 
 wait_ready
 
 agents() { bridge --state | jq -c '[.projects.rows[] | select(.key | startswith("agent:")) | "\(.name) \(.count)"]'; }
-check "the sidebar lists every running agent by what it was asked, with its pages" "$(agents)" '["Fix the footer colour on… 0","pages 1","session olde 0"]'
+check "the sidebar lists every running agent by what it was asked, with its pages" "$(agents)" '["pages 1","Fix the footer colour on… 0","session olde 0"]'
 check "and under that its folder and state" "$(bridge --state | jq -r '[.projects.people[] | select(.key == "agent:other-agent")][0].detail')" "other · idle"
 snap agents "Agents in the sidebar"
 
@@ -23,7 +23,7 @@ bridge --do project "agent:test-$CASE_NAME" >/dev/null
 check_json "selecting an agent lists its pages" "$(bridge --state)" '[.sidebar[].bridges[].title] | join(",")' "Card layout for the archive"
 
 bridge --do drop "$page|other-agent" >/dev/null
-check "dropping the page on another agent moves it there" "$(agents)" '["Fix the footer colour on… 1","pages 0","session olde 0"]'
+check "dropping the page on another agent moves it there" "$(agents)" '["pages 0","Fix the footer colour on… 1","session olde 0"]'
 bridge --do project all >/dev/null
 bridge --do select "$page" >/dev/null
 bridge --js "$page" "document.querySelector('[data-value=grid]').click(); return 1" >/dev/null
