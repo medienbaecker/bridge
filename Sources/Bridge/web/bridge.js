@@ -533,10 +533,28 @@ function __bridgeInit(options) {
   }
   let currentScripts = null;
 
+  const changed = new Set();
+  const blockOf = (node) => (node.nodeType === 1 ? node : node.parentElement)?.closest('h1,h2,h3,h4,p,li,pre,figure,img,table,blockquote,[data-record],.card,section,div');
   const morphCallbacks = {
     beforeNodeRemoved: (node) => !ours(node),
-    beforeNodeMorphed: (node) => !ours(node),
+    beforeNodeMorphed: (node, next) => {
+      if (ours(node)) return false;
+      if (cursors.tracking && node.nodeType === 3 && node.textContent !== next.textContent) changed.add(blockOf(node));
+      return true;
+    },
+    afterNodeAdded: (node) => { if (cursors.tracking && !ours(node)) changed.add(blockOf(node)); },
   };
+
+  function flashChanged() {
+    for (const el of changed) {
+      if (!el || el === document.body || ours(el)) continue;
+      el.removeAttribute('data-bridge-changed');
+      void el.offsetWidth;
+      el.setAttribute('data-bridge-changed', '');
+      setTimeout(() => el.removeAttribute('data-bridge-changed'), 3000);
+    }
+    changed.clear();
+  }
 
   function highlight() {
     if (typeof Prism === 'undefined') return;
@@ -628,7 +646,9 @@ function __bridgeInit(options) {
     }
     for (const our of document.querySelectorAll('.bridge-thread:popover-open')) notes.keepOpen = our.dataset.id;
     Idiomorph.morph(document.head, doc.head, { morphStyle: 'innerHTML', callbacks: morphCallbacks });
+    changed.clear();
     Idiomorph.morph(document.body, doc.body, { morphStyle: 'outerHTML', ignoreActiveValue: true, callbacks: morphCallbacks });
+    flashChanged();
     document.title = doc.title;
     state.patches += 1;
     renderMarkdown();

@@ -24,6 +24,8 @@ sed -i '' 's|<h1>Card layout for the archive</h1>|<h1>Card layout, take two</h1>
 until_is "h1 b '$there'" "Card layout, take two"
 check "his agent's rewrite shows on her Mac" "$(h1 b "$there")" "Card layout, take two"
 check "patched in place, not reloaded" "$(b --js "$there" "return window.__marker" | jq -r .)" "alive"
+check "the heading the agent changed is outlined on her page" "$(b --js "$there" "return document.querySelector('h1').hasAttribute('data-bridge-changed')")" "true"
+check "and nothing else is" "$(b --js "$there" "return document.querySelectorAll('[data-bridge-changed]').length")" "1"
 check "her pick survived it" "$(b --read "$there" | jq -r '.answers.layout')" "list"
 
 cp "$CASE_DIR/elsewhere/shot.png" "$(dirname "$there")/files/hers.png"
