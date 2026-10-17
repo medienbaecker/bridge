@@ -52,6 +52,7 @@ final class Link {
     var peers: [Peer] = Peers.load()
     var sessions: [String: Session] = [:]
     var connecting: Set<String> = []
+    var nearby: [String: Bonjour.Endpoint] = [:]
     var pairingUntil: Date?
     var pairingWith: String?
     var words: [String]?
@@ -74,6 +75,7 @@ final class Link {
         listener?.cancel()
         var txt = NWTXTRecord()
         txt["id"] = me
+        txt["name"] = Person.current
         if !group.isEmpty { txt["group"] = group }
         if pairing { txt["pairing"] = "1" }
         let provider = BonjourListenerProvider(name: Person.current, type: Self.service, txtRecord: txt)
@@ -100,6 +102,12 @@ final class Link {
     }
 
     func saw(_ endpoints: [Bonjour.Endpoint]) {
+        let unpaired = endpoints.filter { e in
+            guard let id = e.txtRecord["id"], id != me, (e.txtRecord["group"] ?? "") == group else { return false }
+            return !peers.contains { $0.id == id }
+        }
+        let now = Dictionary(unpaired.map { ($0.txtRecord["id"]!, $0) }, uniquingKeysWith: { a, _ in a })
+        if Set(now.keys) != Set(nearby.keys) { nearby = now; onChange() } else { nearby = now }
         for endpoint in endpoints {
             guard let id = endpoint.txtRecord["id"], id != me, me < id, !connecting.contains(id), (endpoint.txtRecord["group"] ?? "") == group else { continue }
             if pairing, pairingWith == nil, endpoint.txtRecord["pairing"] == "1" {
@@ -116,7 +124,7 @@ final class Link {
         do {
             let first = try await connection.receive()
             switch first.metadata.type {
-            case Wire.pairHello where pairing && pairingWith == nil:
+            case Wire.pairHello where pairingWith == nil:
                 await pair(connection, initiator: false, hello: first.content)
             case Wire.hello:
                 try await serve(connection, hello: first.content)
@@ -137,6 +145,15 @@ final class Link {
             self.listen()
             self.onChange()
         }
+    }
+
+    var nearbyNames: [String] { nearby.values.compactMap { $0.txtRecord["name"] }.sorted() }
+
+    func pair(with name: String) {
+        guard pairingWith == nil, let (id, endpoint) = nearby.first(where: { $0.value.txtRecord["name"] == name }), !connecting.contains(id) else { return }
+        connecting.insert(id)
+        pairingWith = name
+        Task { await pair(Connection(to: endpoint) { TLV { TCP() } }, initiator: true); connecting.remove(id) }
     }
 
     func answer(_ yes: Bool) {
@@ -249,6 +266,7 @@ final class Link {
             "pairingWith": pairingWith.map { .string($0) } ?? .null,
             "words": words.map { .array($0.map { .string($0) }) } ?? .null,
             "peers": .array(peers.map { .string($0.name) }),
+            "nearby": .array(nearbyNames.map { .string($0) }),
             "connected": .array(sessions.values.map { .string($0.peer.name) }.sorted { "\($0)" < "\($1)" }),
         ])
     }

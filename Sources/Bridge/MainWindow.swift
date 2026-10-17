@@ -262,7 +262,15 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
 
     func updateShare() {
         guard let item = toolbarItems.first(where: { $0.itemIdentifier == Self.share }) else { return }
-        guard let sharing = (NSApp.delegate as? AppDelegate)?.sharing, let peer = sharing.link.peers.first else { item.isHidden = true; return }
+        guard let sharing = (NSApp.delegate as? AppDelegate)?.sharing else { item.isHidden = true; return }
+        guard let peer = sharing.link.peers.first else {
+            let nearby = sharing.link.nearbyNames.first
+            item.isHidden = nearby == nil
+            item.label = nearby.map { "Pair with \($0)" } ?? "Share"
+            item.toolTip = nearby.map { "Pair with \($0)'s Mac to share pages and see each other's cursors" }
+            window?.toolbar?.validateVisibleItems()
+            return
+        }
         let shared = shownPage.map { sharing.share(at: $0.location) != nil } ?? false
         item.isHidden = false
         item.label = shared ? "Shared with \(peer.name)" : "Share with \(peer.name)"
@@ -385,7 +393,8 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
             return page != nil && page?.viewingVersion == nil && page?.kind != .pdf
         case Self.notesId: return page.map { !$0.sidecar.comments.isEmpty } ?? false
         case Self.share:
-            guard let sharing = (NSApp.delegate as? AppDelegate)?.sharing, !sharing.link.peers.isEmpty else { return false }
+            guard let sharing = (NSApp.delegate as? AppDelegate)?.sharing else { return false }
+            if sharing.link.peers.isEmpty { return !sharing.link.nearby.isEmpty && sharing.link.pairingWith == nil }
             let shared = page.map { sharing.share(at: $0.location) != nil } ?? false
             return page.map { $0.kind == .html && !shared && !sharing.link.sessions.isEmpty } ?? false
         case Self.send:
@@ -428,7 +437,13 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         switch command {
         case "select": return select(argument)
         case "share":
-            guard let page = shownPage, let sharing = (NSApp.delegate as? AppDelegate)?.sharing else { return false }
+            guard let sharing = (NSApp.delegate as? AppDelegate)?.sharing else { return false }
+            if sharing.link.peers.isEmpty, let name = sharing.link.nearbyNames.first {
+                sharing.link.pair(with: name)
+                updateShare()
+                return true
+            }
+            guard let page = shownPage else { return false }
             do { _ = try sharing.share(page.location) } catch {
                 if Env.test { return false }
                 let alert = NSAlert()
