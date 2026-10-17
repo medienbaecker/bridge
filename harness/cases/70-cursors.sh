@@ -5,6 +5,7 @@ page=$(fixture decision.html)
 (cd "$CASE_DIR/pages" && bridge decision.html)
 wait_ready
 js() { bridge --js "$page" "$1"; }
+check_json "an unpaired Mac shows no Share button" "$(bridge --state)" '[.toolbar[] | select(.id == "share")][0].hidden' "true"
 centre="const r = document.querySelector('[data-value=grid]').getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]"
 
 js "@bridge __bridge.trackCursor(true); const r = document.querySelector('[data-value=grid]').getBoundingClientRect(); document.querySelector('[data-value=grid]').dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); return 1" >/dev/null

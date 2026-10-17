@@ -30,6 +30,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
     let notesPopover = NSPopover()
 
     static let point = NSToolbarItem.Identifier("point")
+    static let share = NSToolbarItem.Identifier("share")
     static let notesId = NSToolbarItem.Identifier("notes")
     static let send = NSToolbarItem.Identifier("send")
 
@@ -158,7 +159,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
     }
 
     var toolbarItems: [NSToolbarItem] {
-        (window?.toolbar?.items ?? []).filter { [Self.point, Self.notesId, Self.send].contains($0.itemIdentifier) }
+        (window?.toolbar?.items ?? []).filter { [Self.share, Self.point, Self.notesId, Self.send].contains($0.itemIdentifier) }
     }
 
     var bannerText: String? { model.selectedPage?.bannerText }
@@ -259,7 +260,18 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
 
     var shownPage: Page? { model.selectedPage.flatMap { windows[$0.location] == nil ? $0 : nil } }
 
+    func updateShare() {
+        guard let item = toolbarItems.first(where: { $0.itemIdentifier == Self.share }) else { return }
+        guard let sharing = (NSApp.delegate as? AppDelegate)?.sharing, let peer = sharing.link.peers.first else { item.isHidden = true; return }
+        let shared = shownPage.map { sharing.share(at: $0.location) != nil } ?? false
+        item.isHidden = false
+        item.label = shared ? "Shared with \(peer.name)" : "Share with \(peer.name)"
+        item.toolTip = sharing.link.sessions.isEmpty ? "\(peer.name)'s Mac isn't connected" : item.label
+        window?.toolbar?.validateVisibleItems()
+    }
+
     func refresh() {
+        updateShare()
         projects.reload()
         sidebar.reload()
         for (location, pageWindow) in windows where model.listing.entry(location) == nil { pageWindow.close() }
@@ -283,7 +295,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         // AppKit puts the window title after the sidebar separator, over the list, and
         // handing that identifier to the second divider hangs the toolbar. So the
         // window's title is hidden and the toolbar carries its own two titles.
-        [.toggleSidebar, .sidebarTrackingSeparator, Self.listName, Self.bridgesSeparator, Self.docTitle, .flexibleSpace, Self.point, Self.notesId, .space, Self.send]
+        [.toggleSidebar, .sidebarTrackingSeparator, Self.listName, Self.bridgesSeparator, Self.docTitle, .flexibleSpace, Self.share, Self.point, Self.notesId, .space, Self.send]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -311,6 +323,10 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         item.target = self
         item.action = #selector(toolbarAction(_:))
         switch id {
+        case Self.share:
+            item.label = "Share"; item.toolTip = "Share this page with the Mac you paired with"
+            item.image = Self.symbol("shareplay", "Share")
+            item.isHidden = true
         case Self.point:
             item.label = "Point"; item.toolTip = "Point at something and leave a note"
             item.image = Self.pointImage(on: false)
@@ -368,6 +384,10 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
             pointShownOn = on
             return page != nil && page?.viewingVersion == nil && page?.kind != .pdf
         case Self.notesId: return page.map { !$0.sidecar.comments.isEmpty } ?? false
+        case Self.share:
+            guard let sharing = (NSApp.delegate as? AppDelegate)?.sharing, !sharing.link.peers.isEmpty else { return false }
+            let shared = page.map { sharing.share(at: $0.location) != nil } ?? false
+            return page.map { $0.kind == .html && !shared && !sharing.link.sessions.isEmpty } ?? false
         case Self.send:
             let state = page?.sendLabel ?? "Send"
             Self.styleSend(item, state)
@@ -407,6 +427,18 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         if command == "relaunch" { (NSApp.delegate as? AppDelegate)?.relaunch(); return true }
         switch command {
         case "select": return select(argument)
+        case "share":
+            guard let page = shownPage, let sharing = (NSApp.delegate as? AppDelegate)?.sharing else { return false }
+            do { _ = try sharing.share(page.location) } catch {
+                if Env.test { return false }
+                let alert = NSAlert()
+                alert.messageText = "Couldn't share this page"
+                alert.informativeText = "\(error)"
+                if let window { alert.beginSheetModal(for: window) }
+                return false
+            }
+            updateShare()
+            return true
         case "resize":
             let parts = (argument ?? "").split(separator: " ").compactMap { Double($0) }
             guard parts.count == 2, let w = window else { return false }

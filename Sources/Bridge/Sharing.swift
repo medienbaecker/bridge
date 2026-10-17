@@ -33,6 +33,7 @@ final class Sharing {
             "html": .string(bundle.html), "files": .object(bundle.files.mapValues { .string($0.base64EncodedString()) }),
         ])
         if let page = model.pages[location], page.ready { ready(page) }
+        model.onChange()
         return .object(["share": .string(id), "to": .array(link.sessions.values.map { .string($0.peer.name) })])
     }
 

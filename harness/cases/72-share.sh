@@ -19,10 +19,14 @@ page="$CASE_DIR/pages/decision.html"
 (cd "$CASE_DIR/pages" && bridge decision.html)
 wait_ready
 
+share_button() { bridge --state | jq -c '[.toolbar[] | select(.id == "share")][0] | {label, enabled, hidden}'; }
+check "a paired Mac offers to share the page" "$(share_button)" '{"label":"Share with yoshie","enabled":true,"hidden":false}'
 check "sharing with no page path is refused" "$(bridge --share 2>&1 >/dev/null | head -1 | cut -c1-6)" "bridge"
 out=$(bridge --share "$page")
 check_json "the page goes to yoshie" "$out" '.to | join(",")' "yoshie"
 id=$(echo "$out" | jq -r '.share')
+for i in $(seq 1 20); do [ "$(share_button | jq -r .enabled)" = "false" ] && break; sleep 0.1; done
+check "and then says it is shared" "$(share_button)" '{"label":"Shared with yoshie","enabled":false,"hidden":false}'
 there="$CASE_DIR/state-b/bridge-dev/shared/$id/page.html"
 for i in $(seq 1 60); do [ -f "$there" ] && break; sleep 0.25; done
 check "it arrives on her Mac" "$([ -f "$there" ] && echo yes)" "yes"

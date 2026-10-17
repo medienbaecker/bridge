@@ -30,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
         self.server = server
         link.onWords = { [weak self] name, words in self?.askToPair(name, words) }
+        link.onChange = { [weak self] in self?.window.updateShare() }
         _ = sharing
         link.start()
         if model.scope == .waiting, model.bridges(in: .waiting).isEmpty { model.scope = .all }
@@ -318,7 +319,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         out["contentShowsPage"] = .bool(window.content.shown != nil)
         out["quietRows"] = .array(model.shown().filter { model.isQuiet($0) }.map { .string($0.location) })
         out["toolbar"] = .array(window.toolbarItems.map {
-            .object(["id": .string($0.itemIdentifier.rawValue), "label": .string($0.label), "enabled": .bool($0.isEnabled),
+            .object(["id": .string($0.itemIdentifier.rawValue), "label": .string($0.label), "enabled": .bool($0.isEnabled), "hidden": .bool($0.isHidden),
                      "symbol": .string($0.image?.accessibilityDescription ?? ""),
                      "on": .bool($0.itemIdentifier == MainWindow.point && window.pointShownOn)])
         })
