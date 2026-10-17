@@ -8,12 +8,13 @@ repo
 started() { printf '{"session_id":"%s","hook_event_name":"SessionStart","cwd":"%s"}' "$1" "$2" | bridge --hook session; }
 started "test-$CASE_NAME" "$CASE_DIR/pages"
 started other-agent "$CASE_DIR/other"
+printf '{"session_id":"older-agent","hook_event_name":"SessionStart"}' | bridge --hook session
 (cd "$CASE_DIR/pages" && bridge decision.html)
 wait_ready
 
 agent() { bridge --state | jq -r '[.toolbar[] | select(.id == "agent")][0].label'; }
 check "the toolbar names the agent that presented the page" "$(agent)" "pages"
-check_json "the menu would list both running sessions" "$(bridge --state)" '[.agents[].project] | sort | join(",")' "other,pages"
+check_json "the menu lists every running session, one without a folder by its id" "$(bridge --state)" '[.agents[].project] | sort | join(",")' "other,pages,session olde"
 
 bridge --do agent other-agent >/dev/null
 check "picking another session hands it the page" "$(agent)" "other"

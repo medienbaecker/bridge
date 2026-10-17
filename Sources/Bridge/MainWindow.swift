@@ -263,6 +263,12 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
 
     var shownPage: Page? { model.selectedPage.flatMap { windows[$0.location] == nil ? $0 : nil } }
 
+    func agentName(_ session: String, cwd: String) -> String {
+        if !cwd.isEmpty { return projectName(cwd) }
+        if let entry = model.listing.bridges.filter({ $0.session == session }).max(by: { $0.presentedAt < $1.presentedAt }) { return entry.projectName }
+        return "session \(session.prefix(4))"
+    }
+
     func projectName(_ cwd: String) -> String {
         if cwd.isEmpty { return "unknown folder" }
         if let name = projectNames[cwd] { return name }
@@ -273,7 +279,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
 
     func holder(of page: Page) -> (session: String, name: String, life: ClaudeSessions.Life)? {
         guard let p = page.sidecar.presented, !p.session.isEmpty else { return nil }
-        return (p.session, projectName(p.cwd), ClaudeSessions.life(of: p.session))
+        return (p.session, agentName(p.session, cwd: p.cwd), ClaudeSessions.life(of: p.session))
     }
 
     func updateAgent() {
@@ -287,9 +293,9 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         guard menu === agentMenu else { return }
         menu.removeAllItems()
         let current = shownPage?.sidecar.presented?.session
-        for live in ClaudeSessions.live().sorted(by: { projectName($0.cwd) < projectName($1.cwd) }) {
+        for live in ClaudeSessions.live().sorted(by: { agentName($0.session, cwd: $0.cwd) < agentName($1.session, cwd: $1.cwd) }) {
             let state = live.life == .working ? "working" : "idle"
-            let item = NSMenuItem(title: "\(projectName(live.cwd)) · \(state)", action: #selector(chooseAgent(_:)), keyEquivalent: "")
+            let item = NSMenuItem(title: "\(agentName(live.session, cwd: live.cwd)) · \(state)", action: #selector(chooseAgent(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = live.session
             item.state = live.session == current ? .on : .off
