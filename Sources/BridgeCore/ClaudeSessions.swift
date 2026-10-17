@@ -9,7 +9,7 @@ public enum ClaudeSessions {
 
     nonisolated(unsafe) static var dir = Paths.stateBase.appendingPathComponent("bridge/sessions")
 
-    public static func record(_ event: String, session: String, pid: Int32) {
+    public static func record(_ event: String, session: String, pid: Int32, cwd: String = "") {
         guard !session.isEmpty, !session.contains("/") else { return }
         let file = dir.appendingPathComponent("\(session).json")
         let state: String
@@ -20,8 +20,26 @@ public enum ClaudeSessions {
         default: return
         }
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        guard let data = try? JSONSerialization.data(withJSONObject: ["pid": Int(pid), "state": state]) else { return }
+        let kept = (try? Data(contentsOf: file)).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }?["cwd"] as? String ?? ""
+        guard let data = try? JSONSerialization.data(withJSONObject: ["pid": Int(pid), "state": state, "cwd": cwd.isEmpty ? kept : cwd]) else { return }
         try? data.write(to: file, options: .atomic)
+    }
+
+    public struct Live: Sendable {
+        public let session: String
+        public let cwd: String
+        public let life: Life
+    }
+
+    public static func live() -> [Live] {
+        let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
+        return files.filter { $0.pathExtension == "json" }.compactMap { file in
+            let session = file.deletingPathExtension().lastPathComponent
+            let life = life(of: session)
+            guard life != .gone, let data = try? Data(contentsOf: file),
+                  let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return nil }
+            return Live(session: session, cwd: obj["cwd"] as? String ?? "", life: life)
+        }
     }
 
     public static func life(of session: String) -> Life {

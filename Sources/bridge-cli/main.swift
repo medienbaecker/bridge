@@ -198,7 +198,7 @@ func hook(_ event: String) -> Never {
     let input = FileHandle.standardInput.readDataToEndOfFile()
     let fields = (try? JSONSerialization.jsonObject(with: input)) as? [String: Any]
     let session = fields?["session_id"] as? String ?? Session.current
-    ClaudeSessions.record(event == "stop" ? "Stop" : fields?["hook_event_name"] as? String ?? "", session: session, pid: ClaudeSessions.claudePID())
+    ClaudeSessions.record(event == "stop" ? "Stop" : fields?["hook_event_name"] as? String ?? "", session: session, pid: ClaudeSessions.claudePID(), cwd: fields?["cwd"] as? String ?? "")
     guard event == "stop" else { exit(0) }
     var timeout: TimeInterval = 570
     if let i = args.firstIndex(of: "--timeout"), let t = args.dropFirst(i + 1).first.flatMap(Double.init) { timeout = t }

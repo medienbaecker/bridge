@@ -261,7 +261,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     func state() -> JSONValue {
-        var out: [String: JSONValue] = ["running": .bool(true), "test": .bool(Env.test), "link": link.state]
+        var out: [String: JSONValue] = ["running": .bool(true), "test": .bool(Env.test), "link": link.state,
+            "agents": .array(ClaudeSessions.live().map { .object(["session": .string($0.session), "project": .string(window.projectName($0.cwd)), "life": .string($0.life.rawValue)]) })]
         if let page = model.selectedPage {
             out["selected"] = .string(page.location)
             out["title"] = .string(page.title)
