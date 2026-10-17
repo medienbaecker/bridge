@@ -4,7 +4,7 @@ import BridgeCore
 /// The left column: the two smart scopes, then the projects with their waiting
 /// counts, and the update row at its foot.
 final class ProjectsController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
-    enum Row: Equatable { case scope(Scope), heading }
+    enum Row: Equatable { case scope(Scope), heading(String) }
 
     let model: Model
     let table = NSTableView()
@@ -37,6 +37,7 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
         table.backgroundColor = .clear
         table.dataSource = self
         table.delegate = self
+        table.registerForDraggedTypes([SidebarController.rowType])
         table.translatesAutoresizingMaskIntoConstraints = false
         scroll.documentView = table
         table.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor).isActive = true
@@ -62,8 +63,10 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
         reloading = true
         defer { reloading = false }
         rows = [.scope(.waiting), .scope(.all)]
+        let agents = model.agents()
+        if !agents.isEmpty { rows.append(.heading("Agents")); rows += agents.map { .scope(.agent($0.session)) } }
         let projects = model.listing.projects
-        if !projects.isEmpty { rows.append(.heading); rows += projects.map { .scope(.project($0)) } }
+        if !projects.isEmpty { rows.append(.heading("Projects")); rows += projects.map { .scope(.project($0)) } }
         table.reloadData()
         if let i = rows.firstIndex(of: .scope(model.scope)) { table.selectRowIndexes([i], byExtendingSelection: false) }
     }
@@ -124,16 +127,34 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
 
     func numberOfRows(in tableView: NSTableView) -> Int { rows.count }
 
-    func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat { rows[row] == .heading ? 24 : 28 }
+    func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
+        if case .heading = rows[row] { return 24 }
+        return 28
+    }
 
-    func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool { rows[row] != .heading }
+    func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool {
+        if case .heading = rows[row] { return false }
+        return true
+    }
+
+    func tableView(_ tableView: NSTableView, validateDrop info: NSDraggingInfo, proposedRow row: Int, proposedDropOperation op: NSTableView.DropOperation) -> NSDragOperation {
+        guard op == .on, row < rows.count, case .scope(.agent) = rows[row] else { return [] }
+        return .move
+    }
+
+    func tableView(_ tableView: NSTableView, acceptDrop info: NSDraggingInfo, row: Int, dropOperation: NSTableView.DropOperation) -> Bool {
+        guard case .scope(.agent(let session)) = rows[row] else { return false }
+        let locations = (info.draggingPasteboard.pasteboardItems ?? []).compactMap { $0.string(forType: SidebarController.rowType) }
+        for location in locations { model.hand(location, to: session) }
+        return !locations.isEmpty
+    }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         switch rows[row] {
-        case .heading:
+        case .heading(let title):
             let cell = tableView.makeView(withIdentifier: .init("heading"), owner: nil) as? NSTableCellView ?? SidebarController.headerCell()
             cell.identifier = .init("heading")
-            cell.textField?.stringValue = "Projects"
+            cell.textField?.stringValue = title
             return cell
         case .scope(let scope):
             let cell = tableView.makeView(withIdentifier: ScopeCell.id, owner: nil) as? ScopeCell ?? ScopeCell()
@@ -164,7 +185,7 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
             let i = rows.firstIndex(of: row)!
             let f = table.convert(table.rect(ofRow: i), to: nil)
             let top = table.window.map { $0.frame.height - f.maxY } ?? 0
-            return .object(["key": .string(s.key), "name": .string(ScopeCell.name(of: s)), "count": .number(Double(ScopeCell.count(of: s, model: model))),
+            return .object(["key": .string(s.key), "name": .string(ScopeCell.name(of: s, model: model)), "count": .number(Double(ScopeCell.count(of: s, model: model))),
                             "top": .number(Double(top)), "height": .number(Double(f.height))])
         })]
     }
@@ -204,19 +225,37 @@ final class ScopeCell: NSTableCellView {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    static func name(of scope: Scope) -> String {
-        switch scope { case .waiting: return "Waiting"; case .all: return "All"; case .project(let p): return (p as NSString).lastPathComponent }
+    static func name(of scope: Scope, model: Model) -> String {
+        switch scope {
+        case .waiting: return "Waiting"
+        case .all: return "All"
+        case .project(let p): return (p as NSString).lastPathComponent
+        case .agent(let s): return model.agentLabel(s, cwd: ClaudeSessions.live().first { $0.session == s }?.cwd ?? "")
+        }
     }
 
     static func count(of scope: Scope, model: Model) -> Int {
-        switch scope { case .waiting: return model.waitingCount(); case .all: return model.listing.bridges.filter { !$0.crossed }.count; case .project(let p): return model.waitingCount(in: p) }
+        switch scope {
+        case .waiting: return model.waitingCount()
+        case .all: return model.listing.bridges.filter { !$0.crossed }.count
+        case .project(let p): return model.waitingCount(in: p)
+        case .agent: return model.bridges(in: scope).count
+        }
     }
 
     func show(_ scope: Scope, model: Model) {
         let symbol: String
-        switch scope { case .waiting: symbol = "tray.full"; case .all: symbol = "tray.2"; case .project: symbol = "folder" }
-        icon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: Self.name(of: scope))?.withSymbolConfiguration(.init(pointSize: 13, weight: .regular))
-        name.stringValue = Self.name(of: scope)
+        icon.contentTintColor = .secondaryLabelColor
+        switch scope {
+        case .waiting: symbol = "tray.full"
+        case .all: symbol = "tray.2"
+        case .project: symbol = "folder"
+        case .agent(let s):
+            symbol = "terminal"
+            icon.contentTintColor = ClaudeSessions.life(of: s) == .working ? .systemOrange : .systemGreen
+        }
+        icon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: Self.name(of: scope, model: model))?.withSymbolConfiguration(.init(pointSize: 13, weight: .regular))
+        name.stringValue = Self.name(of: scope, model: model)
         let n = Self.count(of: scope, model: model)
         count.stringValue = n > 0 ? "\(n)" : ""
     }

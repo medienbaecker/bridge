@@ -20,7 +20,7 @@ check "her chip shows on his page: here, no agent yet" "$(chip)" "yoshieno agent
 
 mkdir -p "$CASE_DIR/her-project" && (cd "$CASE_DIR/her-project" && git init -q .)
 printf '{"session_id":"her-agent","hook_event_name":"SessionStart","cwd":"%s"}' "$CASE_DIR/her-project" | b --hook session
-b --do agent her-agent >/dev/null
+b --do drop "$there|her-agent" >/dev/null
 until_is chip "yoshieagent idle in her-project"
 check "handed to an agent, it says which and what it is doing" "$(chip)" "yoshieagent idle in her-project"
 snap here "Her chip in the corner of his page"
