@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     let model = Model()
     var server: Server?
     var window: MainWindow!
+    let link = Link()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let server = Server { [self] request, reply in
@@ -27,6 +28,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             exit(1)
         }
         self.server = server
+        link.onWords = { [weak self] name, words in self?.askToPair(name, words) }
+        link.start()
         if model.scope == .waiting, model.bridges(in: .waiting).isEmpty { model.scope = .all }
         let remembered = Model.remembered("selected") as? String
         model.selected = model.listing.bridges.contains { $0.location == remembered } ? remembered : nil
@@ -174,8 +177,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             Task { @MainActor in
                 do { reply(.ok(try await page.evaluate(code))) } catch { reply(.error("\(error)")) }
             }
+        case .pair:
+            link.startPairing()
+            reply(.ok(link.state))
+        case .peers:
+            reply(.ok(link.state))
         case .command(let name, let argument):
             guard Env.test else { reply(.error("test mode only")); return }
+            if name == "pair-confirm" || name == "pair-cancel" { link.answer(name == "pair-confirm"); reply(.ok(state())); return }
             reply(window.perform(command: name, argument: argument) ? .ok(state()) : .error("unknown command \(name)"))
         case .shot(let path, let screen):
             Task { @MainActor in
@@ -226,8 +235,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
     }
 
+    func askToPair(_ name: String, _ words: [String]) {
+        guard !Env.test, let window = window.window else { return }
+        let alert = NSAlert()
+        alert.messageText = "Pair with \(name)?"
+        alert.informativeText = "Pair only if \(name)'s Mac shows the same four words:\n\n" + words.joined(separator: " · ")
+        alert.addButton(withTitle: "Pair")
+        alert.addButton(withTitle: "Cancel")
+        NSApp.activate()
+        alert.beginSheetModal(for: window) { [weak self] response in self?.link.answer(response == .alertFirstButtonReturn) }
+    }
+
     func state() -> JSONValue {
-        var out: [String: JSONValue] = ["running": .bool(true), "test": .bool(Env.test)]
+        var out: [String: JSONValue] = ["running": .bool(true), "test": .bool(Env.test), "link": link.state]
         if let page = model.selectedPage {
             out["selected"] = .string(page.location)
             out["title"] = .string(page.title)

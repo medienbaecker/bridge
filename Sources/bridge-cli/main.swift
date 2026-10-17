@@ -10,6 +10,8 @@ bridge-dev --site <url> <file.html>     run the page as part of that site: its i
 bridge-dev --read   <file>              what they have answered so far, JSON, no blocking
 bridge-dev --name [name]                who answers on this Mac, as a shared page shows it; with a name, set it
 bridge-dev --colour [#hex|none]         your cursor's colour on shared pages; none lets Bridge pick
+bridge-dev --pair                       pair with another Mac running Bridge: both show four words, both click Pair
+bridge-dev --peers                      the Macs this one is paired with, and which are connected now
 bridge-dev --sidecar <file>             where their record for that page lives (in the app's store)
 bridge-dev --seed-from <flavour>        once, into an empty flavour: copy that flavour's list and records here
 bridge-dev --wait   <file> [--timeout 900]   block until they click Send, then print
@@ -280,6 +282,12 @@ case "--colour":
     } else {
         print(Person.colour ?? "none")
     }
+
+case "--pair":
+    print(json: check(send(.pair, launching: true)))
+
+case "--peers":
+    print(json: check(send(.peers, launching: true)))
 
 case "--sidecar":
     print(Paths.sidecar(for: location(args.dropFirst().first)).path)

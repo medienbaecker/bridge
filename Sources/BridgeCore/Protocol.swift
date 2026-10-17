@@ -17,6 +17,8 @@ public enum Request: Codable, Sendable {
     case shot(path: String, screen: Bool)
     case render(location: String, path: String, width: Double?, site: String?, crop: [Double]?, scale: Double?, zoom: Double?)
     case reload(location: String)
+    case pair
+    case peers
     case quit
 }
 

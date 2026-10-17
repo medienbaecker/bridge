@@ -9,6 +9,14 @@ public enum Person {
         return clean(first) ?? clean(NSUserName()) ?? "me"
     }
 
+    public static var device: String {
+        let file = Paths.stateDir.appendingPathComponent("device-id")
+        if let saved = try? String(contentsOf: file, encoding: .utf8), let id = UUID(uuidString: saved.trimmingCharacters(in: .whitespacesAndNewlines)) { return id.uuidString }
+        let id = UUID().uuidString
+        try? Data((id + "\n").utf8).write(to: file, options: .atomic)
+        return id
+    }
+
     public static func set(_ name: String) throws -> String {
         guard let name = clean(name) else { throw Invalid() }
         try Data((name + "\n").utf8).write(to: file, options: .atomic)

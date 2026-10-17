@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import BridgeCore
 
 public struct Peer: Codable, Equatable, Sendable {
     public var id: String
@@ -98,5 +99,18 @@ public struct Channel: Sendable {
         let plain = try ChaChaPoly.open(box, using: receiveKey, authenticating: Data(String(type).utf8))
         received += 1
         return plain
+    }
+}
+
+public enum Peers {
+    public static var file: URL { Paths.stateDir.appendingPathComponent("peers.json") }
+
+    public static func load() -> [Peer] {
+        (try? Data(contentsOf: file)).flatMap { try? JSON.decoder.decode([Peer].self, from: $0) } ?? []
+    }
+
+    public static func save(_ peers: [Peer]) throws {
+        try JSON.encoder.encode(peers).write(to: file, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
     }
 }
