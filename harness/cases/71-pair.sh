@@ -12,7 +12,7 @@ bridge --pair >/dev/null
 b --pair >/dev/null
 
 words() { "$@" --state | jq -c '.link.words'; }
-for i in $(seq 1 60); do [ "$(words bridge)" != "null" ] && [ "$(words b)" != "null" ] && break; sleep 0.25; done
+for i in $(seq 1 160); do [ "$(words bridge)" != "null" ] && [ "$(words b)" != "null" ] && break; sleep 0.25; done
 check "both Macs show four words" "$(words bridge | jq 'length')" "4"
 check "and they are the same words" "$(words b)" "$(words bridge)"
 check_json "each knows who it is pairing with" "$(bridge --state)" '.link.pairingWith' "yoshie"

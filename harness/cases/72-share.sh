@@ -1,16 +1,9 @@
 #!/bin/bash
 source "$(dirname "$0")/../lib.sh"
 
-mkdir -p "$CASE_DIR/state-b" "$CASE_DIR/elsewhere"
-b() { XDG_STATE_HOME="$CASE_DIR/state-b" BRIDGE_SESSION="test-$CASE_NAME-b" bridge "$@"; }
-trap 'bridge --quit >/dev/null 2>&1; b --quit >/dev/null 2>&1' EXIT
-bridge --name thomas >/dev/null; bridge --colour '#e8590c' >/dev/null
-b --name yoshie >/dev/null
-bridge --pair >/dev/null; b --pair >/dev/null
-for i in $(seq 1 60); do [ "$(b --state | jq -r '.link.words')" != "null" ] && [ "$(bridge --state | jq -r '.link.words')" != "null" ] && break; sleep 0.25; done
-bridge --do pair-confirm >/dev/null; b --do pair-confirm >/dev/null
-connected() { "$@" --peers | jq -r '.connected | join(",")'; }
-for i in $(seq 1 60); do [ -n "$(connected bridge)" ] && [ -n "$(connected b)" ] && break; sleep 0.25; done
+mkdir -p "$CASE_DIR/elsewhere"
+pair_with_b
+bridge --colour '#e8590c' >/dev/null
 
 cp "$ROOT/harness/fixtures/decision.html" "$CASE_DIR/pages/decision.html"
 python3 -c "import struct,zlib,sys; c=lambda t,d: struct.pack('>I',len(d))+t+d+struct.pack('>I',zlib.crc32(t+d)); open(sys.argv[1],'wb').write(b'\x89PNG\r\n\x1a\n'+c(b'IHDR',struct.pack('>IIBBBBB',2,1,8,2,0,0,0))+c(b'IDAT',zlib.compress(b'\0'+b'\xff\0\0'*2))+c(b'IEND',b''))" "$CASE_DIR/elsewhere/shot.png"

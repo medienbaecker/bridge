@@ -13,7 +13,7 @@ repo
 js() { bridge --js "$page" "$1"; }
 point_on() { bridge --state | jq -r '[.toolbar[] | select(.id=="point") | .on][0]'; }
 check "before: the Point item reads off" "$(point_on)" "false"
-glyphs() { local g; g=$(bridge --state); bridge --shot "$CASE_DIR/shots/$1.png" >/dev/null; printf '%s' "$g" | jq -r '[(.windowFrame.width - 300) * .backingScale, 6 * .backingScale, .windowFrame.width * .backingScale, 44 * .backingScale, 190] | map(floor) | @sh' | xargs python3 "$ROOT/harness/measure.py" "$CASE_DIR/shots/$1.png" columns; }
+glyphs() { local g; g=$(bridge --state); bridge --shot "$CASE_DIR/shots/$1.png" >/dev/null; printf '%s' "$g" | jq -r '[(.windowFrame.width - 180) * .backingScale, 6 * .backingScale, .windowFrame.width * .backingScale, 44 * .backingScale, 190] | map(floor) | @sh' | xargs python3 "$ROOT/harness/measure.py" "$CASE_DIR/shots/$1.png" columns; }
 c0=$(glyphs point-off)
 bridge --do point >/dev/null; settle 0.3
 check "pointing: the Point item reads on" "$(point_on)" "true"

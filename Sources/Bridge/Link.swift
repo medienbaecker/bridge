@@ -80,7 +80,7 @@ final class Link {
         txt["id"] = me
         txt["name"] = Person.current
         if !group.isEmpty { txt["group"] = group }
-        let provider = BonjourListenerProvider(name: Person.current, type: Self.service, txtRecord: txt)
+        let provider = BonjourListenerProvider(name: me, type: Self.service, txtRecord: txt)
         listener = Task { [weak self] in
             do {
                 let listener = try NetworkListener(for: provider) { TLV { TCP() } }
@@ -99,7 +99,12 @@ final class Link {
                     Task { @MainActor in self?.saw(endpoints) }
                     return .continue
                 }
-            } catch { Env.log("link browser: \(error)") }
+            } catch {
+                Env.log("link browser: \(error)")
+                guard !Task.isCancelled else { return }
+                try? await Task.sleep(for: .seconds(1))
+                await MainActor.run { self?.browse() }
+            }
         }
     }
 
@@ -110,7 +115,7 @@ final class Link {
             connecting.remove(id)
             if sessions[id] == nil { DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self.map { $0.saw($0.seen) } } }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
             guard let self, self.connecting.contains(id), self.sessions[id] == nil, self.words == nil else { return }
             task.cancel()
             self.connecting.remove(id)

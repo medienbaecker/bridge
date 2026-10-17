@@ -279,9 +279,8 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
     func updateAgent() {
         guard let item = toolbarItems.first(where: { $0.itemIdentifier == Self.agent }) else { return }
         let held = shownPage.flatMap(holder)
-        item.title = held.map { $0.life == .gone ? "\($0.name) (ended)" : $0.name } ?? "No agent"
-        item.label = item.title
-        item.isEnabled = shownPage.map { $0.kind != .url } ?? false
+        let title = held.map { $0.life == .gone ? "\($0.name) (ended)" : $0.name } ?? "No agent"
+        if item.title != title { item.title = title; item.label = title }
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {

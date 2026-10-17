@@ -1,15 +1,7 @@
 #!/bin/bash
 source "$(dirname "$0")/../lib.sh"
 
-mkdir -p "$CASE_DIR/state-b"
-b() { XDG_STATE_HOME="$CASE_DIR/state-b" BRIDGE_SESSION="test-$CASE_NAME-b" bridge "$@"; }
-trap 'bridge --quit >/dev/null 2>&1; b --quit >/dev/null 2>&1' EXIT
-bridge --name thomas >/dev/null; b --name yoshie >/dev/null
-bridge --pair >/dev/null; b --pair >/dev/null
-for i in $(seq 1 60); do [ "$(b --state | jq -r '.link.words')" != "null" ] && [ "$(bridge --state | jq -r '.link.words')" != "null" ] && break; sleep 0.25; done
-bridge --do pair-confirm >/dev/null; b --do pair-confirm >/dev/null
-connected() { "$@" --peers | jq -r '.connected | join(",")'; }
-for i in $(seq 1 60); do [ -n "$(connected bridge)" ] && [ -n "$(connected b)" ] && break; sleep 0.25; done
+pair_with_b
 
 page=$(fixture decision.html)
 (cd "$CASE_DIR/pages" && bridge decision.html)
