@@ -48,6 +48,7 @@ final class Link {
     static let service = "_bridge._tcp"
 
     let me = Person.device
+    let group = ProcessInfo.processInfo.environment["BRIDGE_LINK_GROUP"] ?? ""
     var peers: [Peer] = Peers.load()
     var sessions: [String: Session] = [:]
     var connecting: Set<String> = []
@@ -57,6 +58,7 @@ final class Link {
     var confirm: CheckedContinuation<Bool, Never>?
     var onMessage: (Peer, [String: JSONValue]) -> Void = { _, _ in }
     var onChange: () -> Void = {}
+    var onDrop: (Peer) -> Void = { _ in }
     var onWords: (String, [String]) -> Void = { _, _ in }
     private var listener: Task<Void, Never>?
     private var browser: Task<Void, Never>?
@@ -72,6 +74,7 @@ final class Link {
         listener?.cancel()
         var txt = NWTXTRecord()
         txt["id"] = me
+        if !group.isEmpty { txt["group"] = group }
         if pairing { txt["pairing"] = "1" }
         let provider = BonjourListenerProvider(name: Person.current, type: Self.service, txtRecord: txt)
         listener = Task { [weak self] in
@@ -98,7 +101,7 @@ final class Link {
 
     func saw(_ endpoints: [Bonjour.Endpoint]) {
         for endpoint in endpoints {
-            guard let id = endpoint.txtRecord["id"], id != me, me < id, !connecting.contains(id) else { continue }
+            guard let id = endpoint.txtRecord["id"], id != me, me < id, !connecting.contains(id), (endpoint.txtRecord["group"] ?? "") == group else { continue }
             if pairing, pairingWith == nil, endpoint.txtRecord["pairing"] == "1" {
                 connecting.insert(id)
                 Task { await pair(Connection(to: endpoint) { TLV { TCP() } }, initiator: true); connecting.remove(id) }
@@ -224,6 +227,7 @@ final class Link {
         onChange()
         defer {
             if sessions[session.peer.id] === session { sessions[session.peer.id] = nil }
+            onDrop(session.peer)
             onChange()
         }
         while true {

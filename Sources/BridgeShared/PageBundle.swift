@@ -1,11 +1,16 @@
 import Foundation
 import CryptoKit
+import BridgeCore
 
 public struct PageBundle: Codable, Equatable, Sendable {
     public var html: String
     public var files: [String: Data]
 
     public static let limit = 50 * 1024 * 1024
+
+    public init(html: String, files: [String: Data]) {
+        self.html = html; self.files = files
+    }
 
     static let reference = try! NSRegularExpression(pattern: #"(\b(?:src|href|poster)\s*=\s*)(["'])([^"']*)\2"#, options: .caseInsensitive)
 
@@ -66,5 +71,29 @@ public struct PageBundle: Codable, Equatable, Sendable {
     public struct Unsafe: Error, CustomStringConvertible {
         public let name: String
         public var description: String { "refused a shared file named \(name)" }
+    }
+}
+
+public struct Share: Codable, Equatable, Sendable {
+    public var id: String
+    public var location: String
+    public var from: String
+    public var title: String
+
+    public init(id: String, location: String, from: String, title: String) {
+        self.id = id; self.location = location; self.from = from; self.title = title
+    }
+}
+
+public enum Shares {
+    public static var file: URL { Paths.stateDir.appendingPathComponent("shares.json") }
+    public static var folder: URL { Paths.stateDir.appendingPathComponent("shared") }
+
+    public static func load() -> [Share] {
+        (try? Data(contentsOf: file)).flatMap { try? JSON.decoder.decode([Share].self, from: $0) } ?? []
+    }
+
+    public static func save(_ shares: [Share]) throws {
+        try JSON.encoder.encode(shares).write(to: file, options: .atomic)
     }
 }

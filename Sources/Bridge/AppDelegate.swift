@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     var server: Server?
     var window: MainWindow!
     let link = Link()
+    lazy var sharing = Sharing(link: link, model: model)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let server = Server { [self] request, reply in
@@ -29,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
         self.server = server
         link.onWords = { [weak self] name, words in self?.askToPair(name, words) }
+        _ = sharing
         link.start()
         if model.scope == .waiting, model.bridges(in: .waiting).isEmpty { model.scope = .all }
         let remembered = Model.remembered("selected") as? String
@@ -182,6 +184,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             reply(.ok(link.state))
         case .peers:
             reply(.ok(link.state))
+        case .share(let loc):
+            do { reply(.ok(try sharing.share(loc))) } catch { reply(.error("\(error)")) }
         case .command(let name, let argument):
             guard Env.test else { reply(.error("test mode only")); return }
             if name == "pair-confirm" || name == "pair-cancel" { link.answer(name == "pair-confirm"); reply(.ok(state())); return }

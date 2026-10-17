@@ -10,6 +10,7 @@ export XDG_STATE_HOME="$CASE_DIR/state"
 export BRIDGE_TEST=1
 export BRIDGE_DEV_APP="$ROOT/build.noindex/Bridge Dev.app"
 export BRIDGE_SESSION="test-$CASE_NAME"
+export BRIDGE_LINK_GROUP="$CASE_NAME"
 export BRIDGE_SCREEN="${BRIDGE_SCREEN-Test Screen}"
 FAILS=0
 CHECKS=0

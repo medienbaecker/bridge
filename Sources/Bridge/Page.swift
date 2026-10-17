@@ -307,6 +307,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
             collidingClasses = (classes?["both"] as? [String]) ?? []
             if let t = body["title"] as? String, !t.isEmpty, viewingVersion == nil, !buildFailed, !preview { title = t; model.setTitle(t, for: location) }
             checkFrames()
+            model.onReady(self)
             fallthrough
         case "shape":
             if !preview, viewingVersion == nil, !buildFailed, !missing, let shape = body["shape"] as? String {
@@ -341,6 +342,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
             replyHandler(nil, nil)
         case "cursor":
             cursor = JSONValue(any: body["anchor"] ?? NSNull())
+            model.onCursor(location, cursor)
             replyHandler(nil, nil)
         case "size":
             if kind == .image, !preview, let w = body["width"] as? Int, let h = body["height"] as? Int {
