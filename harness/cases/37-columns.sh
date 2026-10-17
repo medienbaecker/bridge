@@ -34,7 +34,7 @@ bridge --quit >/dev/null 2>&1; sleep 0.5; "$exe" >/dev/null 2>&1 & sleep 0.3; wa
 check_json "a relaunch comes back to the same column and bridge" "$(bridge --state)" '.projects.scope + " " + (.selected | split("/") | last)' "all k1.html"
 mk drafts "Draft 1" d1; (cd "$CASE_DIR/drafts" && bridge d1.html); wait_ready; settle 0.4
 check_json "a bridge presented into a project All shows stays in All and heads it" "$(bridge --state)" '(.projects.scope == "all") and (.bridgesColumn[0] | endswith("d1.html"))' "true"
-bridge --do project "$(bridge --state | jq -r '[.projects.rows[] | select(.name == "inbox") | .key][0]')" >/dev/null; settle 0.3
+bridge --do project "project:$(cd "$CASE_DIR/inbox" && pwd -P)" >/dev/null; settle 0.3
 mk drafts "Draft 2" d2; (cd "$CASE_DIR/drafts" && bridge d2.html); wait_ready; settle 0.4
 check_json "presented into a project the column does not show, the column moves to it" "$(bridge --state)" '(.projects.scope | endswith("/drafts")) and (.bridgesColumn[0] | endswith("d2.html"))' "true"
 # At the narrowest sidebar, the longest project name is whole: its ink ends inside the column.
