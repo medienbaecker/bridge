@@ -35,3 +35,30 @@ func scratch() throws -> URL {
     let bundle = PageBundle(html: "", files: ["files/../../evil": Data()])
     #expect(throws: PageBundle.Unsafe.self) { try bundle.install(into: try scratch()) }
 }
+
+@Test func aRewriteFromTheOtherMacPointsBackAtTheOriginalFiles() throws {
+    let here = try scratch(), elsewhere = try scratch(), there = try scratch(), mine = try scratch()
+    try Data("far".utf8).write(to: elsewhere.appendingPathComponent("far.png"))
+    let page = here.appendingPathComponent("page.html")
+    try Data(#"<h1>One</h1><img src="\#(elsewhere.path)/far.png">"#.utf8).write(to: page)
+    let sent = try PageBundle.make(page: page)
+
+    let copy = try sent.install(into: there)
+    let html = try String(contentsOf: copy, encoding: .utf8).replacingOccurrences(of: "One", with: "Two")
+    try Data((html + #"<img src="files/new.png">"#).utf8).write(to: copy)
+    try Data("new".utf8).write(to: there.appendingPathComponent("files/new.png"))
+    let back = try PageBundle.make(page: copy)
+    #expect(Set(back.files.keys) == Set(sent.files.keys).union(["files/new.png"]))
+
+    let restored = PageBundle.restore(back.html, origins: sent.origins, folder: mine)
+    #expect(restored.contains("<h1>Two</h1>"))
+    #expect(restored.contains("\(elsewhere.path)/far.png"))
+    #expect(restored.contains("\(mine.path)/files/new.png"))
+    try Data(restored.utf8).write(to: page)
+    var origins = sent.origins
+    origins["files/new.png"] = mine.appendingPathComponent("files/new.png").path
+    try FileManager.default.createDirectory(at: mine.appendingPathComponent("files"), withIntermediateDirectories: true)
+    try Data("new".utf8).write(to: mine.appendingPathComponent("files/new.png"))
+    let again = try PageBundle.make(page: page, known: Dictionary(uniqueKeysWithValues: origins.map { ($0.value, $0.key) }))
+    #expect(again.html == back.html)
+}

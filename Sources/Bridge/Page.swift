@@ -276,6 +276,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         guard kind.isDocument, kind != .jsx, let data = try? Data(contentsOf: URL(fileURLWithPath: location)), data != lastContent else { return }
         let previous = lastContent
         lastContent = data
+        if kind == .html { model.onRewrite(self) }
         guard viewingVersion == nil else { return }
         var html = kind == .html ? String(decoding: data, as: UTF8.self) : wrapped(data)
         var before = kind == .html ? String(decoding: previous ?? Data(), as: UTF8.self) : wrapped(previous)

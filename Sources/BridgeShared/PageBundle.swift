@@ -5,6 +5,9 @@ import BridgeCore
 public struct PageBundle: Codable, Equatable, Sendable {
     public var html: String
     public var files: [String: Data]
+    public var origins: [String: String] = [:]
+
+    enum CodingKeys: String, CodingKey { case html, files }
 
     public static let limit = 50 * 1024 * 1024
 
@@ -14,21 +17,39 @@ public struct PageBundle: Codable, Equatable, Sendable {
 
     static let reference = try! NSRegularExpression(pattern: #"(\b(?:src|href|poster)\s*=\s*)(["'])([^"']*)\2"#, options: .caseInsensitive)
 
-    public static func make(page: URL) throws -> PageBundle {
+    public static func make(page: URL, known: [String: String] = [:]) throws -> PageBundle {
         var html = String(decoding: try Data(contentsOf: page), as: UTF8.self)
         let folder = page.deletingLastPathComponent()
         var files: [String: Data] = [:]
+        var origins: [String: String] = [:]
         var total = 0
         let source = html
         for m in reference.matches(in: source, range: NSRange(source.startIndex..., in: source)).reversed() {
             guard let range = Range(m.range(at: 3), in: source), let path = local(String(source[range]), in: folder) else { continue }
             let data = try Data(contentsOf: URL(fileURLWithPath: path))
-            let name = "files/" + digest(path) + "-" + (path as NSString).lastPathComponent
+            let given = String(source[range])
+            let name = given.hasPrefix("files/") && path == folder.appendingPathComponent(given).standardizedFileURL.path
+                ? given : known[path] ?? "files/" + digest(path) + "-" + (path as NSString).lastPathComponent
+            origins[name] = path
             if files[name] == nil { total += data.count; files[name] = data }
             guard total <= limit else { throw TooLarge(bytes: total) }
             html.replaceSubrange(Range(m.range(at: 3), in: html)!, with: name)
         }
-        return PageBundle(html: html, files: files)
+        var bundle = PageBundle(html: html, files: files)
+        bundle.origins = origins
+        return bundle
+    }
+
+    public static func restore(_ html: String, origins: [String: String], folder: URL) -> String {
+        var out = html
+        for m in reference.matches(in: html, range: NSRange(html.startIndex..., in: html)).reversed() {
+            guard let range = Range(m.range(at: 3), in: html) else { continue }
+            let value = String(html[range])
+            guard value.hasPrefix("files/") else { continue }
+            let name = String(value[..<(value.firstIndex { $0 == "?" || $0 == "#" } ?? value.endIndex)])
+            out.replaceSubrange(Range(m.range(at: 3), in: out)!, with: origins[name] ?? folder.appendingPathComponent(name).path)
+        }
+        return out
     }
 
     public func install(into dir: URL) throws -> URL {
@@ -70,6 +91,7 @@ public struct PageBundle: Codable, Equatable, Sendable {
 
     public struct Unsafe: Error, CustomStringConvertible {
         public let name: String
+        public init(name: String) { self.name = name }
         public var description: String { "refused a shared file named \(name)" }
     }
 }
@@ -79,10 +101,14 @@ public struct Share: Codable, Equatable, Sendable {
     public var location: String
     public var from: String
     public var title: String
+    public var origins: [String: String]?
+    public var synced: String?
 
     public init(id: String, location: String, from: String, title: String) {
         self.id = id; self.location = location; self.from = from; self.title = title
     }
+
+    public var received: Bool { location.hasPrefix(Paths.shared.path + "/") }
 }
 
 public enum Shares {

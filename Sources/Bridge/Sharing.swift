@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 import BridgeCore
 import BridgeShared
 
@@ -19,6 +20,7 @@ final class Sharing {
         link.onDrop = { [weak self] peer in self?.dropped(peer) }
         link.onConnect = { [weak self] _ in self?.sendRecords() }
         model.onSaved = { [weak self] page in self?.saved(page) }
+        model.onRewrite = { [weak self] page in self?.rewritten(page) }
     }
 
     func share(at location: String) -> String? { shares.first { $0.location == location }?.id }
@@ -28,10 +30,8 @@ final class Sharing {
         let bundle = try PageBundle.make(page: URL(fileURLWithPath: location))
         let title = model.listing.entry(location)?.title ?? BridgeEntry.defaultTitle(location)
         let id = share(at: location) ?? UUID().uuidString
-        if share(at: location) == nil {
-            shares.append(Share(id: id, location: location, from: Person.current, title: title))
-            try Shares.save(shares)
-        }
+        if share(at: location) == nil { shares.append(Share(id: id, location: location, from: Person.current, title: title)) }
+        try update(id) { $0.origins = bundle.origins; $0.synced = Self.hash(bundle.html) }
         let rec = try record(id) ?? SharedRecord(person: Person.current)
         records[id] = rec
         try rec.absorb(model.page(for: location).sidecar)
@@ -44,6 +44,46 @@ final class Sharing {
         if let page = model.pages[location], page.ready { ready(page) }
         model.onChange()
         return .object(["share": .string(id), "to": .array(link.sessions.values.map { .string($0.peer.name) })])
+    }
+
+    static func hash(_ html: String) -> String { SHA256.hash(data: Data(html.utf8)).map { String(format: "%02x", $0) }.joined() }
+
+    func update(_ id: String, _ change: (inout Share) -> Void) throws {
+        guard let i = shares.firstIndex(where: { $0.id == id }) else { return }
+        change(&shares[i])
+        try Shares.save(shares)
+    }
+
+    func rewritten(_ page: Page) {
+        guard let share = shares.first(where: { $0.location == page.location }) else { return }
+        let known = Dictionary((share.origins ?? [:]).map { ($0.value, $0.key) }, uniquingKeysWith: { a, _ in a })
+        guard let bundle = try? PageBundle.make(page: URL(fileURLWithPath: share.location), known: known), Self.hash(bundle.html) != share.synced else { return }
+        try? update(share.id) { $0.origins = ($0.origins ?? [:]).merging(bundle.origins) { a, _ in a }; $0.synced = Self.hash(bundle.html) }
+        link.send([
+            "kind": .string("page"), "share": .string(share.id), "by": .string(Person.current),
+            "html": .string(bundle.html), "files": .object(bundle.files.mapValues { .string($0.base64EncodedString()) }),
+        ])
+    }
+
+    func receivePage(_ id: String, _ message: [String: JSONValue]) throws {
+        guard let share = shares.first(where: { $0.id == id }), let html = message["html"]?.stringValue, case .object(let encoded)? = message["files"] else { return }
+        var files: [String: Data] = [:]
+        for (name, value) in encoded { files[name] = value.stringValue.flatMap { Data(base64Encoded: $0) } ?? Data() }
+        let folder = Shares.folder.appendingPathComponent(id)
+        try update(id) { $0.synced = Self.hash(html) }
+        if share.received {
+            _ = try PageBundle(html: html, files: files).install(into: folder)
+            return
+        }
+        var origins = share.origins ?? [:]
+        try FileManager.default.createDirectory(at: folder.appendingPathComponent("files"), withIntermediateDirectories: true)
+        for (name, data) in files where origins[name] == nil {
+            guard name.hasPrefix("files/"), !name.contains(".."), !name.dropFirst(6).contains("/") else { throw PageBundle.Unsafe(name: name) }
+            try data.write(to: folder.appendingPathComponent(name), options: .atomic)
+            origins[name] = folder.appendingPathComponent(name).path
+        }
+        try update(id) { $0.origins = origins }
+        try Data(PageBundle.restore(html, origins: origins, folder: folder).utf8).write(to: URL(fileURLWithPath: share.location), options: .atomic)
     }
 
     func recordURL(_ id: String) -> URL { Shares.folder.appendingPathComponent(id).appendingPathComponent("record.automerge") }
@@ -151,6 +191,8 @@ final class Sharing {
                 try install(id, message, from: peer)
                 try merge(id, message["record"]?.stringValue)
             } catch { Env.log("share from \(peer.name): \(error)") }
+        case "page":
+            do { try receivePage(id, message) } catch { Env.log("page from \(peer.name): \(error)") }
         case "record":
             do { try merge(id, message["record"]?.stringValue) } catch { Env.log("record from \(peer.name): \(error)") }
         default:
@@ -165,10 +207,8 @@ final class Sharing {
         let page = try PageBundle(html: html, files: files).install(into: Shares.folder.appendingPathComponent(id)).path
         let from = message["from"]?.stringValue ?? peer.name
         let title = message["title"]?.stringValue ?? "Shared page"
-        if share(at: page) == nil {
-            shares.append(Share(id: id, location: page, from: from, title: title))
-            try Shares.save(shares)
-        }
+        if share(at: page) == nil { shares.append(Share(id: id, location: page, from: from, title: title)) }
+        try update(id) { $0.synced = Self.hash(html) }
         if model.listing.entry(page) == nil {
             var entry = BridgeEntry(location: page, project: "Shared by \(from)", session: "")
             entry.title = title
