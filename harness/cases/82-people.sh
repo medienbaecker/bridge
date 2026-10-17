@@ -12,22 +12,26 @@ page=$(fixture decision.html)
 (cd "$CASE_DIR/pages" && bridge decision.html)
 wait_ready
 
+printf '{"session_id":"her-private","hook_event_name":"SessionStart","cwd":"%s"}' "$CASE_DIR/her-project" | b --hook session
 people() { bridge --state | jq -c '[.projects.people[] | .key + (if .connected == null then "" else (if .connected then " ●" else " ○" end) end) + (if .detail then " " + .name + " / " + .detail else "" end)]'; }
-for i in $(seq 1 60); do people | grep -q 'remote:yoshie:her-agent' && break; sleep 0.25; done
-check "the sidebar shows you, her, and her agent under her" "$(people)" '["me","person:yoshie ●","remote:yoshie:her-agent Plan the footer / her-project · idle"]'
-snap people "People and their agents"
+sleep 4
+check "her agents stay private until one holds a shared page" "$(people)" '["me","person:yoshie ●"]'
 
-bridge --do dropon "$page|remote:yoshie:her-agent" >/dev/null
+bridge --do dropon "$page|person:yoshie" >/dev/null
 there=""
 for i in $(seq 1 80); do there=$(ls "$CASE_DIR"/state-b/bridge-dev/shared/*/page.html 2>/dev/null | head -1); [ -n "$there" ] && break; sleep 0.25; done
-check "dropping a page on her agent shares it" "$([ -n "$there" ] && echo yes)" "yes"
-for i in $(seq 1 40); do [ "$(AGENT=someone-else b --read "$there" | jq -r '.heldBy')" = "her-agent" ] && break; sleep 0.25; done
-check "and hands it to that agent on her Mac" "$(AGENT=someone-else b --read "$there" | jq -r '.heldBy')" "her-agent"
+check "dropping a page on her shares it" "$([ -n "$there" ] && echo yes)" "yes"
+b --do drop "$there|her-agent" >/dev/null
+for i in $(seq 1 60); do people | grep -q 'remote:yoshie:her-agent' && break; sleep 0.25; done
+check "once she hands it to an agent, that agent shows under her, and only that one" "$(people)" '["me","person:yoshie ●","remote:yoshie:her-agent Plan the footer / her-project · idle"]'
+snap people "Her agent shows once it holds a shared page"
 
 other=$(fixture decision.html second.html)
 (cd "$CASE_DIR/pages" && bridge second.html)
 wait_ready
-bridge --do dropon "$other|person:yoshie" >/dev/null
+bridge --do dropon "$other|remote:yoshie:her-agent" >/dev/null
 for i in $(seq 1 80); do [ "$(ls "$CASE_DIR"/state-b/bridge-dev/shared/*/page.html | wc -l | tr -d ' ')" = "2" ] && break; sleep 0.25; done
-check "dropping a page on her shares it" "$(ls "$CASE_DIR"/state-b/bridge-dev/shared/*/page.html | wc -l | tr -d ' ')" "2"
+second=$(ls -t "$CASE_DIR"/state-b/bridge-dev/shared/*/page.html | head -1)
+for i in $(seq 1 40); do [ "$(AGENT=someone-else b --read "$second" | jq -r '.heldBy')" = "her-agent" ] && break; sleep 0.25; done
+check "dropping another page on her agent shares it and hands it to that agent" "$(AGENT=someone-else b --read "$second" | jq -r '.heldBy')" "her-agent"
 finish

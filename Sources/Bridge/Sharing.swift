@@ -301,7 +301,10 @@ final class Sharing {
     }
 
     func announceAgents() {
-        let list: [JSONValue] = model.agents().map { live in
+        let holding = Set(shares.compactMap { share in
+            (model.pages[share.location]?.sidecar ?? Sidecar.peek(Paths.sidecar(for: share.location))).presented?.session
+        })
+        let list: [JSONValue] = model.agents().filter { holding.contains($0.session) }.map { live in
             .object(["session": .string(live.session), "title": .string(model.agentTitle(live.session, cwd: live.cwd)),
                      "detail": .string(model.agentDetail(live.session, cwd: live.cwd, life: live.life))])
         }
