@@ -266,6 +266,14 @@ bug with the markup that caused it, and suggest filing it at
 https://github.com/medienbaecker/bridge/issues. Do not work around it by renaming the
 file or rebuilding the page in another shape; the next agent hits it again.
 
+## Shared pages
+
+The user may share a page with someone on another Mac. Then `--read` also
+returns `people`, each person's picks by name, and `answers` stays this
+user's own. A page that arrived from them sits in their list under
+"Shared by …"; reading it makes you its holder. Rewrites travel both ways.
+See cli.md "Shared pages".
+
 ## Ending a bridge
 
 Taking the answer does not end it. When you have **acted** on the user's
