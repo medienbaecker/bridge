@@ -127,3 +127,5 @@ html[data-bridge-pointing] * { cursor: crosshair !important; }
 .bridge-cursor-off[data-off="down"] span::before { content: "↓ "; }
 .bridge-cursor-off[data-off="left"] span::before { content: "← "; }
 .bridge-cursor-off[data-off="right"] span::before { content: "→ "; }
+.bridge-pick-draft { font-style: italic; }
+.bridge-pick-draft::after { content: "…"; }

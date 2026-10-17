@@ -43,6 +43,7 @@ final class Model {
     var onReady: (Page) -> Void = { _ in }
     var onSaved: (Page) -> Void = { _ in }
     var onRewrite: (Page) -> Void = { _ in }
+    var onDraft: (String, String, JSONValue) -> Void = { _, _, _ in }
     var waiters: [Waiter] = []
     var lives: [String: ClaudeSessions.Life] = [:]
 

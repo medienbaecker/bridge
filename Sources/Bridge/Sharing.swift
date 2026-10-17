@@ -10,6 +10,7 @@ final class Sharing {
     var cursors: [String: [String: JSONValue]] = [:]
     var colours: [String: String] = [:]
     var records: [String: SharedRecord] = [:]
+    var drafts: [String: [String: [String: JSONValue]]] = [:]
 
     init(link: Link, model: Model) {
         self.link = link
@@ -21,6 +22,10 @@ final class Sharing {
         link.onConnect = { [weak self] _ in self?.sendRecords() }
         model.onSaved = { [weak self] page in self?.saved(page) }
         model.onRewrite = { [weak self] page in self?.rewritten(page) }
+        model.onDraft = { [weak self] location, key, value in
+            guard let self, let id = self.share(at: location) else { return }
+            self.link.send(["kind": .string("draft"), "share": .string(id), "person": .string(Person.current), "key": .string(key), "value": value])
+        }
     }
 
     func share(at location: String) -> String? { shares.first { $0.location == location }?.id }
@@ -147,8 +152,10 @@ final class Sharing {
     func drawPeople(_ id: String) {
         guard let share = shares.first(where: { $0.id == id }), let page = model.pages[share.location], page.ready, let rec = records[id] else { return }
         let people = (try? rec.people) ?? [:]
-        let list: [JSONValue] = people.keys.sorted().filter { $0 != Person.current }.map { person in
-            .object(["person": .string(person), "color": colours[person].map { .string($0) } ?? .null, "answers": .object(people[person] ?? [:])])
+        let typing = drafts[id] ?? [:]
+        let list: [JSONValue] = Set(people.keys).union(typing.keys).sorted().filter { $0 != Person.current }.map { person in
+            .object(["person": .string(person), "color": colours[person].map { .string($0) } ?? .null,
+                     "answers": .object(people[person] ?? [:]), "drafts": .object(typing[person] ?? [:])])
         }
         page.call("__bridge.people(list)", ["list": page.any(.array(list))])
     }
@@ -191,6 +198,11 @@ final class Sharing {
                 try install(id, message, from: peer)
                 try merge(id, message["record"]?.stringValue)
             } catch { Env.log("share from \(peer.name): \(error)") }
+        case "draft":
+            guard let person = message["person"]?.stringValue, let key = message["key"]?.stringValue else { return }
+            let value = message["value"] ?? .null
+            drafts[id, default: [:]][person, default: [:]][key] = value == .null ? nil : value
+            drawPeople(id)
         case "page":
             do { try receivePage(id, message) } catch { Env.log("page from \(peer.name): \(error)") }
         case "record":
@@ -220,6 +232,10 @@ final class Sharing {
     }
 
     func dropped(_ peer: Peer) {
+        for id in drafts.keys where drafts[id]?[peer.name] != nil {
+            drafts[id]?[peer.name] = nil
+            drawPeople(id)
+        }
         for id in cursors.keys where cursors[id]?[peer.name] != nil {
             cursors[id]?[peer.name] = nil
             draw(id)

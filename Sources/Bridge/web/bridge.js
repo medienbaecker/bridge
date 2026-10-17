@@ -1106,12 +1106,33 @@ function __bridgeInit(options) {
   }
 
   const people = { list: [] };
+  const drafts = { timer: null };
+
+  function draftable(el) {
+    return el && !ours(el) && el.dataset.record && el.dataset.value === undefined &&
+      (el.matches('input:not([type=radio]):not([type=checkbox]), textarea') || el.isContentEditable);
+  }
+
+  document.addEventListener('input', (e) => {
+    const el = e.target.closest?.('[data-record]');
+    if (!cursors.tracking || !draftable(el)) return;
+    const value = el.isContentEditable ? el.textContent : el.value;
+    clearTimeout(drafts.timer);
+    drafts.timer = setTimeout(() => post('draft', { key: el.dataset.record, value }), 60);
+  }, true);
+  document.addEventListener('focusout', (e) => {
+    const el = e.target.closest?.('[data-record]');
+    if (!cursors.tracking || !draftable(el)) return;
+    clearTimeout(drafts.timer);
+    post('draft', { key: el.dataset.record, value: null });
+  }, true);
 
   function drawPeople() {
     for (const dot of document.querySelectorAll('.bridge-pick')) dot.remove();
     const colors = colorsFor(people.list);
     for (const p of people.list) {
-      for (const [key, value] of Object.entries(p.answers || {})) {
+      const typing = p.drafts || {};
+      for (const [key, value] of Object.entries({ ...(p.answers || {}), ...typing })) {
         const els = [...document.querySelectorAll(`[data-record="${CSS.escape(key)}"]`)].filter((el) => !ours(el));
         const radio = els.find((el) => el.matches('input[type=radio]') && el.value === String(value));
         const card = els.find((el) => el.dataset.value !== undefined && el.dataset.value === String(value)) || radio?.parentElement;
@@ -1124,6 +1145,7 @@ function __bridgeInit(options) {
         else if (els.length) {
           dot.textContent = `${p.person}: ${typeof value === 'string' ? value : JSON.stringify(value)}`;
           dot.classList.add('bridge-pick-value');
+          if (key in typing) { dot.classList.add('bridge-pick-draft'); dot.title = `${p.person} is typing`; }
           els[els.length - 1].insertAdjacentElement('afterend', dot);
         }
       }

@@ -341,6 +341,9 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
                 watch()
             }
             replyHandler(nil, nil)
+        case "draft":
+            if let key = body["key"] as? String { model.onDraft(location, key, JSONValue(any: body["value"] ?? NSNull())) }
+            replyHandler(nil, nil)
         case "cursor":
             cursor = JSONValue(any: body["anchor"] ?? NSNull())
             model.onCursor(location, cursor)
