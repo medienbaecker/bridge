@@ -14,6 +14,7 @@ bridge --do window >/dev/null; settle 0.4
 s=$(bridge --state)
 check_json "the bridge has a window of its own" "$s" '[.pageWindows[] | select(.location | endswith("/p1.html"))] | length' "1"
 check_json "that window shows the page, titled after it" "$s" '.pageWindows[0] | .showsPage and .visible and .title == "Page 1"' "true"
+check_json "it opens beside the main window, on the harness's screen" "$s" '(.pageWindows[0].topLeft[0] - .windowFrame.x | fabs) < 100' "true"
 check_json "the main window shows the placeholder instead" "$s" '.contentShowsPage' "false"
 check_json "Send in the main window is off while the page is away" "$s" '[.toolbar[] | select(.id == "send")][0].enabled' "false"
 
@@ -29,7 +30,9 @@ check "closing the window is not an answer" "$(bridge --read "$p1" | jq -r '.sta
 bridge --do select "$p1" >/dev/null; settle 0.2
 check_json "the page is back in the main window" "$(bridge --state)" '.contentShowsPage' "true"
 
-bridge --do dragout "$p2 400 700" >/dev/null; settle 0.4
+main=$(bridge --state | jq -r '.windowFrame | "\(.x + 120) \(.y + .height - 120)"')
+read -r dropX dropY <<< "$main"
+bridge --do dragout "$p2 $dropX $dropY" >/dev/null; settle 0.4
 check_json "dragged out, it opens with its top left near the drop" "$(bridge --state)" \
-  '.pageWindows[0].topLeft | (.[0] - 400 | fabs) < 2 and (.[1] - 700 | fabs) < 2' "true"
+  ".pageWindows[0].topLeft | (.[0] - $dropX | fabs) < 2 and (.[1] - $dropY | fabs) < 2" "true"
 finish

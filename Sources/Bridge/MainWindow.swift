@@ -243,7 +243,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
             return
         }
         let page = model.page(for: location)
-        let pageWindow = PageWindow(page: page)
+        let pageWindow = PageWindow(page: page, near: window)
         pageWindow.onClose = { [weak self] in
             self?.windows[location] = nil
             self?.refresh()

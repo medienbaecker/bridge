@@ -8,7 +8,7 @@ final class PageWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
     let notesPopover = NSPopover()
     var onClose: () -> Void = {}
 
-    init(page: Page) {
+    init(page: Page, near main: NSWindow?) {
         self.page = page
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 760, height: 720),
@@ -23,7 +23,7 @@ final class PageWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         shouldCascadeWindows = false
         window.contentViewController = content
         window.setContentSize(NSSize(width: 760, height: 720))
-        window.cascadeTopLeft(from: NSApp.keyWindow.map { NSPoint(x: $0.frame.minX, y: $0.frame.maxY) } ?? .zero)
+        window.cascadeTopLeft(from: (NSApp.keyWindow ?? main).map { NSPoint(x: $0.frame.minX, y: $0.frame.maxY) } ?? .zero)
 
         let toolbar = NSToolbar(identifier: "Bridge.page")
         toolbar.delegate = self
