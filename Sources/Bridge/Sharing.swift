@@ -69,9 +69,16 @@ final class Sharing {
         guard let share = shares.first(where: { $0.location == page.location }) else { return }
         let known = Dictionary((share.origins ?? [:]).map { ($0.value, $0.key) }, uniquingKeysWith: { a, _ in a })
         guard let bundle = try? PageBundle.make(page: URL(fileURLWithPath: share.location), known: known), Self.hash(bundle.html) != share.synced else { return }
-        try? update(share.id) { $0.origins = ($0.origins ?? [:]).merging(bundle.origins) { a, _ in a }; $0.synced = Self.hash(bundle.html) }
+        let clock = (share.clock ?? 0) + 1
+        try? update(share.id) {
+            $0.origins = ($0.origins ?? [:]).merging(bundle.origins) { a, _ in a }
+            $0.synced = Self.hash(bundle.html)
+            $0.clock = clock
+            $0.writer = link.me
+        }
         link.send([
             "kind": .string("page"), "share": .string(share.id), "by": .string(Person.current),
+            "clock": .number(Double(clock)), "writer": .string(link.me),
             "html": .string(bundle.html), "files": .object(bundle.files.mapValues { .string($0.base64EncodedString()) }),
         ])
     }
@@ -81,7 +88,9 @@ final class Sharing {
         var files: [String: Data] = [:]
         for (name, value) in encoded { files[name] = value.stringValue.flatMap { Data(base64Encoded: $0) } ?? Data() }
         let folder = Shares.folder.appendingPathComponent(id)
-        try update(id) { $0.synced = Self.hash(html) }
+        let clock = message["clock"]?.intValue ?? 0, writer = message["writer"]?.stringValue ?? ""
+        guard share.older(than: clock, by: writer) else { throw LinkError("an older rewrite arrived after a newer one; kept the newer") }
+        try update(id) { $0.synced = Self.hash(html); $0.clock = clock; $0.writer = writer }
         if share.received {
             _ = try PageBundle(html: html, files: files).install(into: folder)
             return

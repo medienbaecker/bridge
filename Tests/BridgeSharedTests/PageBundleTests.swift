@@ -62,3 +62,14 @@ func scratch() throws -> URL {
     let again = try PageBundle.make(page: page, known: Dictionary(uniqueKeysWithValues: origins.map { ($0.value, $0.key) }))
     #expect(again.html == back.html)
 }
+
+@Test func ofTwoRewritesTheLaterOrTheHigherWriterWinsOnBothMacs() {
+    var share = Share(id: "s", location: "/x", from: "thomas", title: "x")
+    #expect(share.older(than: 1, by: "a"))
+    share.clock = 3; share.writer = "b"
+    #expect(share.older(than: 4, by: "a"))
+    #expect(!share.older(than: 2, by: "z"))
+    #expect(share.older(than: 3, by: "c"))
+    #expect(!share.older(than: 3, by: "a"))
+    #expect(!share.older(than: 3, by: "b"))
+}

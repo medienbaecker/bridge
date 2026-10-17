@@ -103,6 +103,12 @@ public struct Share: Codable, Equatable, Sendable {
     public var title: String
     public var origins: [String: String]?
     public var synced: String?
+    public var clock: Int?
+    public var writer: String?
+
+    public func older(than clock: Int, by writer: String) -> Bool {
+        (self.clock ?? 0, self.writer ?? "") < (clock, writer)
+    }
 
     public init(id: String, location: String, from: String, title: String) {
         self.id = id; self.location = location; self.from = from; self.title = title

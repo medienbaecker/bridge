@@ -42,4 +42,8 @@ check "and his window shows it" "$(h1 bridge "$page")" "Her version"
 
 a=$(shasum "$page" | cut -c1-12); c=$(shasum "$there" | cut -c1-12); sleep 2
 check "nothing bounces back and forth" "$(shasum "$page" | cut -c1-12) $(shasum "$there" | cut -c1-12)" "$a $c"
+sed -i '' 's|<h1>Her version</h1>|<h1>His at the same time</h1>|' "$page" & sed -i '' 's|<h1>Her version</h1>|<h1>Hers at the same time</h1>|' "$there" & wait
+sleep 3
+h_page=$(grep -o '<h1>[^<]*</h1>' "$page"); h_there=$(grep -o '<h1>[^<]*</h1>' "$there")
+check "two rewrites at the same moment end up the same on both Macs" "$h_page" "$h_there"
 finish
