@@ -571,6 +571,51 @@ function __bridgeInit(options) {
     return n;
   }
 
+  // ---- media: local images re-fetched when their file changes
+
+  const mediaAttributes = [['img, video, audio, source', 'src'], ['video', 'poster']];
+  const mediaVersions = {};
+
+  function mediaPath(url) {
+    try {
+      const u = new URL(url, document.baseURI);
+      return u.protocol === 'file:' || u.protocol === 'bridge-file:' ? decodeURIComponent(u.pathname) : null;
+    } catch (e) { return null; }
+  }
+
+  function eachMedia(fn) {
+    for (const [selector, attr] of mediaAttributes) {
+      for (const el of document.querySelectorAll(selector)) {
+        const value = el.getAttribute(attr);
+        const path = value && mediaPath(value);
+        if (path) fn(el, attr, value, path);
+      }
+    }
+  }
+
+  function reportMedia() {
+    const paths = new Set();
+    eachMedia((el, attr, value, path) => paths.add(path));
+    post('media', { paths: [...paths] });
+  }
+
+  function applyMediaVersions() {
+    eachMedia((el, attr, value, path) => {
+      const v = mediaVersions[path];
+      if (!v) return;
+      const u = new URL(value, document.baseURI);
+      if (u.searchParams.get('bridge-v') === v) return;
+      u.searchParams.set('bridge-v', v);
+      el.setAttribute(attr, u.href);
+      if (el.localName === 'source') el.parentElement?.load?.();
+    });
+  }
+
+  function refreshMedia(changed) {
+    Object.assign(mediaVersions, changed);
+    applyMediaVersions();
+  }
+
   async function patch(html, previous) {
     const doc = new DOMParser().parseFromString(html, 'text/html');
     if (currentScripts === null) currentScripts = scriptSignature(document);
@@ -589,6 +634,8 @@ function __bridgeInit(options) {
     renderMarkdown();
     highlight();
     enhance();
+    applyMediaVersions();
+    reportMedia();
     applyAnswers(state.answers);
     const s = shape();
     const payload = await post('shape', s);
@@ -990,6 +1037,7 @@ function __bridgeInit(options) {
     drive,
     applyDrives,
     frameRefused,
+    refreshMedia,
   };
   globalThis.__bridgeNotes = notes;
 
@@ -1064,6 +1112,7 @@ function __bridgeInit(options) {
     const payload = await post('ready', { title: document.title, classes: auditClasses(), ...shape() });
     apply(payload);
     propose(proposed);
+    reportMedia();
   }
   // A page using bridge.ready() restores itself in its callbacks; hash it after
   // that, so the keys it read are questions from the first fingerprint on.

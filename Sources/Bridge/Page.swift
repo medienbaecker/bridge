@@ -44,6 +44,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
     var unreadable: String?
     var lastData: Data?
     var watcher: Watcher?
+    var media: [String: Date] = [:]
     var buildFailed = false
     var buildMs: Int?
     var frames: [WKFrameInfo] = []
@@ -81,11 +82,28 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         webView.navigationDelegate = self
         webView.uiDelegate = self
         webView.setValue(false, forKey: "drawsBackground")
-        if kind != .url, !preview {
-            let dir = URL(fileURLWithPath: location).deletingLastPathComponent()
-            let files = [location, sidecarURL.path, Paths.dataFile(for: location).path]
-            watcher = Watcher(directory: dir, files: files) { [weak self] in self?.fileChanged() }
+        if kind != .url, !preview { watch() }
+    }
+
+    func watch() {
+        let dir = URL(fileURLWithPath: location).deletingLastPathComponent()
+        let folders = Set(media.keys.map { ($0 as NSString).deletingLastPathComponent }).subtracting([dir.path])
+        let files = [location, sidecarURL.path, Paths.dataFile(for: location).path] + media.keys.sorted() + folders.sorted()
+        watcher = Watcher(directory: dir, files: files) { [weak self] in self?.fileChanged() }
+    }
+
+    static func stamp(_ path: String) -> Date? {
+        (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date
+    }
+
+    func refreshMedia() {
+        var changed: [String: String] = [:]
+        for (path, was) in media {
+            guard let now = Self.stamp(path), now != was else { continue }
+            media[path] = now
+            changed[path] = String(Int(now.timeIntervalSince1970 * 1000))
         }
+        if !changed.isEmpty { call("__bridge.refreshMedia(changed)", ["changed": changed]) }
     }
 
     func installScripts() {
@@ -219,6 +237,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
 
     func fileChanged() {
         guard kind != .url else { return }
+        refreshMedia()
         if let data = try? Data(contentsOf: sidecarURL), data != lastWritten, data != sidecar.data() {
             lastWritten = data
             do { sidecar = try Sidecar.load(sidecarURL); unreadable = nil } catch { unreadable = "\(error)" }
@@ -299,6 +318,13 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
                 let d: [String: Any] = ["prop": prop, "value": value, "target": body["target"] as? String ?? NSNull()]
                 drives[prop] = d
                 for frame in frames { call("__bridge.drive(prop, value, target)", d, in: frame) }
+            }
+            replyHandler(nil, nil)
+        case "media":
+            let paths = Set(body["paths"] as? [String] ?? [])
+            if !preview, kind != .url, paths != Set(media.keys) {
+                media = Dictionary(uniqueKeysWithValues: paths.compactMap { p in Self.stamp(p).map { (p, media[p] ?? $0) } })
+                watch()
             }
             replyHandler(nil, nil)
         case "size":
