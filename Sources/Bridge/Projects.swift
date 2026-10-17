@@ -4,7 +4,7 @@ import BridgeCore
 /// The left column: the two smart scopes, then the projects with their waiting
 /// counts, and the update row at its foot.
 final class ProjectsController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
-    enum Row: Equatable { case scope(Scope), heading(String), person(String), more(Int), remote(peer: String, session: String, title: String, detail: String) }
+    enum Row: Equatable { case scope(Scope), heading(String), person(String), more(Int) }
 
     var sharing: Sharing? { (NSApp.delegate as? AppDelegate)?.sharing }
 
@@ -65,17 +65,9 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
         reloading = true
         defer { reloading = false }
         rows = [.scope(.waiting), .scope(.all), .person("")]
-        let agents = model.agents()
         let mine = model.listing.projects.filter { !$0.hasPrefix("Shared by ") }
-        var active = mine.filter { p in model.listing.bridges.contains { $0.project == p && !$0.crossed } }
-        for agent in agents {
-            if let root = model.projectRoot(of: agent.session, cwd: agent.cwd), !active.contains(root) { active.append(root) }
-        }
-        for project in active {
-            rows.append(.scope(.project(project)))
-            rows += agents.filter { model.projectRoot(of: $0.session, cwd: $0.cwd) == project }.map { .scope(.agent($0.session)) }
-        }
-        rows += agents.filter { model.projectRoot(of: $0.session, cwd: $0.cwd) == nil }.map { .scope(.agent($0.session)) }
+        let active = mine.filter { p in model.listing.bridges.contains { $0.project == p && !$0.crossed } }
+        rows += active.map { .scope(.project($0)) }
         let rest = mine.filter { !active.contains($0) }
         if !rest.isEmpty {
             if model.showAllProjects { rows += rest.map { .scope(.project($0)) }; rows.append(.more(0)) } else { rows.append(.more(rest.count)) }
@@ -84,9 +76,6 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
             for peer in sharing.link.peers where !sharing.link.refused.contains(peer.id) {
                 rows.append(.person(peer.id))
                 if model.listing.projects.contains("Shared by \(peer.name)") { rows.append(.scope(.project("Shared by \(peer.name)"))) }
-                for agent in sharing.peerAgents[peer.id] ?? [] {
-                    rows.append(.remote(peer: peer.id, session: agent["session"]?.stringValue ?? "", title: agent["title"]?.stringValue ?? "", detail: agent["detail"]?.stringValue ?? ""))
-                }
             }
         }
         table.reloadData()
@@ -150,11 +139,8 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
     func numberOfRows(in tableView: NSTableView) -> Int { rows.count }
 
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
-        switch rows[row] {
-        case .heading: return 24
-        case .scope(.agent), .remote: return 40
-        default: return 28
-        }
+        if case .heading = rows[row] { return 24 }
+        return 28
     }
 
     func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool {
@@ -171,7 +157,6 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
     func tableView(_ tableView: NSTableView, validateDrop info: NSDraggingInfo, proposedRow row: Int, proposedDropOperation op: NSTableView.DropOperation) -> NSDragOperation {
         guard op == .on, row < rows.count else { return [] }
         switch rows[row] {
-        case .scope(.agent), .remote: return .move
         case .person(let id): return id.isEmpty || sharing?.link.sessions[id] == nil ? [] : .move
         default: return []
         }
@@ -186,9 +171,7 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
     func drop(_ locations: [String], on row: Row) {
         for location in locations {
             switch row {
-            case .scope(.agent(let session)): model.hand(location, to: session)
             case .person: _ = try? sharing?.share(location)
-            case .remote(let peer, let session, _, _): try? sharing?.handTo(peer, session: session, location: location)
             default: break
             }
         }
@@ -201,17 +184,6 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
             cell.identifier = .init("heading")
             cell.textField?.stringValue = title
             return cell
-        case .scope(.agent(let session)):
-            let live = ClaudeSessions.live().first { $0.session == session }
-            let cell = tableView.makeView(withIdentifier: AgentCell.id, owner: nil) as? AgentCell ?? AgentCell()
-            let n = model.bridges(in: .agent(session)).count
-            cell.show(title: model.agentTitle(session, cwd: live?.cwd ?? ""), detail: model.agentDetail(session, cwd: live?.cwd ?? "", life: live?.life ?? .gone) + (n > 0 ? " · \(n) page\(n == 1 ? "" : "s")" : ""),
-                      tint: live?.life == .working ? .systemOrange : .systemGreen)
-            return cell
-        case .remote(_, _, let title, let detail):
-            let cell = tableView.makeView(withIdentifier: AgentCell.id, owner: nil) as? AgentCell ?? AgentCell()
-            cell.show(title: title, detail: detail, tint: detail.hasSuffix("working") ? .systemOrange : .systemGreen)
-            return cell
         case .person(let id):
             let cell = tableView.makeView(withIdentifier: .init("heading"), owner: nil) as? NSTableCellView ?? SidebarController.headerCell()
             cell.identifier = .init("heading")
@@ -220,7 +192,10 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
                 cell.toolTip = nil
             } else {
                 let connected = sharing?.link.sessions[id] != nil
-                cell.textField?.stringValue = (sharing?.link.peers.first { $0.id == id }?.name.capitalized ?? "Mac") + (connected ? "  ●" : "  ○")
+                let label = NSMutableAttributedString(string: (sharing?.link.peers.first { $0.id == id }?.name.capitalized ?? "Mac") + "  ",
+                                                      attributes: [.font: cell.textField?.font ?? .systemFont(ofSize: 11, weight: .semibold), .foregroundColor: NSColor.secondaryLabelColor])
+                label.append(NSAttributedString(string: connected ? "●" : "○", attributes: [.font: NSFont.systemFont(ofSize: 9), .foregroundColor: connected ? NSColor.systemGreen : NSColor.tertiaryLabelColor]))
+                cell.textField?.attributedStringValue = label
                 cell.toolTip = connected ? "Connected. Drop a page here to share it" : "Not connected right now"
             }
             return cell
@@ -256,7 +231,6 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
         case .scope(let s): return s.key
         case .person(let id): return id.isEmpty ? "me" : "person:" + (sharing?.link.peers.first { $0.id == id }?.name ?? id)
         case .more: return "more"
-        case .remote(let peer, let session, _, _): return "remote:" + (sharing?.link.peers.first { $0.id == peer }?.name ?? peer) + ":" + session
         case .heading: return nil
         }
     }
@@ -267,11 +241,6 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
             switch row {
             case .person(let id) where id.isEmpty: people.append(.object(["key": .string("me"), "name": .string(Person.current)]))
             case .person(let id): people.append(.object(["key": .string(key(row) ?? ""), "connected": .bool(sharing?.link.sessions[id] != nil)]))
-            case .remote(_, _, let title, let detail): people.append(.object(["key": .string(key(row) ?? ""), "name": .string(title), "detail": .string(detail)]))
-            case .scope(.agent(let session)):
-                let live = ClaudeSessions.live().first { $0.session == session }
-                people.append(.object(["key": .string("agent:" + session), "name": .string(model.agentTitle(session, cwd: live?.cwd ?? "")),
-                                       "detail": .string(model.agentDetail(session, cwd: live?.cwd ?? "", life: live?.life ?? .gone))]))
             default: break
             }
         }
@@ -325,7 +294,6 @@ final class ScopeCell: NSTableCellView {
         case .waiting: return "Waiting"
         case .all: return "All"
         case .project(let p): return p.hasPrefix("Shared by ") ? "Shared with you" : (p as NSString).lastPathComponent
-        case .agent(let s): return model.agentLabel(s, cwd: ClaudeSessions.live().first { $0.session == s }?.cwd ?? "")
         }
     }
 
@@ -334,7 +302,6 @@ final class ScopeCell: NSTableCellView {
         case .waiting: return model.waitingCount()
         case .all: return model.listing.bridges.filter { !$0.crossed }.count
         case .project(let p): return model.waitingCount(in: p)
-        case .agent: return model.bridges(in: scope).count
         }
     }
 
@@ -361,55 +328,10 @@ final class ScopeCell: NSTableCellView {
         case .waiting: symbol = "tray.full"
         case .all: symbol = "tray.2"
         case .project: symbol = "folder"
-        case .agent(let s):
-            symbol = "terminal"
-            icon.contentTintColor = ClaudeSessions.life(of: s) == .working ? .systemOrange : .systemGreen
         }
         icon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: Self.name(of: scope, model: model))?.withSymbolConfiguration(.init(pointSize: 13, weight: .regular))
         name.stringValue = Self.name(of: scope, model: model)
         let n = Self.count(of: scope, model: model)
         if case .project = scope { count.stringValue = "" } else { count.stringValue = n > 0 ? "\(n)" : "" }
-    }
-}
-
-final class AgentCell: NSTableCellView {
-    static let id = NSUserInterfaceItemIdentifier("agent")
-    let icon = NSImageView()
-    let title = PlainLabel(labelWithString: "")
-    let detail = PlainLabel(labelWithString: "")
-
-    override var allowsVibrancy: Bool { false }
-
-    init() {
-        super.init(frame: .zero)
-        identifier = Self.id
-        for label in [title, detail] {
-            label.lineBreakMode = .byTruncatingTail
-            label.maximumNumberOfLines = 1
-            label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        }
-        detail.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-        detail.textColor = .secondaryLabelColor
-        for v in [icon, title, detail] { v.translatesAutoresizingMaskIntoConstraints = false; addSubview(v) }
-        textField = title
-        NSLayoutConstraint.activate([
-            icon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18), icon.widthAnchor.constraint(equalToConstant: 16),
-            icon.topAnchor.constraint(equalTo: topAnchor, constant: 5),
-            title.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 6),
-            title.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -10),
-            title.topAnchor.constraint(equalTo: topAnchor, constant: 3),
-            detail.leadingAnchor.constraint(equalTo: title.leadingAnchor),
-            detail.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -10),
-            detail.topAnchor.constraint(equalTo: title.bottomAnchor, constant: 0),
-        ])
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-
-    func show(title: String, detail: String, tint: NSColor) {
-        icon.image = NSImage(systemSymbolName: "terminal", accessibilityDescription: title)?.withSymbolConfiguration(.init(pointSize: 12, weight: .regular))
-        icon.contentTintColor = tint
-        self.title.stringValue = title
-        self.detail.stringValue = detail
     }
 }

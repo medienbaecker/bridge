@@ -436,11 +436,6 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
             guard parts.count == 2, let row = projects.rows.first(where: { projects.key($0) == parts[1] }) else { return false }
             projects.drop([parts[0]], on: row)
             return true
-        case "drop":
-            let parts = (argument ?? "").components(separatedBy: "|")
-            guard parts.count == 2 else { return false }
-            model.hand(parts[0], to: parts[1])
-            return true
         case "share":
             guard let sharing = (NSApp.delegate as? AppDelegate)?.sharing else { return false }
             guard let page = shownPage else { return false }

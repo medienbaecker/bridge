@@ -11,9 +11,6 @@ final class Sharing {
     var colours: [String: String] = [:]
     var records: [String: SharedRecord] = [:]
     var drafts: [String: [String: [String: JSONValue]]] = [:]
-    var peerAgents: [String: [JSONValue]] = [:]
-    var onPeople: () -> Void = {}
-    var beat: Timer?
 
     init(link: Link, model: Model) {
         self.link = link
@@ -22,10 +19,7 @@ final class Sharing {
         model.onReady = { [weak self] page in self?.ready(page) }
         link.onMessage = { [weak self] peer, message in self?.received(message, from: peer) }
         link.onDrop = { [weak self] peer in self?.dropped(peer) }
-        link.onConnect = { [weak self] _ in self?.sendRecords(); self?.announce() }
-        beat = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.announce() }
-        }
+        link.onConnect = { [weak self] _ in self?.sendRecords() }
         model.onSaved = { [weak self] page in self?.saved(page) }
         model.onRewrite = { [weak self] page in self?.rewritten(page) }
         model.onDraft = { [weak self] location, key, value in
@@ -211,7 +205,6 @@ final class Sharing {
         guard let id = share(at: page.location) else { return }
         page.call("__bridge.trackCursor(true)")
         draw(id)
-        announce()
         if (try? record(id)) != nil { drawPeople(id) }
     }
 
@@ -222,10 +215,6 @@ final class Sharing {
     }
 
     func received(_ message: [String: JSONValue], from peer: Peer) {
-        if message["kind"]?.stringValue == "agents", case .array(let list)? = message["list"] {
-            if peerAgents[peer.id] != list { peerAgents[peer.id] = list; onPeople() }
-            return
-        }
         guard let id = message["share"]?.stringValue else { return }
         switch message["kind"]?.stringValue {
         case "cursor":
@@ -254,9 +243,6 @@ final class Sharing {
                     page.call("__bridge.toast(text)", ["text": "\(message["by"]?.stringValue ?? peer.name)'s agent rewrote the page"])
                 }
             } catch { Env.log("page from \(peer.name): \(error)") }
-        case "hand":
-            guard let session = message["session"]?.stringValue, let share = shares.first(where: { $0.id == id }) else { return }
-            model.hand(share.location, to: session)
         case "record":
             do { try merge(id, message["record"]?.stringValue) } catch { Env.log("record from \(peer.name): \(error)") }
         default:
@@ -285,31 +271,7 @@ final class Sharing {
     }
 
 
-    func announceAgents() {
-        let holding = Set(shares.compactMap { share in
-            (model.pages[share.location]?.sidecar ?? Sidecar.peek(Paths.sidecar(for: share.location))).presented?.session
-        })
-        let list: [JSONValue] = model.agents().filter { holding.contains($0.session) }.map { live in
-            .object(["session": .string(live.session), "title": .string(model.agentTitle(live.session, cwd: live.cwd)),
-                     "detail": .string(model.agentDetail(live.session, cwd: live.cwd, life: live.life))])
-        }
-        link.send(["kind": .string("agents"), "list": .array(list)])
-    }
-
-    func handTo(_ peerID: String, session: String, location: String) throws {
-        let id = try (share(at: location).map { JSONValue.string($0) } ?? share(location)["share"]) ?? .null
-        guard let peer = link.sessions[peerID] else { throw LinkError("that Mac isn't connected right now") }
-        peer.send(["kind": .string("hand"), "share": id, "session": .string(session)])
-    }
-
-    func announce() {
-        guard !link.sessions.isEmpty else { return }
-        announceAgents()
-    }
-
     func dropped(_ peer: Peer) {
-        peerAgents[peer.id] = nil
-        onPeople()
         for id in drafts.keys where drafts[id]?[peer.name] != nil {
             drafts[id]?[peer.name] = nil
             drawPeople(id)

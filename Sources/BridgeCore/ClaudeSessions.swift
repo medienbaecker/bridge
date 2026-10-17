@@ -25,51 +25,6 @@ public enum ClaudeSessions {
         try? data.write(to: file, options: .atomic)
     }
 
-    public struct Live: Sendable {
-        public let session: String
-        public let cwd: String
-        public let life: Life
-    }
-
-    public static func live() -> [Live] {
-        let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
-        return files.filter { $0.pathExtension == "json" }.compactMap { file in
-            let session = file.deletingPathExtension().lastPathComponent
-            let life = life(of: session)
-            guard life != .gone, let data = try? Data(contentsOf: file),
-                  let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return nil }
-            return Live(session: session, cwd: obj["cwd"] as? String ?? "", life: life)
-        }
-    }
-
-    nonisolated(unsafe) static var transcripts = ProcessInfo.processInfo.environment["BRIDGE_TRANSCRIPTS"].map { URL(fileURLWithPath: $0) }
-        ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/projects")
-
-    public struct About: Sendable {
-        public let topic: String?
-        public let cwd: String?
-    }
-
-    public static func about(_ session: String) -> About {
-        guard !session.isEmpty, !session.contains("/"),
-              let folders = try? FileManager.default.contentsOfDirectory(at: transcripts, includingPropertiesForKeys: nil),
-              let file = folders.map({ $0.appendingPathComponent("\(session).jsonl") }).first(where: { FileManager.default.fileExists(atPath: $0.path) }),
-              let handle = try? FileHandle(forReadingFrom: file) else { return About(topic: nil, cwd: nil) }
-        defer { try? handle.close() }
-        let head = String(decoding: (try? handle.read(upToCount: 256 * 1024)) ?? Data(), as: UTF8.self)
-        var cwd: String?
-        for line in head.split(separator: "\n") {
-            guard let obj = (try? JSONSerialization.jsonObject(with: Data(line.utf8))) as? [String: Any] else { continue }
-            if cwd == nil { cwd = obj["cwd"] as? String }
-            guard obj["type"] as? String == "user", (obj["isSidechain"] as? Bool) != true,
-                  let text = (obj["message"] as? [String: Any])?["content"] as? String else { continue }
-            let first = text.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: "\n").first.map(String.init) ?? ""
-            guard !first.isEmpty, !first.hasPrefix("<") else { continue }
-            return About(topic: first.count > 48 ? String(first.prefix(47)) + "…" : first, cwd: cwd ?? obj["cwd"] as? String)
-        }
-        return About(topic: nil, cwd: cwd)
-    }
-
     public static func life(of session: String) -> Life {
         autoreleasepool {
             var isDir: ObjCBool = false

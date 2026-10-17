@@ -9,7 +9,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     var window: MainWindow!
     let link = Link()
     lazy var sharing = Sharing(link: link, model: model)
-    var agentsSeen: [String] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let server = Server { [self] request, reply in
@@ -31,7 +30,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
         self.server = server
         link.onChange = { [weak self] in self?.window.updateShare(); self?.window.projects.reload() }
-        sharing.onPeople = { [weak self] in self?.window.projects.reload() }
         _ = sharing
         link.start()
         if model.scope == .waiting, model.bridges(in: .waiting).isEmpty { model.scope = .all }
@@ -65,8 +63,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             ? "\(found.count) agent\(found.count == 1 ? "" : "s") waiting · \(size)" : nil
         if text != pileupText { pileupText = text; window?.projects.showPileup(text) }
         if Set(found.map { "\($0.pid) \($0.session)" }) != listeningBefore || model.lives != livesBefore { window?.sidebar.reload() }
-        let agents = ClaudeSessions.live().map { "\($0.session) \($0.life.rawValue)" }.sorted()
-        if agents != agentsSeen { agentsSeen = agents; window?.projects.reload() }
     }
 
     func applicationDidBecomeActive(_ notification: Notification) { checkUpdate() }
@@ -250,8 +246,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     func state() -> JSONValue {
-        var out: [String: JSONValue] = ["running": .bool(true), "test": .bool(Env.test), "link": link.state,
-            "agents": .array(ClaudeSessions.live().map { .object(["session": .string($0.session), "project": .string(model.agentLabel($0.session, cwd: $0.cwd)), "life": .string($0.life.rawValue)]) })]
+        var out: [String: JSONValue] = ["running": .bool(true), "test": .bool(Env.test), "link": link.state]
         if let page = model.selectedPage {
             out["selected"] = .string(page.location)
             out["title"] = .string(page.title)

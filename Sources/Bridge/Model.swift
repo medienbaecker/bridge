@@ -3,16 +3,15 @@ import BridgeCore
 
 /// What the middle column shows: the bridges waiting on the user, all of them, or one project's.
 enum Scope: Equatable {
-    case waiting, all, project(String), agent(String)
+    case waiting, all, project(String)
 
     var key: String {
-        switch self { case .waiting: return "waiting"; case .all: return "all"; case .project(let p): return "project:" + p; case .agent(let s): return "agent:" + s }
+        switch self { case .waiting: return "waiting"; case .all: return "all"; case .project(let p): return "project:" + p }
     }
 
     init(key: String) {
         if key == "all" { self = .all }
         else if key.hasPrefix("project:") { self = .project(String(key.dropFirst(8))) }
-        else if key.hasPrefix("agent:") { self = .agent(String(key.dropFirst(6))) }
         else { self = .waiting }
     }
 }
@@ -62,7 +61,6 @@ final class Model {
         case .waiting: return all.filter { !$0.crossed && status(of: $0) == "open" && attended($0) }
         case .all: return all.filter { !$0.crossed } + (showCrossed ? all.filter { $0.crossed } : [])
         case .project(let p): return all.filter { $0.project == p && !$0.crossed } + (showCrossed ? all.filter { $0.project == p && $0.crossed } : [])
-        case .agent(let s): return all.filter { $0.session == s && !$0.crossed }
         }
     }
 
@@ -134,74 +132,7 @@ final class Model {
         onChange()
     }
 
-    var projectNames: [String: String] = [:]
-    var projectRoots: [String: String] = [:]
     var showAllProjects: Bool = Model.remembered("showAllProjects") as? Bool ?? false { didSet { Self.remember(showAllProjects, "showAllProjects") } }
-
-    func projectRoot(of session: String, cwd: String) -> String? {
-        let dir = cwd.isEmpty ? (about(session).cwd ?? "") : cwd
-        guard !dir.isEmpty else { return nil }
-        if let root = projectRoots[dir] { return root }
-        let root = Ground.projectRoot(for: dir)
-        projectRoots[dir] = root
-        return root
-    }
-    var abouts: [String: ClaudeSessions.About] = [:]
-
-    func about(_ session: String) -> ClaudeSessions.About {
-        if let known = abouts[session], known.topic != nil { return known }
-        let found = ClaudeSessions.about(session)
-        abouts[session] = found
-        return found
-    }
-
-    func projectName(_ cwd: String) -> String {
-        if let name = projectNames[cwd] { return name }
-        if cwd == NSHomeDirectory() || cwd == FileManager.default.homeDirectoryForCurrentUser.path { return "Home" }
-        let name = (Ground.projectRoot(for: cwd) as NSString).lastPathComponent
-        projectNames[cwd] = name
-        return name
-    }
-
-    func agentName(_ session: String, cwd: String) -> String {
-        if !cwd.isEmpty { return projectName(cwd) }
-        if let known = about(session).cwd { return projectName(known) }
-        if let entry = listing.bridges.filter({ $0.session == session }).max(by: { $0.presentedAt < $1.presentedAt }) { return entry.projectName }
-        return "session \(session.prefix(4))"
-    }
-
-    func agentLabel(_ session: String, cwd: String) -> String {
-        agentTitle(session, cwd: cwd)
-    }
-
-    func agentTitle(_ session: String, cwd: String) -> String {
-        guard var topic = about(session).topic?.replacingOccurrences(of: "…", with: "") else { return agentName(session, cwd: cwd) }
-        if topic.count > 30, let space = topic.prefix(30).lastIndex(of: " ") { topic = String(topic[..<space]) + "…" }
-        return topic
-    }
-
-    func agentDetail(_ session: String, cwd: String, life: ClaudeSessions.Life) -> String {
-        let state = life == .working ? "working" : life == .gone ? "ended" : "idle"
-        return about(session).topic == nil ? state : "\(agentName(session, cwd: cwd)) · \(state)"
-    }
-
-    func agents() -> [ClaudeSessions.Live] {
-        ClaudeSessions.live().sorted { agentLabel($0.session, cwd: $0.cwd) < agentLabel($1.session, cwd: $1.cwd) }
-    }
-
-    func hand(_ location: String, to session: String) {
-        guard listing.entry(location) != nil else { return }
-        let page = page(for: location)
-        if session.isEmpty {
-            page.sidecar.presented = nil
-            page.save()
-        } else {
-            let cwd = ClaudeSessions.live().first { $0.session == session }?.cwd.nilIfEmpty ?? about(session).cwd ?? page.sidecar.presented?.cwd ?? ""
-            page.presented(Presentation(session: session, cwd: cwd, ground: cwd.isEmpty ? nil : Ground.current(in: cwd)))
-        }
-        listing.update(location) { $0.session = session }
-        changed()
-    }
 
     func page(for location: String) -> Page {
         if let p = pages[location] { return p }
@@ -273,8 +204,4 @@ final class Model {
         listing.update(location) { $0.title = title }
         changed()
     }
-}
-
-extension String {
-    var nilIfEmpty: String? { isEmpty ? nil : self }
 }
