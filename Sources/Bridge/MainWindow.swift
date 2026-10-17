@@ -34,6 +34,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
     static let agent = NSToolbarItem.Identifier("agent")
     let agentMenu = NSMenu()
     var projectNames: [String: String] = [:]
+    var abouts: [String: ClaudeSessions.About] = [:]
     static let notesId = NSToolbarItem.Identifier("notes")
     static let send = NSToolbarItem.Identifier("send")
 
@@ -263,8 +264,21 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
 
     var shownPage: Page? { model.selectedPage.flatMap { windows[$0.location] == nil ? $0 : nil } }
 
+    func about(_ session: String) -> ClaudeSessions.About {
+        if let known = abouts[session], known.topic != nil { return known }
+        let found = ClaudeSessions.about(session)
+        abouts[session] = found
+        return found
+    }
+
+    func agentLabel(_ session: String, cwd: String) -> String {
+        let name = agentName(session, cwd: cwd)
+        return about(session).topic.map { "\(name) · “\($0)”" } ?? name
+    }
+
     func agentName(_ session: String, cwd: String) -> String {
         if !cwd.isEmpty { return projectName(cwd) }
+        if let known = about(session).cwd { return projectName(known) }
         if let entry = model.listing.bridges.filter({ $0.session == session }).max(by: { $0.presentedAt < $1.presentedAt }) { return entry.projectName }
         return "session \(session.prefix(4))"
     }
@@ -289,25 +303,33 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         if item.title != title { item.title = title; item.label = title }
     }
 
+    func agentChoices() -> [(session: String, title: String, detail: String, on: Bool)] {
+        let current = shownPage?.sidecar.presented?.session ?? ""
+        var out = ClaudeSessions.live().map { live in
+            (live.session, agentLabel(live.session, cwd: live.cwd), live.life == .working ? "working" : "idle", live.session == current)
+        }.sorted { $0.1 < $1.1 }
+        if !current.isEmpty, !out.contains(where: { $0.0 == current }), let p = shownPage?.sidecar.presented {
+            out.insert((current, agentLabel(current, cwd: p.cwd), "ended", true), at: 0)
+        }
+        out.append(("", "No agent", "Send only saves your answer", current.isEmpty))
+        return out
+    }
+
     func menuNeedsUpdate(_ menu: NSMenu) {
         guard menu === agentMenu else { return }
         menu.removeAllItems()
-        let current = shownPage?.sidecar.presented?.session
-        for live in ClaudeSessions.live().sorted(by: { agentName($0.session, cwd: $0.cwd) < agentName($1.session, cwd: $1.cwd) }) {
-            let state = live.life == .working ? "working" : "idle"
-            let item = NSMenuItem(title: "\(agentName(live.session, cwd: live.cwd)) · \(state)", action: #selector(chooseAgent(_:)), keyEquivalent: "")
+        let heading = NSMenuItem(title: "Send on this page wakes", action: nil, keyEquivalent: "")
+        heading.isEnabled = false
+        menu.addItem(heading)
+        for choice in agentChoices() {
+            if choice.session.isEmpty { menu.addItem(.separator()) }
+            let item = NSMenuItem(title: choice.title, action: #selector(chooseAgent(_:)), keyEquivalent: "")
+            item.subtitle = choice.detail
             item.target = self
-            item.representedObject = live.session
-            item.state = live.session == current ? .on : .off
+            item.representedObject = choice.session
+            item.state = choice.on ? .on : .off
             menu.addItem(item)
         }
-        if menu.items.isEmpty { menu.addItem(withTitle: "No Claude sessions running", action: nil, keyEquivalent: "").isEnabled = false }
-        menu.addItem(.separator())
-        let none = NSMenuItem(title: "No agent: Send only records", action: #selector(chooseAgent(_:)), keyEquivalent: "")
-        none.target = self
-        none.representedObject = ""
-        none.state = current == nil ? .on : .off
-        menu.addItem(none)
     }
 
     @objc func chooseAgent(_ sender: NSMenuItem) {

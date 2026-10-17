@@ -1,7 +1,9 @@
 #!/bin/bash
 source "$(dirname "$0")/../lib.sh"
 
-mkdir -p "$CASE_DIR/other"
+mkdir -p "$CASE_DIR/other" "$CASE_DIR/transcripts/-other"
+export BRIDGE_TRANSCRIPTS="$CASE_DIR/transcripts"
+printf '%s\n' '{"type":"mode"}' "{\"type\":\"user\",\"cwd\":\"$CASE_DIR/other\",\"message\":{\"role\":\"user\",\"content\":\"<command-name>/clear</command-name>\"}}" "{\"type\":\"user\",\"cwd\":\"$CASE_DIR/other\",\"message\":{\"role\":\"user\",\"content\":\"Fix the footer colour on mobile\\nand more\"}}" > "$CASE_DIR/transcripts/-other/other-agent.jsonl"
 (cd "$CASE_DIR/other" && git init -q .)
 page=$(fixture decision.html)
 repo
@@ -18,6 +20,9 @@ check_json "the menu lists every running session, one without a folder by its id
 
 bridge --do agent other-agent >/dev/null
 check "picking another session hands it the page" "$(agent)" "other"
+menu=$(bridge --state | jq -c '[.agentMenu[] | "\(if .on then "✓ " else "" end)\(.title)"]')
+check "the menu marks the session the Send wakes and names sessions by what they were asked" "$(echo "$menu" | jq -r '.[] | select(startswith("✓"))')" "✓ other · “Fix the footer colour on mobile”"
+check "and ends with No agent, saying what that means" "$(bridge --state | jq -r '.agentMenu[-1] | "\(.title): \(.detail)"')" "No agent: Send only saves your answer"
 bridge --shot "$CASE_DIR/shots/toolbar.png" >/dev/null
 bridge --js "$page" "document.querySelector('[data-value=grid]').click(); return 1" >/dev/null
 sleep 0.3
