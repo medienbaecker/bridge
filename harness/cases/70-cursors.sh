@@ -41,6 +41,21 @@ js "@bridge __bridge.cursors([{ person: 'yoshie', anchor: { tag: 'section', sele
 check "a cursor on something this page doesn't have hides" "$(at | jq -r .)" "hidden"
 js "@bridge __bridge.cursors([]); return 1" >/dev/null
 check "when she leaves, her cursor goes" "$(js "@bridge return document.querySelectorAll('.bridge-cursor').length")" "0"
+js "const s = document.createElement('div'); s.style.height = '3000px'; document.querySelector('h1').after(s); scrollTo(0, 0); return 1" >/dev/null
+note=$(js "@bridge const t = document.querySelector('textarea'); const r = t.getBoundingClientRect(); return { selector: 'textarea', tag: 'textarea', classes: [], index: 0, text: '', x: 0.5, y: 0.5 }" | jq -c .)
+js "@bridge __bridge.cursors([{ person: 'yoshie', anchor: $note }]); return 1" >/dev/null
+edge() { js "@bridge const c = document.querySelector('.bridge-cursor'); return c.dataset.off + ' ' + Math.round(parseFloat(c.style.top)) + ' ' + innerHeight" | jq -r .; }
+read -r off top height <<< "$(edge)"
+check "a cursor below the view shows at the bottom edge" "$off $(( height - top < 60 ))" "down 1"
+snap edge "Her cursor is below the view: an arrow at the bottom edge"
+js "@bridge document.querySelector('.bridge-cursor-off span').click(); return __bridge.following()" >/dev/null
+check "clicking it follows her" "$(js "@bridge return __bridge.following()" | jq -r .)" "yoshie"
+for i in $(seq 1 30); do [ "$(edge | cut -d' ' -f1)" = "" ] && break; js "@bridge __bridge.cursors([{ person: 'yoshie', anchor: $note }]); return 1" >/dev/null; sleep 0.1; done
+check "the page scrolls until her cursor is in view" "$(edge | cut -d' ' -f1)" ""
+check "and it is drawn as a cursor again" "$(js "@bridge return document.querySelector('.bridge-cursor').classList.contains('bridge-cursor-off')")" "false"
+js "dispatchEvent(new WheelEvent('wheel', { deltaY: -100 })); return 1" >/dev/null
+check "scrolling yourself stops following" "$(js "@bridge return __bridge.following()")" "null"
+
 check "a Mac has no colour until one is chosen" "$(bridge --colour)" "none"
 check "a colour is saved in lowercase" "$(bridge --colour '#E8590C')" "#e8590c"
 check "and read back" "$(bridge --colour)" "#e8590c"

@@ -120,3 +120,10 @@ html[data-bridge-pointing] * { cursor: crosshair !important; }
 .bridge-pick { position: absolute; top: 8px; right: 8px; padding: 0 7px; border-radius: 9px; background: var(--bridge-cursor); color: white; font: 600 11px/18px -apple-system, system-ui, sans-serif; pointer-events: none; }
 .bridge-pick + .bridge-pick { right: auto; }
 .bridge-pick.bridge-pick-value { position: static; display: inline-block; margin-left: 8px; vertical-align: middle; }
+.bridge-cursor-off { margin: 0; pointer-events: auto; cursor: pointer; transition: none; }
+.bridge-cursor-off i { display: none; }
+.bridge-cursor-off span { position: static; display: block; padding: 2px 8px; font-size: 12px; line-height: 18px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25); }
+.bridge-cursor-off[data-off="up"] span::before { content: "↑ "; }
+.bridge-cursor-off[data-off="down"] span::before { content: "↓ "; }
+.bridge-cursor-off[data-off="left"] span::before { content: "← "; }
+.bridge-cursor-off[data-off="right"] span::before { content: "→ "; }

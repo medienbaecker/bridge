@@ -1030,7 +1030,7 @@ function __bridgeInit(options) {
   // ---- cursors: the other person's pointer, anchored to the element under it
 
   const cursorColors = ['#e8590c', '#1c7ed6', '#2f9e44', '#ae3ec9', '#f08c00', '#0c8599', '#d6336c', '#5c7cfa'];
-  const cursors = { tracking: false, list: [], els: new Map(), sentAt: 0, timer: null, last: undefined };
+  const cursors = { tracking: false, list: [], els: new Map(), sentAt: 0, timer: null, last: undefined, following: null };
 
   function colorsFor(list) {
     const taken = new Set(), out = new Map();
@@ -1084,12 +1084,23 @@ function __bridgeInit(options) {
       }
       el.style.setProperty('--bridge-cursor', c.agent ? '#5f6670' : colors.get(c.person));
       el.querySelector('span').textContent = c.person;
+      el.dataset.person = c.person;
       const target = c.anchor && resolve(c.anchor);
       el.hidden = !target;
       if (!target) continue;
       const r = target.getBoundingClientRect();
-      el.style.left = `${r.left + r.width * (c.anchor.x ?? 0.5)}px`;
-      el.style.top = `${r.top + r.height * (c.anchor.y ?? 0.5)}px`;
+      let x = r.left + r.width * (c.anchor.x ?? 0.5), y = r.top + r.height * (c.anchor.y ?? 0.5);
+      const off = y < 0 ? 'up' : y > innerHeight ? 'down' : x < 0 ? 'left' : x > innerWidth ? 'right' : '';
+      el.classList.toggle('bridge-cursor-off', !!off);
+      el.dataset.off = off;
+      el.title = off ? `Follow ${c.person}` : '';
+      if (off) {
+        x = Math.min(Math.max(x, 12), innerWidth - 110);
+        y = Math.min(Math.max(y, 12), innerHeight - 34);
+        if (cursors.following === c.person) target.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
+      }
+      el.style.left = `${x}px`;
+      el.style.top = `${y}px`;
     }
     for (const [person, el] of cursors.els) if (!seen.has(person)) { el.remove(); cursors.els.delete(person); }
   }
@@ -1123,6 +1134,15 @@ function __bridgeInit(options) {
   document.documentElement.addEventListener('pointerleave', () => { if (cursors.tracking) sendCursor(null); });
   addEventListener('scroll', () => { if (cursors.list.length) placeCursors(); }, { capture: true, passive: true });
   addEventListener('resize', () => { if (cursors.list.length) placeCursors(); });
+  document.addEventListener('click', (e) => {
+    const edge = e.target.closest?.('.bridge-cursor-off');
+    if (!edge) return;
+    e.preventDefault();
+    e.stopPropagation();
+    cursors.following = edge.dataset.person;
+    placeCursors();
+  }, true);
+  for (const type of ['wheel', 'touchmove', 'keydown']) addEventListener(type, () => { cursors.following = null; }, { capture: true, passive: true });
 
   globalThis.__bridge = {
     patch,
@@ -1137,6 +1157,7 @@ function __bridgeInit(options) {
     applyDrives,
     frameRefused,
     refreshMedia,
+    following: () => cursors.following,
     trackCursor: (on) => { cursors.tracking = on; if (!on) sendCursor(null); },
     cursors: (list) => { cursors.list = list || []; placeCursors(); },
     people: (list) => { people.list = list || []; drawPeople(); },
