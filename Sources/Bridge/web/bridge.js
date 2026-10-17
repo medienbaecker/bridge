@@ -1152,6 +1152,46 @@ function __bridgeInit(options) {
     }
   }
 
+  function drawPresence(list) {
+    let bar = document.querySelector('.bridge-here');
+    if (!list.length) { bar?.remove(); return; }
+    if (!bar) { bar = document.createElement('div'); bar.className = 'bridge-here'; document.body.appendChild(bar); }
+    const colors = colorsFor(list);
+    bar.replaceChildren(...list.map((p) => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'bridge-here-person';
+      chip.dataset.person = p.person;
+      chip.style.setProperty('--bridge-cursor', colors.get(p.person));
+      const agent = p.agent ? `agent ${p.agent.life} in ${p.agent.project}` : 'no agent';
+      chip.innerHTML = '<b></b><small></small>';
+      chip.querySelector('b').textContent = p.person;
+      chip.querySelector('small').textContent = (p.viewing ? '' : 'elsewhere · ') + agent;
+      chip.classList.toggle('bridge-here-away', !p.viewing);
+      chip.title = `Follow ${p.person}`;
+      return chip;
+    }));
+  }
+
+  function toast(text) {
+    const t = document.createElement('div');
+    t.className = 'bridge-toast';
+    t.textContent = text;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 4000);
+  }
+
+  document.addEventListener('click', (e) => {
+    const chip = e.target.closest?.('.bridge-here-person');
+    if (!chip) return;
+    e.preventDefault();
+    e.stopPropagation();
+    cursors.following = chip.dataset.person;
+    const c = cursors.list.find((x) => x.person === chip.dataset.person);
+    const target = c?.anchor && resolve(c.anchor);
+    target?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, true);
+
   document.addEventListener('pointermove', trackCursor, { capture: true, passive: true });
   document.documentElement.addEventListener('pointerleave', () => { if (cursors.tracking) sendCursor(null); });
   addEventListener('scroll', () => { if (cursors.list.length) placeCursors(); }, { capture: true, passive: true });
@@ -1183,6 +1223,8 @@ function __bridgeInit(options) {
     trackCursor: (on) => { cursors.tracking = on; if (!on) sendCursor(null); },
     cursors: (list) => { cursors.list = list || []; placeCursors(); },
     people: (list) => { people.list = list || []; drawPeople(); },
+    presence: (list) => drawPresence(list || []),
+    toast,
     answers: (answers) => { state.answers = answers || {}; applyAnswers(state.answers); },
   };
   globalThis.__bridgeNotes = notes;
