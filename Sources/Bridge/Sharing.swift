@@ -11,8 +11,6 @@ final class Sharing {
     var colours: [String: String] = [:]
     var records: [String: SharedRecord] = [:]
     var drafts: [String: [String: [String: JSONValue]]] = [:]
-    var here: [String: [String: (info: JSONValue, at: Date)]] = [:]
-    var projects: [String: String] = [:]
     var peerAgents: [String: [JSONValue]] = [:]
     var onPeople: () -> Void = {}
     var beat: Timer?
@@ -213,7 +211,6 @@ final class Sharing {
         guard let id = share(at: page.location) else { return }
         page.call("__bridge.trackCursor(true)")
         draw(id)
-        drawPresence(id)
         announce()
         if (try? record(id)) != nil { drawPeople(id) }
     }
@@ -260,12 +257,6 @@ final class Sharing {
         case "hand":
             guard let session = message["session"]?.stringValue, let share = shares.first(where: { $0.id == id }) else { return }
             model.hand(share.location, to: session)
-        case "here":
-            guard let person = message["person"]?.stringValue else { return }
-            if let colour = message["color"]?.stringValue { colours[person] = colour }
-            let changed = here[id]?[person]?.info != .object(message)
-            here[id, default: [:]][person] = (.object(message), Date())
-            if changed { drawPresence(id) }
         case "record":
             do { try merge(id, message["record"]?.stringValue) } catch { Env.log("record from \(peer.name): \(error)") }
         default:
@@ -293,12 +284,6 @@ final class Sharing {
         model.changed()
     }
 
-    func project(of cwd: String) -> String {
-        if let name = projects[cwd] { return name }
-        let name = (Ground.projectRoot(for: cwd) as NSString).lastPathComponent
-        projects[cwd] = name
-        return name
-    }
 
     func announceAgents() {
         let holding = Set(shares.compactMap { share in
@@ -320,40 +305,11 @@ final class Sharing {
     func announce() {
         guard !link.sessions.isEmpty else { return }
         announceAgents()
-        for share in shares {
-            var agent: JSONValue = .null
-            if let presented = model.pages[share.location]?.sidecar.presented ?? (try? Sidecar.load(Paths.sidecar(for: share.location)))?.presented, !presented.session.isEmpty {
-                let life = ClaudeSessions.life(of: presented.session)
-                if life != .gone { agent = .object(["project": .string(project(of: presented.cwd)), "life": .string(life.rawValue)]) }
-            }
-            link.send([
-                "kind": .string("here"), "share": .string(share.id), "person": .string(Person.current),
-                "color": Person.colour.map { .string($0) } ?? .null,
-                "viewing": .bool(model.selected == share.location), "agent": agent,
-            ])
-        }
-        let now = Date()
-        for id in here.keys {
-            let stale = (here[id] ?? [:]).filter { now.timeIntervalSince($0.value.at) > 10 }.map(\.key)
-            guard !stale.isEmpty else { continue }
-            for person in stale { here[id]?[person] = nil }
-            drawPresence(id)
-        }
-    }
-
-    func drawPresence(_ id: String) {
-        guard let share = shares.first(where: { $0.id == id }), let page = model.pages[share.location], page.ready else { return }
-        let list = (here[id] ?? [:]).sorted { $0.key < $1.key }.map(\.value.info)
-        page.call("__bridge.presence(list)", ["list": page.any(.array(list))])
     }
 
     func dropped(_ peer: Peer) {
         peerAgents[peer.id] = nil
         onPeople()
-        for id in here.keys where here[id]?[peer.name] != nil {
-            here[id]?[peer.name] = nil
-            drawPresence(id)
-        }
         for id in drafts.keys where drafts[id]?[peer.name] != nil {
             drafts[id]?[peer.name] = nil
             drawPeople(id)

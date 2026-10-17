@@ -1,0 +1,19 @@
+#!/bin/bash
+source "$(dirname "$0")/../lib.sh"
+
+with_b
+page=$(fixture decision.html)
+(cd "$CASE_DIR/pages" && bridge decision.html)
+wait_ready
+id=$(bridge --share "$page" | jq -r '.share')
+there="$CASE_DIR/state-b/bridge-dev/shared/$id/page.html"
+for i in $(seq 1 80); do [ -f "$there" ] && break; sleep 0.25; done
+b --do select "$there" >/dev/null
+for i in $(seq 1 60); do [ "$(b --state | jq -r '.ready')" = "true" ] && break; sleep 0.25; done
+
+until_is() { for i in $(seq 1 120); do [ "$(eval "$1")" = "$2" ] && return; sleep 0.1; done; }
+check "nothing about her is drawn over his page" "$(bridge --js "$page" "@bridge return document.querySelectorAll('.bridge-here, .bridge-here-person').length")" "0"
+sed -i '' 's|<h1>Card layout for the archive</h1>|<h1>Her take</h1>|' "$there"
+until_is "bridge --js '$page' \"@bridge return document.querySelector('.bridge-toast')?.textContent || ''\" | jq -r ." "yoshie's agent rewrote the page"
+check "her agent's rewrite is announced on his page" "$(bridge --js "$page" "@bridge return document.querySelector('.bridge-toast')?.textContent || ''" | jq -r .)" "yoshie's agent rewrote the page"
+finish
