@@ -242,6 +242,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             out["buildMs"] = page.buildMs.map { .number(Double($0)) } ?? .null
             out["zoom"] = .number(Double((page.zoom * 100).rounded() / 100))
             out["links"] = .string(page.links.rawValue)
+            out["cursor"] = page.cursor
         }
         if let w = window.window {
             out["windowNumber"] = .number(Double(w.windowNumber))

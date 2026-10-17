@@ -45,6 +45,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
     var lastData: Data?
     var watcher: Watcher?
     var media: [String: Date] = [:]
+    var cursor: JSONValue = .null
     var buildFailed = false
     var buildMs: Int?
     var frames: [WKFrameInfo] = []
@@ -326,6 +327,9 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
                 media = Dictionary(uniqueKeysWithValues: paths.compactMap { p in Self.stamp(p).map { (p, media[p] ?? $0) } })
                 watch()
             }
+            replyHandler(nil, nil)
+        case "cursor":
+            cursor = JSONValue(any: body["anchor"] ?? NSNull())
             replyHandler(nil, nil)
         case "size":
             if kind == .image, !preview, let w = body["width"] as? Int, let h = body["height"] as? Int {

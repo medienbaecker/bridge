@@ -108,3 +108,8 @@ html[data-bridge-pointing] * { cursor: crosshair !important; }
   pointer-events: none;
   transition: opacity 200ms;
 }
+
+.bridge-cursor { position: fixed; z-index: 2147482999; margin: -1px 0 0 -1px; pointer-events: none; transition: left 60ms linear, top 60ms linear; }
+.bridge-cursor[hidden] { display: none; }
+.bridge-cursor svg { display: block; fill: var(--bridge-cursor); stroke: white; stroke-width: 1.2; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.3)); }
+.bridge-cursor span { position: absolute; left: 13px; top: 17px; padding: 0 6px; border-radius: 6px; background: var(--bridge-cursor); color: white; font: 600 11px/17px -apple-system, system-ui, sans-serif; white-space: nowrap; }

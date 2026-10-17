@@ -642,6 +642,7 @@ function __bridgeInit(options) {
     apply(payload);
     propose(proposals(doc));
     notes.place();
+    placeCursors();
     return { reload: false };
   }
 
@@ -1025,6 +1026,63 @@ function __bridgeInit(options) {
     notes.place();
   });
 
+  // ---- cursors: the other person's pointer, anchored to the element under it
+
+  const cursorColors = ['#e8590c', '#1c7ed6', '#2f9e44', '#ae3ec9', '#f08c00', '#0c8599', '#d6336c', '#5c7cfa'];
+  const cursors = { tracking: false, list: [], els: new Map(), sentAt: 0, timer: null, last: undefined };
+
+  function cursorColor(person) {
+    let h = 2166136261;
+    for (const ch of person) h = Math.imul(h ^ ch.codePointAt(0), 16777619);
+    return cursorColors[(h >>> 0) % cursorColors.length];
+  }
+
+  function sendCursor(anchor) {
+    const key = JSON.stringify(anchor);
+    if (key === cursors.last) return;
+    cursors.last = key;
+    cursors.sentAt = Date.now();
+    post('cursor', { anchor });
+  }
+
+  function trackCursor(e) {
+    if (!cursors.tracking) return;
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const anchor = el && !ours(el) && el.parentElement ? describe(el, e.clientX, e.clientY).anchor : null;
+    clearTimeout(cursors.timer);
+    const wait = 33 - (Date.now() - cursors.sentAt);
+    if (wait <= 0) sendCursor(anchor); else cursors.timer = setTimeout(() => sendCursor(anchor), wait);
+  }
+
+  function placeCursors() {
+    const seen = new Set();
+    for (const c of cursors.list) {
+      seen.add(c.person);
+      let el = cursors.els.get(c.person);
+      if (!el) {
+        el = document.createElement('div');
+        el.className = 'bridge-cursor';
+        el.innerHTML = '<svg width="16" height="20" viewBox="0 0 16 20"><path d="M1 1 L1 16 L5 12 L8 19 L11 18 L8 11 L14 11 Z"/></svg><span></span>';
+        document.body.appendChild(el);
+        cursors.els.set(c.person, el);
+      }
+      el.style.setProperty('--bridge-cursor', cursorColor(c.person));
+      el.querySelector('span').textContent = c.person;
+      const target = c.anchor && resolve(c.anchor);
+      el.hidden = !target;
+      if (!target) continue;
+      const r = target.getBoundingClientRect();
+      el.style.left = `${r.left + r.width * (c.anchor.x ?? 0.5)}px`;
+      el.style.top = `${r.top + r.height * (c.anchor.y ?? 0.5)}px`;
+    }
+    for (const [person, el] of cursors.els) if (!seen.has(person)) { el.remove(); cursors.els.delete(person); }
+  }
+
+  document.addEventListener('pointermove', trackCursor, { capture: true, passive: true });
+  document.documentElement.addEventListener('pointerleave', () => { if (cursors.tracking) sendCursor(null); });
+  addEventListener('scroll', () => { if (cursors.list.length) placeCursors(); }, { capture: true, passive: true });
+  addEventListener('resize', () => { if (cursors.list.length) placeCursors(); });
+
   globalThis.__bridge = {
     patch,
     status: setStatus,
@@ -1038,6 +1096,8 @@ function __bridgeInit(options) {
     applyDrives,
     frameRefused,
     refreshMedia,
+    trackCursor: (on) => { cursors.tracking = on; if (!on) sendCursor(null); },
+    cursors: (list) => { cursors.list = list || []; placeCursors(); },
   };
   globalThis.__bridgeNotes = notes;
 
