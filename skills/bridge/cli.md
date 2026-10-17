@@ -22,9 +22,8 @@ bridge --pins   <file>                 open notes with their threads
 bridge --reply  <file> <id> <text>
 bridge --done / --reopen / --working <file> <id>
 bridge --hook stop [--timeout N]        the Claude Code Stop hook (installed once, not for agents)
-bridge --share <file>                  send a page and the files it shows to the paired Mac
-bridge --pair                          pair with another Mac running Bridge (both show four words)
-bridge --peers                         paired Macs, which are connected, and unpaired ones nearby, JSON
+bridge --share <file>                  send a page and the files it shows to the other connected Macs
+bridge --peers                         the other Macs with Bridge this one knows, and which are connected, JSON
 bridge --name [name]                   this Mac's person on shared pages; with a name, set it
 bridge --colour [#hex|none]            this person's cursor colour on shared pages
 ```
@@ -102,9 +101,10 @@ when the app is not up. Use it to check a report against their actual window.
 
 ## Shared pages
 
-Two people can share a page across their Macs. They pair once (the
-toolbar's "Pair with …" button, or `--pair` on both), then a page is shared
-with the toolbar's "Share with …" button or `bridge --share <file>`. The page
+Two people can share a page across their Macs. Bridges on the same network
+find and trust each other on their own; a page is shared with the toolbar's
+"Share with …" button, by dropping it on the person in the sidebar, or with
+`bridge --share <file>`. The page
 and the local files it shows are copied to the other Mac, and from then on
 both people see each other's cursors, picks, typing and notes.
 
@@ -114,7 +114,7 @@ both people see each other's cursors, picks, typing and notes.
 - A page that arrived from the other Mac lives in Bridge's state dir under
   `shared/`. Reading it (`--read` or `--pins`) makes your session its holder,
   so this Mac's Send wakes you. The person can also hand it to a session
-  with the toolbar's agent button.
+  by dropping it on that agent in the sidebar.
 - Rewrite a shared page as you would any page. The rewrite reaches the other
   Mac and its window patches in place. Image paths are mapped for you.
   If the other agent rewrote it since you read it, Claude Code asks you to

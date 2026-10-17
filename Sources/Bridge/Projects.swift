@@ -4,7 +4,9 @@ import BridgeCore
 /// The left column: the two smart scopes, then the projects with their waiting
 /// counts, and the update row at its foot.
 final class ProjectsController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
-    enum Row: Equatable { case scope(Scope), heading(String) }
+    enum Row: Equatable { case scope(Scope), heading(String), me, person(String), remote(peer: String, session: String, title: String, detail: String) }
+
+    var sharing: Sharing? { (NSApp.delegate as? AppDelegate)?.sharing }
 
     let model: Model
     let table = NSTableView()
@@ -63,8 +65,17 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
         reloading = true
         defer { reloading = false }
         rows = [.scope(.waiting), .scope(.all)]
-        let agents = model.agents()
-        if !agents.isEmpty { rows.append(.heading("Agents")); rows += agents.map { .scope(.agent($0.session)) } }
+        rows.append(.heading("People"))
+        rows.append(.me)
+        rows += model.agents().map { .scope(.agent($0.session)) }
+        if let sharing {
+            for peer in sharing.link.peers where !sharing.link.refused.contains(peer.id) {
+                rows.append(.person(peer.id))
+                for agent in sharing.peerAgents[peer.id] ?? [] {
+                    rows.append(.remote(peer: peer.id, session: agent["session"]?.stringValue ?? "", title: agent["title"]?.stringValue ?? "", detail: agent["detail"]?.stringValue ?? ""))
+                }
+            }
+        }
         let projects = model.listing.projects
         if !projects.isEmpty { rows.append(.heading("Projects")); rows += projects.map { .scope(.project($0)) } }
         table.reloadData()
@@ -128,25 +139,42 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
     func numberOfRows(in tableView: NSTableView) -> Int { rows.count }
 
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
-        if case .heading = rows[row] { return 24 }
-        return 28
+        switch rows[row] {
+        case .heading: return 24
+        case .scope(.agent), .remote: return 40
+        default: return 28
+        }
     }
 
     func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool {
-        if case .heading = rows[row] { return false }
-        return true
+        if case .scope = rows[row] { return true }
+        return false
     }
 
     func tableView(_ tableView: NSTableView, validateDrop info: NSDraggingInfo, proposedRow row: Int, proposedDropOperation op: NSTableView.DropOperation) -> NSDragOperation {
-        guard op == .on, row < rows.count, case .scope(.agent) = rows[row] else { return [] }
-        return .move
+        guard op == .on, row < rows.count else { return [] }
+        switch rows[row] {
+        case .scope(.agent), .remote: return .move
+        case .person(let id): return sharing?.link.sessions[id] == nil ? [] : .move
+        default: return []
+        }
     }
 
     func tableView(_ tableView: NSTableView, acceptDrop info: NSDraggingInfo, row: Int, dropOperation: NSTableView.DropOperation) -> Bool {
-        guard case .scope(.agent(let session)) = rows[row] else { return false }
         let locations = (info.draggingPasteboard.pasteboardItems ?? []).compactMap { $0.string(forType: SidebarController.rowType) }
-        for location in locations { model.hand(location, to: session) }
+        drop(locations, on: rows[row])
         return !locations.isEmpty
+    }
+
+    func drop(_ locations: [String], on row: Row) {
+        for location in locations {
+            switch row {
+            case .scope(.agent(let session)): model.hand(location, to: session)
+            case .person: _ = try? sharing?.share(location)
+            case .remote(let peer, let session, _, _): try? sharing?.handTo(peer, session: session, location: location)
+            default: break
+            }
+        }
     }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
@@ -155,6 +183,27 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
             let cell = tableView.makeView(withIdentifier: .init("heading"), owner: nil) as? NSTableCellView ?? SidebarController.headerCell()
             cell.identifier = .init("heading")
             cell.textField?.stringValue = title
+            return cell
+        case .scope(.agent(let session)):
+            let live = ClaudeSessions.live().first { $0.session == session }
+            let cell = tableView.makeView(withIdentifier: AgentCell.id, owner: nil) as? AgentCell ?? AgentCell()
+            let n = model.bridges(in: .agent(session)).count
+            cell.show(title: model.agentTitle(session, cwd: live?.cwd ?? ""), detail: model.agentDetail(session, cwd: live?.cwd ?? "", life: live?.life ?? .gone) + (n > 0 ? " · \(n) page\(n == 1 ? "" : "s")" : ""),
+                      tint: live?.life == .working ? .systemOrange : .systemGreen)
+            return cell
+        case .remote(_, _, let title, let detail):
+            let cell = tableView.makeView(withIdentifier: AgentCell.id, owner: nil) as? AgentCell ?? AgentCell()
+            cell.show(title: title, detail: detail, tint: detail.hasSuffix("working") ? .systemOrange : .systemGreen)
+            return cell
+        case .me:
+            let cell = tableView.makeView(withIdentifier: ScopeCell.id, owner: nil) as? ScopeCell ?? ScopeCell()
+            cell.person("\(Person.current) (you)", tint: .controlAccentColor)
+            return cell
+        case .person(let id):
+            let cell = tableView.makeView(withIdentifier: ScopeCell.id, owner: nil) as? ScopeCell ?? ScopeCell()
+            let peer = sharing?.link.peers.first { $0.id == id }
+            cell.person(peer?.name ?? "Mac", tint: sharing?.link.sessions[id] == nil ? .tertiaryLabelColor : .systemGreen)
+            cell.toolTip = sharing?.link.sessions[id] == nil ? "Not connected right now" : "Connected. Drop a page here to share it"
             return cell
         case .scope(let scope):
             let cell = tableView.makeView(withIdentifier: ScopeCell.id, owner: nil) as? ScopeCell ?? ScopeCell()
@@ -179,8 +228,31 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
     }
 
     /// For the harness: the rows as shown, and the selected one.
+    func key(_ row: Row) -> String? {
+        switch row {
+        case .scope(let s): return s.key
+        case .me: return "me"
+        case .person(let id): return "person:" + (sharing?.link.peers.first { $0.id == id }?.name ?? id)
+        case .remote(let peer, let session, _, _): return "remote:" + (sharing?.link.peers.first { $0.id == peer }?.name ?? peer) + ":" + session
+        case .heading: return nil
+        }
+    }
+
     func dump() -> [String: JSONValue] {
-        ["scope": .string(model.scope.key), "vibrant": .bool(vibrant), "rows": .array(rows.compactMap { row in
+        var people: [JSONValue] = []
+        for row in rows {
+            switch row {
+            case .me: people.append(.object(["key": .string("me"), "name": .string("\(Person.current) (you)")]))
+            case .person(let id): people.append(.object(["key": .string(key(row) ?? ""), "connected": .bool(sharing?.link.sessions[id] != nil)]))
+            case .remote(_, _, let title, let detail): people.append(.object(["key": .string(key(row) ?? ""), "name": .string(title), "detail": .string(detail)]))
+            case .scope(.agent(let session)):
+                let live = ClaudeSessions.live().first { $0.session == session }
+                people.append(.object(["key": .string("agent:" + session), "name": .string(model.agentTitle(session, cwd: live?.cwd ?? "")),
+                                       "detail": .string(model.agentDetail(session, cwd: live?.cwd ?? "", life: live?.life ?? .gone))]))
+            default: break
+            }
+        }
+        return ["scope": .string(model.scope.key), "vibrant": .bool(vibrant), "people": .array(people), "rows": .array(rows.compactMap { row in
             guard case .scope(let s) = row else { return nil }
             let i = rows.firstIndex(of: row)!
             let f = table.convert(table.rect(ofRow: i), to: nil)
@@ -243,7 +315,15 @@ final class ScopeCell: NSTableCellView {
         }
     }
 
+    func person(_ text: String, tint: NSColor) {
+        icon.image = NSImage(systemSymbolName: "person.crop.circle.fill", accessibilityDescription: text)?.withSymbolConfiguration(.init(pointSize: 13, weight: .regular))
+        icon.contentTintColor = tint
+        name.stringValue = text
+        count.stringValue = ""
+    }
+
     func show(_ scope: Scope, model: Model) {
+        toolTip = nil
         let symbol: String
         icon.contentTintColor = .secondaryLabelColor
         switch scope {
@@ -258,5 +338,47 @@ final class ScopeCell: NSTableCellView {
         name.stringValue = Self.name(of: scope, model: model)
         let n = Self.count(of: scope, model: model)
         if case .project = scope { count.stringValue = "" } else { count.stringValue = n > 0 ? "\(n)" : "" }
+    }
+}
+
+final class AgentCell: NSTableCellView {
+    static let id = NSUserInterfaceItemIdentifier("agent")
+    let icon = NSImageView()
+    let title = PlainLabel(labelWithString: "")
+    let detail = PlainLabel(labelWithString: "")
+
+    override var allowsVibrancy: Bool { false }
+
+    init() {
+        super.init(frame: .zero)
+        identifier = Self.id
+        for label in [title, detail] {
+            label.lineBreakMode = .byTruncatingTail
+            label.maximumNumberOfLines = 1
+            label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        }
+        detail.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        detail.textColor = .secondaryLabelColor
+        for v in [icon, title, detail] { v.translatesAutoresizingMaskIntoConstraints = false; addSubview(v) }
+        textField = title
+        NSLayoutConstraint.activate([
+            icon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18), icon.widthAnchor.constraint(equalToConstant: 16),
+            icon.topAnchor.constraint(equalTo: topAnchor, constant: 5),
+            title.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 6),
+            title.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -10),
+            title.topAnchor.constraint(equalTo: topAnchor, constant: 3),
+            detail.leadingAnchor.constraint(equalTo: title.leadingAnchor),
+            detail.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -10),
+            detail.topAnchor.constraint(equalTo: title.bottomAnchor, constant: 0),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    func show(title: String, detail: String, tint: NSColor) {
+        icon.image = NSImage(systemSymbolName: "terminal", accessibilityDescription: title)?.withSymbolConfiguration(.init(pointSize: 12, weight: .regular))
+        icon.contentTintColor = tint
+        self.title.stringValue = title
+        self.detail.stringValue = detail
     }
 }

@@ -5,7 +5,6 @@ import BridgeCore
 import BridgeShared
 
 enum Wire {
-    static let pairHello = 1, pairCommit = 2, pairKey = 3, pairConfirm = 4
     static let hello = 10, proof = 11
     static let sealed = 20
 }
@@ -49,29 +48,28 @@ final class Link {
 
     let me = Person.device
     let group = ProcessInfo.processInfo.environment["BRIDGE_LINK_GROUP"] ?? ""
+    let identity = Identity.load()
     var peers: [Peer] = Peers.load()
     var sessions: [String: Session] = [:]
     var connecting: Set<String> = []
-    var nearby: [String: Bonjour.Endpoint] = [:]
+    var refused: Set<String> = []
     var seen: [Bonjour.Endpoint] = []
     var rebrowsing = false
-    var pairingUntil: Date?
-    var pairingWith: String?
-    var words: [String]?
-    var confirm: CheckedContinuation<Bool, Never>?
     var onMessage: (Peer, [String: JSONValue]) -> Void = { _, _ in }
     var onChange: () -> Void = {}
     var onDrop: (Peer) -> Void = { _ in }
     var onConnect: (Peer) -> Void = { _ in }
-    var onWords: (String, [String]) -> Void = { _, _ in }
     private var listener: Task<Void, Never>?
     private var browser: Task<Void, Never>?
 
-    var pairing: Bool { pairingUntil.map { $0 > Date() } ?? false }
+    var key: Data { identity.publicKey.rawRepresentation }
 
     func start() {
         listen()
         browse()
+        Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self.map { $0.saw($0.seen) } }
+        }
     }
 
     func listen() {
@@ -79,6 +77,7 @@ final class Link {
         var txt = NWTXTRecord()
         txt["id"] = me
         txt["name"] = Person.current
+        txt["key"] = key.base64EncodedString()
         if !group.isEmpty { txt["group"] = group }
         let provider = BonjourListenerProvider(name: me, type: Self.service, txtRecord: txt)
         listener = Task { [weak self] in
@@ -113,20 +112,33 @@ final class Link {
         let task = Task {
             await work()
             connecting.remove(id)
-            if sessions[id] == nil { DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self.map { $0.saw($0.seen) } } }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
-            guard let self, self.connecting.contains(id), self.sessions[id] == nil, self.words == nil else { return }
+            guard let self, self.connecting.contains(id), self.sessions[id] == nil else { return }
             task.cancel()
             self.connecting.remove(id)
-            if self.pairingWith != nil, self.words == nil { self.pairingWith = nil }
-            self.saw(self.seen)
         }
+    }
+
+    func trust(_ id: String, name: String?, key: Data) -> Peer? {
+        if let i = peers.firstIndex(where: { $0.id == id }) {
+            guard peers[i].key == key else {
+                if refused.insert(id).inserted { Env.log("link: \(peers[i].name) came back with another key; refused"); onChange() }
+                return nil
+            }
+            if let name, peers[i].name != name { peers[i].name = name; try? Peers.save(peers); onChange() }
+            return peers[i]
+        }
+        let peer = Peer(id: id, name: name ?? "Mac", key: key)
+        peers.append(peer)
+        try? Peers.save(peers)
+        onChange()
+        return peer
     }
 
     func saw(_ endpoints: [Bonjour.Endpoint]) {
         seen = endpoints
-        if endpoints.contains(where: { $0.txtRecord["id"] == nil }), !rebrowsing {
+        if endpoints.contains(where: { $0.txtRecord["id"] == nil || $0.txtRecord["key"] == nil }), !rebrowsing {
             rebrowsing = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
                 self?.rebrowsing = false
@@ -134,133 +146,55 @@ final class Link {
                 self?.browse()
             }
         }
-        let unpaired = endpoints.filter { e in
-            guard let id = e.txtRecord["id"], id != me, (e.txtRecord["group"] ?? "") == group else { return false }
-            return !peers.contains { $0.id == id }
-        }
-        let now = Dictionary(unpaired.map { ($0.txtRecord["id"]!, $0) }, uniquingKeysWith: { a, _ in a })
-        if Set(now.keys) != Set(nearby.keys) { nearby = now; onChange() } else { nearby = now }
         for endpoint in endpoints {
-            guard let id = endpoint.txtRecord["id"], id != me, me < id, !connecting.contains(id), (endpoint.txtRecord["group"] ?? "") == group else { continue }
-            if pairing, pairingWith == nil, !peers.contains(where: { $0.id == id }) {
-                attempt(id) { await self.pair(Connection(to: endpoint) { TLV { TCP() } }, initiator: true) }
-            } else if let peer = peers.first(where: { $0.id == id }), sessions[id] == nil {
-                attempt(id) { await self.open(Connection(to: endpoint) { TLV { TCP() } }, as: peer) }
-            }
+            guard let id = endpoint.txtRecord["id"], id != me, (endpoint.txtRecord["group"] ?? "") == group,
+                  let key = endpoint.txtRecord["key"].flatMap({ Data(base64Encoded: $0) }), key.count == 32,
+                  let peer = trust(id, name: endpoint.txtRecord["name"], key: key) else { continue }
+            guard me < id, sessions[id] == nil, !connecting.contains(id) else { continue }
+            attempt(id) { await self.open(Connection(to: endpoint) { TLV { TCP() } }, as: peer) }
         }
     }
 
     func accept(_ connection: Connection) async {
         do {
             let first = try await connection.receive()
-            switch first.metadata.type {
-            case Wire.pairHello where pairingWith == nil:
-                await pair(connection, initiator: false, hello: first.content)
-            case Wire.hello:
-                try await serve(connection, hello: first.content)
-            default:
-                break
-            }
+            guard first.metadata.type == Wire.hello else { return }
+            try await serve(connection, hello: first.content)
         } catch { Env.log("link accept: \(error)") }
     }
 
-    // MARK: Pairing
-
-    func startPairing(for seconds: TimeInterval = 120) {
-        pairingUntil = Date().addingTimeInterval(seconds)
-        onChange()
-        saw(seen)
-        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in self?.onChange() }
+    func secret(_ peer: Peer) throws -> Data {
+        try Identity.secret(identity, me: me, theirs: peer.key, them: peer.id)
     }
-
-    var nearbyNames: [String] { nearby.values.compactMap { $0.txtRecord["name"] }.sorted() }
-
-    func pair(with name: String) {
-        guard pairingWith == nil, let (id, endpoint) = nearby.first(where: { $0.value.txtRecord["name"] == name }), !connecting.contains(id) else { return }
-        pairingWith = name
-        attempt(id) { await self.pair(Connection(to: endpoint) { TLV { TCP() } }, initiator: true) }
-    }
-
-    func answer(_ yes: Bool) {
-        confirm?.resume(returning: yes)
-        confirm = nil
-    }
-
-    func pair(_ connection: Connection, initiator: Bool, hello: Data? = nil) async {
-        let key = Curve25519.KeyAgreement.PrivateKey()
-        let pub = key.publicKey.rawRepresentation
-        func expect(_ type: Int) async throws -> Data {
-            let message = try await connection.receive()
-            guard message.metadata.type == type else { throw LinkError("pairing: expected \(type), got \(message.metadata.type)") }
-            return message.content
-        }
-        do {
-            let mine = try JSON.compact.encode(["id": me, "name": Person.current])
-            if initiator { try await connection.send(mine, type: Wire.pairHello) }
-            var first = hello
-            if first == nil { first = try await expect(Wire.pairHello) }
-            let theirs = try JSON.decoder.decode([String: String].self, from: first ?? Data())
-            if !initiator { try await connection.send(mine, type: Wire.pairHello) }
-            guard let id = theirs["id"], let name = theirs["name"] else { throw LinkError("pairing: no id") }
-            pairingWith = name
-            let peerKey: Data
-            if initiator {
-                try await connection.send(Pairing.commitment(pub), type: Wire.pairCommit)
-                peerKey = try await expect(Wire.pairKey)
-                try await connection.send(pub, type: Wire.pairKey)
-            } else {
-                let commitment = try await expect(Wire.pairCommit)
-                try await connection.send(pub, type: Wire.pairKey)
-                peerKey = try await expect(Wire.pairKey)
-                guard Pairing.commitment(peerKey) == commitment else { throw LinkError("pairing: commitment mismatch") }
-            }
-            let transcript = initiator ? Pairing.transcript(initiator: me, pub, responder: id, peerKey) : Pairing.transcript(initiator: id, peerKey, responder: me, pub)
-            words = Pairing.words(transcript)
-            onChange()
-            onWords(name, words ?? [])
-            let yes = await withCheckedContinuation { confirm = $0 }
-            guard yes else { throw LinkError("pairing: declined here") }
-            try await connection.send(transcript, type: Wire.pairConfirm)
-            guard try await expect(Wire.pairConfirm) == transcript else { throw LinkError("pairing: declined there") }
-            let peer = Peer(id: id, name: name, secret: try Pairing.secret(key, theirs: peerKey, transcript: transcript))
-            peers.removeAll { $0.id == id }
-            peers.append(peer)
-            try Peers.save(peers)
-            pairingUntil = nil
-        } catch { Env.log("\(error)") }
-        answer(false)
-        pairingWith = nil
-        words = nil
-        onChange()
-    }
-
-    // MARK: Sessions
 
     func open(_ connection: Connection, as peer: Peer) async {
         do {
-            let key = Curve25519.KeyAgreement.PrivateKey()
-            let mine = Hello(id: me, key: key.publicKey.rawRepresentation)
+            let secret = try secret(peer)
+            let ephemeral = Curve25519.KeyAgreement.PrivateKey()
+            let mine = Hello(id: me, key: ephemeral.publicKey.rawRepresentation, identity: key)
             try await connection.send(mine.data, type: Wire.hello)
             let reply = try await connection.receive()
-            guard reply.metadata.type == Wire.hello, let theirs = Hello(reply.content), theirs.id == peer.id else { throw LinkError("link: not \(peer.name)") }
+            guard reply.metadata.type == Wire.hello, let theirs = Hello(reply.content), theirs.id == peer.id, theirs.identity == peer.key else { throw LinkError("link: not \(peer.name)") }
             let transcript = Handshake.transcript(client: mine, server: theirs)
-            try await connection.send(Handshake.proof("client", transcript, secret: peer.secret), type: Wire.proof)
+            try await connection.send(Handshake.proof("client", transcript, secret: secret), type: Wire.proof)
             let proof = try await connection.receive()
-            guard proof.metadata.type == Wire.proof, Handshake.verify(proof.content, role: "server", transcript, secret: peer.secret) else { throw LinkError("link: \(peer.name) did not prove itself") }
-            try await run(Session(peer: peer, connection: connection, channel: try Handshake.channel(key, theirs: theirs.key, transcript: transcript, secret: peer.secret, client: true)))
+            guard proof.metadata.type == Wire.proof, Handshake.verify(proof.content, role: "server", transcript, secret: secret) else { throw LinkError("link: \(peer.name) did not prove itself") }
+            try await run(Session(peer: peer, connection: connection, channel: try Handshake.channel(ephemeral, theirs: theirs.key, transcript: transcript, secret: secret, client: true)))
         } catch { Env.log("link open \(peer.name): \(error)") }
     }
 
     func serve(_ connection: Connection, hello: Data) async throws {
-        guard let theirs = Hello(hello), let peer = peers.first(where: { $0.id == theirs.id }) else { throw LinkError("link: unknown Mac") }
-        let key = Curve25519.KeyAgreement.PrivateKey()
-        let mine = Hello(id: me, key: key.publicKey.rawRepresentation)
+        guard let theirs = Hello(hello), theirs.id != me else { throw LinkError("link: a hello that makes no sense") }
+        guard let peer = trust(theirs.id, name: nil, key: theirs.identity) else { throw LinkError("link: refused a Mac whose key changed") }
+        let secret = try secret(peer)
+        let ephemeral = Curve25519.KeyAgreement.PrivateKey()
+        let mine = Hello(id: me, key: ephemeral.publicKey.rawRepresentation, identity: key)
         try await connection.send(mine.data, type: Wire.hello)
         let transcript = Handshake.transcript(client: theirs, server: mine)
         let proof = try await connection.receive()
-        guard proof.metadata.type == Wire.proof, Handshake.verify(proof.content, role: "client", transcript, secret: peer.secret) else { throw LinkError("link: \(peer.name) did not prove itself") }
-        try await connection.send(Handshake.proof("server", transcript, secret: peer.secret), type: Wire.proof)
-        try await run(Session(peer: peer, connection: connection, channel: try Handshake.channel(key, theirs: theirs.key, transcript: transcript, secret: peer.secret, client: false)))
+        guard proof.metadata.type == Wire.proof, Handshake.verify(proof.content, role: "client", transcript, secret: secret) else { throw LinkError("link: \(peer.name) did not prove itself") }
+        try await connection.send(Handshake.proof("server", transcript, secret: secret), type: Wire.proof)
+        try await run(Session(peer: peer, connection: connection, channel: try Handshake.channel(ephemeral, theirs: theirs.key, transcript: transcript, secret: secret, client: false)))
     }
 
     func run(_ session: Session) async throws {
@@ -287,11 +221,8 @@ final class Link {
     var state: JSONValue {
         .object([
             "device": .string(me),
-            "pairing": .bool(pairing),
-            "pairingWith": pairingWith.map { .string($0) } ?? .null,
-            "words": words.map { .array($0.map { .string($0) }) } ?? .null,
             "peers": .array(peers.map { .string($0.name) }),
-            "nearby": .array(nearbyNames.map { .string($0) }),
+            "refused": .array(peers.filter { refused.contains($0.id) }.map { .string($0.name) }),
             "connected": .array(sessions.values.map { .string($0.peer.name) }.sorted { "\($0)" < "\($1)" }),
         ])
     }

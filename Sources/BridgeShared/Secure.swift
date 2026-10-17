@@ -5,28 +5,29 @@ import BridgeCore
 public struct Peer: Codable, Equatable, Sendable {
     public var id: String
     public var name: String
-    public var secret: Data
-    public var pairedAt: Date
+    public var key: Data
+    public var seenAt: Date
 
-    public init(id: String, name: String, secret: Data, pairedAt: Date = Date()) {
-        self.id = id; self.name = name; self.secret = secret; self.pairedAt = pairedAt
+    public init(id: String, name: String, key: Data, seenAt: Date = Date()) {
+        self.id = id; self.name = name; self.key = key; self.seenAt = seenAt
     }
 }
 
-public enum Pairing {
-    public static func commitment(_ key: Data) -> Data { Data(SHA256.hash(data: key)) }
+public enum Identity {
+    public static var file: URL { Paths.stateDir.appendingPathComponent("identity.key") }
 
-    public static func transcript(initiator: String, _ initiatorKey: Data, responder: String, _ responderKey: Data) -> Data {
-        Data(SHA256.hash(data: Data("bridge-pair-v1".utf8) + Data(initiator.utf8) + Data(responder.utf8) + initiatorKey + responderKey))
+    public static func load() -> Curve25519.KeyAgreement.PrivateKey {
+        if let data = try? Data(contentsOf: file), let key = try? Curve25519.KeyAgreement.PrivateKey(rawRepresentation: data) { return key }
+        let key = Curve25519.KeyAgreement.PrivateKey()
+        try? key.rawRepresentation.write(to: file, options: .atomic)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+        return key
     }
 
-    public static func words(_ transcript: Data) -> [String] {
-        transcript.prefix(4).map { pairingWords[Int($0)] }
-    }
-
-    public static func secret(_ mine: Curve25519.KeyAgreement.PrivateKey, theirs: Data, transcript: Data) throws -> Data {
+    public static func secret(_ mine: Curve25519.KeyAgreement.PrivateKey, me: String, theirs: Data, them: String) throws -> Data {
         let shared = try mine.sharedSecretFromKeyAgreement(with: .init(rawRepresentation: theirs))
-        let key = shared.hkdfDerivedSymmetricKey(using: SHA256.self, salt: transcript, sharedInfo: Data("bridge pairing secret v1".utf8), outputByteCount: 32)
+        let salt = Data([me, them].sorted().joined(separator: "|").utf8)
+        let key = shared.hkdfDerivedSymmetricKey(using: SHA256.self, salt: salt, sharedInfo: Data("bridge peer secret v1".utf8), outputByteCount: 32)
         return key.withUnsafeBytes { Data($0) }
     }
 }
@@ -35,11 +36,12 @@ public struct Hello: Equatable, Sendable {
     public var id: String
     public var key: Data
     public var nonce: Data
+    public var identity: Data
 
-    public static let size = 36 + 32 + 16
+    public static let size = 36 + 32 + 16 + 32
 
-    public init(id: String, key: Data, nonce: Data = Data((0..<16).map { _ in UInt8.random(in: 0...255) })) {
-        self.id = id; self.key = key; self.nonce = nonce
+    public init(id: String, key: Data, identity: Data, nonce: Data = Data((0..<16).map { _ in UInt8.random(in: 0...255) })) {
+        self.id = id; self.key = key; self.identity = identity; self.nonce = nonce
     }
 
     public init?(_ data: Data) {
@@ -48,9 +50,10 @@ public struct Hello: Equatable, Sendable {
         id = String(decoding: bytes.prefix(36), as: UTF8.self)
         key = bytes.subdata(in: 36..<68)
         nonce = bytes.subdata(in: 68..<84)
+        identity = bytes.subdata(in: 84..<116)
     }
 
-    public var data: Data { Data(id.utf8).prefix(36) + key + nonce }
+    public var data: Data { Data(id.utf8).prefix(36) + key + nonce + identity }
 }
 
 public enum Handshake {

@@ -44,14 +44,12 @@ settle() { sleep "${1:-0.2}"; }
 
 b() { XDG_STATE_HOME="$CASE_DIR/state-b" BRIDGE_SESSION="${AGENT:-test-$CASE_NAME-b}" bridge "$@"; }
 
-pair_with_b() {
+with_b() {
   mkdir -p "$CASE_DIR/state-b"
   trap 'bridge --quit >/dev/null 2>&1; b --quit >/dev/null 2>&1' EXIT
   bridge --name "${1:-thomas}" >/dev/null; b --name "${2:-yoshie}" >/dev/null
-  bridge --pair >/dev/null; b --pair >/dev/null
+  bridge --peers >/dev/null; b --peers >/dev/null
   local i
-  for i in $(seq 1 160); do [ "$(b --state | jq -r '.link.words')" != "null" ] && [ "$(bridge --state | jq -r '.link.words')" != "null" ] && break; sleep 0.25; done
-  bridge --do pair-confirm >/dev/null; b --do pair-confirm >/dev/null
   for i in $(seq 1 160); do [ -n "$(bridge --peers | jq -r '.connected | join(",")')" ] && [ -n "$(b --peers | jq -r '.connected | join(",")')" ] && break; sleep 0.25; done
 }
 

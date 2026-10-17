@@ -2,7 +2,7 @@
 source "$(dirname "$0")/../lib.sh"
 
 mkdir -p "$CASE_DIR/elsewhere"
-pair_with_b
+with_b
 python3 -c "import struct,zlib,sys; c=lambda t,d: struct.pack('>I',len(d))+t+d+struct.pack('>I',zlib.crc32(t+d)); open(sys.argv[1],'wb').write(b'\x89PNG\r\n\x1a\n'+c(b'IHDR',struct.pack('>IIBBBBB',2,1,8,2,0,0,0))+c(b'IDAT',zlib.compress(b'\0'+b'\xff\0\0'*2))+c(b'IEND',b''))" "$CASE_DIR/elsewhere/shot.png"
 cp "$ROOT/harness/fixtures/decision.html" "$CASE_DIR/pages/decision.html"
 sed -i '' "s|<h2>Layout</h2>|<img id=\"shot\" src=\"$CASE_DIR/elsewhere/shot.png\">\n<h2>Layout</h2>|" "$CASE_DIR/pages/decision.html"

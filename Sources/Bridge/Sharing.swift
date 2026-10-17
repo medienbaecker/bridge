@@ -13,6 +13,8 @@ final class Sharing {
     var drafts: [String: [String: [String: JSONValue]]] = [:]
     var here: [String: [String: (info: JSONValue, at: Date)]] = [:]
     var projects: [String: String] = [:]
+    var peerAgents: [String: [JSONValue]] = [:]
+    var onPeople: () -> Void = {}
     var beat: Timer?
 
     init(link: Link, model: Model) {
@@ -37,27 +39,47 @@ final class Sharing {
     func share(at location: String) -> String? { shares.first { $0.location == location }?.id }
 
     func share(_ location: String) throws -> JSONValue {
-        guard !link.sessions.isEmpty else { throw LinkError(link.peers.isEmpty ? "this Mac isn't paired with another: run bridge --pair on both" : "no paired Mac is connected right now") }
+        guard !link.sessions.isEmpty else { throw LinkError("no other Mac with Bridge is connected right now") }
         let bundle = try PageBundle.make(page: URL(fileURLWithPath: location))
         let title = model.listing.entry(location)?.title ?? BridgeEntry.defaultTitle(location)
         let id = share(at: location) ?? UUID().uuidString
         if share(at: location) == nil { shares.append(Share(id: id, location: location, from: Person.current, title: title)) }
-        try update(id) { $0.origins = bundle.origins; $0.synced = Self.hash(bundle.html) }
+        try update(id) { $0.origins = bundle.origins; $0.synced = Self.hash(bundle.content) }
         let rec = try record(id) ?? SharedRecord(person: Person.current)
         records[id] = rec
         try rec.absorb(model.page(for: location).sidecar)
         try store(id)
         link.send([
             "kind": .string("share"), "share": .string(id), "from": .string(Person.current), "title": .string(title),
-            "html": .string(bundle.html), "files": .object(bundle.files.mapValues { .string($0.base64EncodedString()) }),
             "record": .string(rec.save().base64EncodedString()),
-        ])
+        ].merging(Self.encode(bundle)) { a, _ in a })
         if let page = model.pages[location], page.ready { ready(page) }
         model.onChange()
         return .object(["share": .string(id), "to": .array(link.sessions.values.map { .string($0.peer.name) })])
     }
 
-    static func hash(_ html: String) -> String { SHA256.hash(data: Data(html.utf8)).map { String(format: "%02x", $0) }.joined() }
+    static func hash(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
+
+    static func encode(_ bundle: PageBundle) -> [String: JSONValue] {
+        var out: [String: JSONValue] = [
+            "html": .string(bundle.html), "main": .string(bundle.main),
+            "files": .object(bundle.files.mapValues { .string($0.base64EncodedString()) }),
+        ]
+        if let binary = bundle.binary { out["binary"] = .string(binary.base64EncodedString()) }
+        if let data = bundle.pageData { out["pageData"] = .string(data.base64EncodedString()) }
+        return out
+    }
+
+    static func decode(_ message: [String: JSONValue]) -> PageBundle? {
+        guard let html = message["html"]?.stringValue, case .object(let encoded)? = message["files"] else { return nil }
+        var files: [String: Data] = [:]
+        for (name, value) in encoded { files[name] = value.stringValue.flatMap { Data(base64Encoded: $0) } ?? Data() }
+        var bundle = PageBundle(html: html, files: files)
+        bundle.main = message["main"]?.stringValue ?? "page.html"
+        bundle.binary = message["binary"]?.stringValue.flatMap { Data(base64Encoded: $0) }
+        bundle.pageData = message["pageData"]?.stringValue.flatMap { Data(base64Encoded: $0) }
+        return bundle
+    }
 
     func update(_ id: String, _ change: (inout Share) -> Void) throws {
         guard let i = shares.firstIndex(where: { $0.id == id }) else { return }
@@ -68,31 +90,29 @@ final class Sharing {
     func rewritten(_ page: Page) {
         guard let share = shares.first(where: { $0.location == page.location }) else { return }
         let known = Dictionary((share.origins ?? [:]).map { ($0.value, $0.key) }, uniquingKeysWith: { a, _ in a })
-        guard let bundle = try? PageBundle.make(page: URL(fileURLWithPath: share.location), known: known), Self.hash(bundle.html) != share.synced else { return }
+        guard let bundle = try? PageBundle.make(page: URL(fileURLWithPath: share.location), known: known), Self.hash(bundle.content) != share.synced else { return }
         let clock = (share.clock ?? 0) + 1
         try? update(share.id) {
             $0.origins = ($0.origins ?? [:]).merging(bundle.origins) { a, _ in a }
-            $0.synced = Self.hash(bundle.html)
+            $0.synced = Self.hash(bundle.content)
             $0.clock = clock
             $0.writer = link.me
         }
         link.send([
             "kind": .string("page"), "share": .string(share.id), "by": .string(Person.current),
             "clock": .number(Double(clock)), "writer": .string(link.me),
-            "html": .string(bundle.html), "files": .object(bundle.files.mapValues { .string($0.base64EncodedString()) }),
-        ])
+        ].merging(Self.encode(bundle)) { a, _ in a })
     }
 
     func receivePage(_ id: String, _ message: [String: JSONValue]) throws {
-        guard let share = shares.first(where: { $0.id == id }), let html = message["html"]?.stringValue, case .object(let encoded)? = message["files"] else { return }
-        var files: [String: Data] = [:]
-        for (name, value) in encoded { files[name] = value.stringValue.flatMap { Data(base64Encoded: $0) } ?? Data() }
+        guard let share = shares.first(where: { $0.id == id }), let bundle = Self.decode(message) else { return }
+        let files = bundle.files
         let folder = Shares.folder.appendingPathComponent(id)
         let clock = message["clock"]?.intValue ?? 0, writer = message["writer"]?.stringValue ?? ""
         guard share.older(than: clock, by: writer) else { throw LinkError("an older rewrite arrived after a newer one; kept the newer") }
-        try update(id) { $0.synced = Self.hash(html); $0.clock = clock; $0.writer = writer }
+        try update(id) { $0.synced = Self.hash(bundle.content); $0.clock = clock; $0.writer = writer }
         if share.received {
-            _ = try PageBundle(html: html, files: files).install(into: folder)
+            _ = try bundle.install(into: folder)
             return
         }
         var origins = share.origins ?? [:]
@@ -103,7 +123,13 @@ final class Sharing {
             origins[name] = folder.appendingPathComponent(name).path
         }
         try update(id) { $0.origins = origins }
-        try Data(PageBundle.restore(html, origins: origins, folder: folder).utf8).write(to: URL(fileURLWithPath: share.location), options: .atomic)
+        let target = URL(fileURLWithPath: share.location)
+        if let data = bundle.pageData { try data.write(to: Paths.dataFile(for: share.location), options: .atomic) }
+        if let binary = bundle.binary {
+            try binary.write(to: target, options: .atomic)
+        } else {
+            try Data(PageBundle.restore(bundle.html, origins: origins, folder: folder).utf8).write(to: target, options: .atomic)
+        }
     }
 
     func recordURL(_ id: String) -> URL { Shares.folder.appendingPathComponent(id).appendingPathComponent("record.automerge") }
@@ -199,6 +225,10 @@ final class Sharing {
     }
 
     func received(_ message: [String: JSONValue], from peer: Peer) {
+        if message["kind"]?.stringValue == "agents", case .array(let list)? = message["list"] {
+            if peerAgents[peer.id] != list { peerAgents[peer.id] = list; onPeople() }
+            return
+        }
         guard let id = message["share"]?.stringValue else { return }
         switch message["kind"]?.stringValue {
         case "cursor":
@@ -227,6 +257,9 @@ final class Sharing {
                     page.call("__bridge.toast(text)", ["text": "\(message["by"]?.stringValue ?? peer.name)'s agent rewrote the page"])
                 }
             } catch { Env.log("page from \(peer.name): \(error)") }
+        case "hand":
+            guard let session = message["session"]?.stringValue, let share = shares.first(where: { $0.id == id }) else { return }
+            model.hand(share.location, to: session)
         case "here":
             guard let person = message["person"]?.stringValue else { return }
             if let colour = message["color"]?.stringValue { colours[person] = colour }
@@ -244,11 +277,12 @@ final class Sharing {
         guard let html = message["html"]?.stringValue, case .object(let encoded)? = message["files"] else { return }
         var files: [String: Data] = [:]
         for (name, value) in encoded { files[name] = value.stringValue.flatMap { Data(base64Encoded: $0) } ?? Data() }
-        let page = try PageBundle(html: html, files: files).install(into: Shares.folder.appendingPathComponent(id)).path
+        guard let bundle = Self.decode(message) else { return }
+        let page = try bundle.install(into: Shares.folder.appendingPathComponent(id)).path
         let from = message["from"]?.stringValue ?? peer.name
         let title = message["title"]?.stringValue ?? "Shared page"
         if share(at: page) == nil { shares.append(Share(id: id, location: page, from: from, title: title)) }
-        try update(id) { $0.synced = Self.hash(html) }
+        try update(id) { $0.synced = Self.hash(bundle.content) }
         if model.listing.entry(page) == nil {
             var entry = BridgeEntry(location: page, project: "Shared by \(from)", session: "")
             entry.title = title
@@ -266,8 +300,23 @@ final class Sharing {
         return name
     }
 
+    func announceAgents() {
+        let list: [JSONValue] = model.agents().map { live in
+            .object(["session": .string(live.session), "title": .string(model.agentTitle(live.session, cwd: live.cwd)),
+                     "detail": .string(model.agentDetail(live.session, cwd: live.cwd, life: live.life))])
+        }
+        link.send(["kind": .string("agents"), "list": .array(list)])
+    }
+
+    func handTo(_ peerID: String, session: String, location: String) throws {
+        let id = try (share(at: location).map { JSONValue.string($0) } ?? share(location)["share"]) ?? .null
+        guard let peer = link.sessions[peerID] else { throw LinkError("that Mac isn't connected right now") }
+        peer.send(["kind": .string("hand"), "share": id, "session": .string(session)])
+    }
+
     func announce() {
         guard !link.sessions.isEmpty else { return }
+        announceAgents()
         for share in shares {
             var agent: JSONValue = .null
             if let presented = model.pages[share.location]?.sidecar.presented ?? (try? Sidecar.load(Paths.sidecar(for: share.location)))?.presented, !presented.session.isEmpty {
@@ -296,6 +345,8 @@ final class Sharing {
     }
 
     func dropped(_ peer: Peer) {
+        peerAgents[peer.id] = nil
+        onPeople()
         for id in here.keys where here[id]?[peer.name] != nil {
             here[id]?[peer.name] = nil
             drawPresence(id)

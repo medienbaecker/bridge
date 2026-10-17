@@ -2,7 +2,7 @@
 source "$(dirname "$0")/../lib.sh"
 
 mkdir -p "$CASE_DIR/elsewhere"
-pair_with_b
+with_b
 bridge --colour '#e8590c' >/dev/null
 
 cp "$ROOT/harness/fixtures/decision.html" "$CASE_DIR/pages/decision.html"
@@ -13,7 +13,7 @@ page="$CASE_DIR/pages/decision.html"
 wait_ready
 
 share_button() { bridge --state | jq -c '[.toolbar[] | select(.id == "share")][0] | {label, enabled, hidden}'; }
-check "a paired Mac offers to share the page" "$(share_button)" '{"label":"Share with yoshie","enabled":true,"hidden":false}'
+check "a connected Mac offers to share the page" "$(share_button)" '{"label":"Share with yoshie","enabled":true,"hidden":false}'
 check "sharing with no page path is refused" "$(bridge --share 2>&1 >/dev/null | head -1 | cut -c1-6)" "bridge"
 out=$(bridge --share "$page")
 check_json "the page goes to yoshie" "$out" '.to | join(",")' "yoshie"

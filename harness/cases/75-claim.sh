@@ -2,7 +2,7 @@
 source "$(dirname "$0")/../lib.sh"
 
 export AGENT=her-agent
-pair_with_b
+with_b
 
 page=$(fixture decision.html)
 (cd "$CASE_DIR/pages" && bridge decision.html)

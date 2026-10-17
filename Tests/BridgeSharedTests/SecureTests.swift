@@ -11,16 +11,15 @@ struct Side {
 
 func paired() throws -> (Side, Side, Data) {
     let a = Side(), b = Side()
-    let t = Pairing.transcript(initiator: a.id, a.pub, responder: b.id, b.pub)
-    let secretA = try Pairing.secret(a.key, theirs: b.pub, transcript: t)
-    let secretB = try Pairing.secret(b.key, theirs: a.pub, transcript: t)
+    let secretA = try Identity.secret(a.key, me: a.id, theirs: b.pub, them: b.id)
+    let secretB = try Identity.secret(b.key, me: b.id, theirs: a.pub, them: a.id)
     #expect(secretA == secretB)
     return (a, b, secretA)
 }
 
 func session(secret clientSecret: Data, _ serverSecret: Data) throws -> (Channel, Channel)? {
     let c = Side(), s = Side()
-    let ch = Hello(id: c.id, key: c.pub), sh = Hello(id: s.id, key: s.pub)
+    let ch = Hello(id: c.id, key: c.pub, identity: Side().pub), sh = Hello(id: s.id, key: s.pub, identity: Side().pub)
     let t = Handshake.transcript(client: ch, server: sh)
     guard Handshake.verify(Handshake.proof("client", t, secret: clientSecret), role: "client", t, secret: serverSecret),
           Handshake.verify(Handshake.proof("server", t, secret: serverSecret), role: "server", t, secret: clientSecret) else { return nil }
@@ -28,12 +27,10 @@ func session(secret clientSecret: Data, _ serverSecret: Data) throws -> (Channel
             try Handshake.channel(s.key, theirs: c.pub, transcript: t, secret: serverSecret, client: false))
 }
 
-@Test func bothMacsSeeTheSameFourWords() throws {
-    let a = Side(), b = Side()
-    let words = Pairing.words(Pairing.transcript(initiator: a.id, a.pub, responder: b.id, b.pub))
-    #expect(words.count == 4)
-    #expect(words == Pairing.words(Pairing.transcript(initiator: a.id, a.pub, responder: b.id, b.pub)))
-    #expect(Pairing.commitment(a.pub) != Pairing.commitment(b.pub))
+@Test func aThirdMacCannotWorkOutTwoMacsSecret() throws {
+    let (a, b, secret) = try paired()
+    let c = Side()
+    #expect(try Identity.secret(c.key, me: a.id, theirs: b.pub, them: b.id) != secret)
 }
 
 @Test func aSessionCarriesMessagesBothWays() throws {
@@ -66,7 +63,7 @@ func session(secret clientSecret: Data, _ serverSecret: Data) throws -> (Channel
 }
 
 @Test func aHelloRoundTrips() throws {
-    let hello = Hello(id: UUID().uuidString, key: Side().pub)
+    let hello = Hello(id: UUID().uuidString, key: Side().pub, identity: Side().pub)
     #expect(Hello(hello.data) == hello)
     #expect(Hello(Data(count: 10)) == nil)
 }

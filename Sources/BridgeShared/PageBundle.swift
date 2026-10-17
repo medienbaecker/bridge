@@ -5,9 +5,14 @@ import BridgeCore
 public struct PageBundle: Codable, Equatable, Sendable {
     public var html: String
     public var files: [String: Data]
+    public var main = "page.html"
+    public var binary: Data?
+    public var pageData: Data?
     public var origins: [String: String] = [:]
 
-    enum CodingKeys: String, CodingKey { case html, files }
+    enum CodingKeys: String, CodingKey { case html, files, main, binary, pageData }
+
+    public var content: Data { binary ?? Data(html.utf8) }
 
     public static let limit = 50 * 1024 * 1024
 
@@ -18,7 +23,26 @@ public struct PageBundle: Codable, Equatable, Sendable {
     static let reference = try! NSRegularExpression(pattern: #"(\b(?:src|href|poster)\s*=\s*)(["'])([^"']*)\2"#, options: .caseInsensitive)
 
     public static func make(page: URL, known: [String: String] = [:]) throws -> PageBundle {
-        var html = String(decoding: try Data(contentsOf: page), as: UTF8.self)
+        let kind = Kind.of(page.path)
+        let ext = page.pathExtension.lowercased()
+        let main = "page." + (ext.isEmpty ? "txt" : ext)
+        let raw = try Data(contentsOf: page)
+        guard raw.count <= limit else { throw TooLarge(bytes: raw.count) }
+        if kind == .image || kind == .pdf {
+            var bundle = PageBundle(html: "", files: [:])
+            bundle.main = main
+            bundle.binary = raw
+            return bundle
+        }
+        var pageData: Data?
+        if kind == .jsx { pageData = try? Data(contentsOf: Paths.dataFile(for: page.path)) }
+        var html = String(decoding: raw, as: UTF8.self)
+        guard kind == .html || kind == .svg || kind == .md else {
+            var bundle = PageBundle(html: html, files: [:])
+            bundle.main = main
+            bundle.pageData = pageData
+            return bundle
+        }
         let folder = page.deletingLastPathComponent()
         var files: [String: Data] = [:]
         var origins: [String: String] = [:]
@@ -36,6 +60,7 @@ public struct PageBundle: Codable, Equatable, Sendable {
             html.replaceSubrange(Range(m.range(at: 3), in: html)!, with: name)
         }
         var bundle = PageBundle(html: html, files: files)
+        bundle.main = main
         bundle.origins = origins
         return bundle
     }
@@ -58,8 +83,10 @@ public struct PageBundle: Codable, Equatable, Sendable {
             guard name.hasPrefix("files/"), !name.contains(".."), !name.dropFirst(6).contains("/") else { throw Unsafe(name: name) }
             try data.write(to: dir.appendingPathComponent(name), options: .atomic)
         }
-        let page = dir.appendingPathComponent("page.html")
-        try Data(html.utf8).write(to: page, options: .atomic)
+        guard main.hasPrefix("page."), !main.contains("/") else { throw Unsafe(name: main) }
+        let page = dir.appendingPathComponent(main)
+        if let pageData { try pageData.write(to: Paths.dataFile(for: page.path), options: .atomic) }
+        try content.write(to: page, options: .atomic)
         return page
     }
 

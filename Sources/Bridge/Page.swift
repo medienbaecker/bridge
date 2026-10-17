@@ -57,6 +57,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
     var watcher: Watcher?
     var media: [String: Date] = [:]
     var cursor: JSONValue = .null
+    var sharedSeen: Data?
     var buildFailed = false
     var buildMs: Int?
     var frames: [WKFrameInfo] = []
@@ -250,6 +251,10 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
     func fileChanged() {
         guard kind != .url else { return }
         refreshMedia()
+        if let data = try? Data(contentsOf: URL(fileURLWithPath: location)), data != sharedSeen {
+            if sharedSeen != nil { model.onRewrite(self) }
+            sharedSeen = data
+        }
         if let data = try? Data(contentsOf: sidecarURL), data != lastWritten, data != sidecar.data() {
             lastWritten = data
             do { sidecar = try Sidecar.load(sidecarURL); unreadable = nil } catch { unreadable = "\(error)" }
@@ -276,7 +281,6 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         guard kind.isDocument, kind != .jsx, let data = try? Data(contentsOf: URL(fileURLWithPath: location)), data != lastContent else { return }
         let previous = lastContent
         lastContent = data
-        if kind == .html { model.onRewrite(self) }
         guard viewingVersion == nil else { return }
         var html = kind == .html ? String(decoding: data, as: UTF8.self) : wrapped(data)
         var before = kind == .html ? String(decoding: previous ?? Data(), as: UTF8.self) : wrapped(previous)

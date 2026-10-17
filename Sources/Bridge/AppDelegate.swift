@@ -30,8 +30,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             exit(1)
         }
         self.server = server
-        link.onWords = { [weak self] name, words in self?.askToPair(name, words) }
-        link.onChange = { [weak self] in self?.window.updateShare() }
+        link.onChange = { [weak self] in self?.window.updateShare(); self?.window.projects.reload() }
+        sharing.onPeople = { [weak self] in self?.window.projects.reload() }
         _ = sharing
         link.start()
         if model.scope == .waiting, model.bridges(in: .waiting).isEmpty { model.scope = .all }
@@ -184,9 +184,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             Task { @MainActor in
                 do { reply(.ok(try await page.evaluate(code))) } catch { reply(.error("\(error)")) }
             }
-        case .pair:
-            link.startPairing()
-            reply(.ok(link.state))
         case .peers:
             reply(.ok(link.state))
         case .claim(let loc, let session, let cwd):
@@ -202,7 +199,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             do { reply(.ok(try sharing.share(loc))) } catch { reply(.error("\(error)")) }
         case .command(let name, let argument):
             guard Env.test else { reply(.error("test mode only")); return }
-            if name == "pair-confirm" || name == "pair-cancel" { link.answer(name == "pair-confirm"); reply(.ok(state())); return }
             reply(window.perform(command: name, argument: argument) ? .ok(state()) : .error("unknown command \(name)"))
         case .shot(let path, let screen):
             Task { @MainActor in
@@ -251,17 +247,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             reply(.ok(.null))
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { NSApp.terminate(nil) }
         }
-    }
-
-    func askToPair(_ name: String, _ words: [String]) {
-        guard !Env.test, let window = window.window else { return }
-        let alert = NSAlert()
-        alert.messageText = "Pair with \(name)?"
-        alert.informativeText = "Pair only if \(name)'s Mac shows the same four words:\n\n" + words.joined(separator: " · ")
-        alert.addButton(withTitle: "Pair")
-        alert.addButton(withTitle: "Cancel")
-        NSApp.activate()
-        alert.beginSheetModal(for: window) { [weak self] response in self?.link.answer(response == .alertFirstButtonReturn) }
     }
 
     func state() -> JSONValue {

@@ -146,6 +146,7 @@ final class Model {
 
     func projectName(_ cwd: String) -> String {
         if let name = projectNames[cwd] { return name }
+        if cwd == NSHomeDirectory() || cwd == FileManager.default.homeDirectoryForCurrentUser.path { return "Home" }
         let name = (Ground.projectRoot(for: cwd) as NSString).lastPathComponent
         projectNames[cwd] = name
         return name
@@ -159,8 +160,18 @@ final class Model {
     }
 
     func agentLabel(_ session: String, cwd: String) -> String {
-        let name = agentName(session, cwd: cwd)
-        return about(session).topic.map { "\(name) · “\($0)”" } ?? name
+        agentTitle(session, cwd: cwd)
+    }
+
+    func agentTitle(_ session: String, cwd: String) -> String {
+        guard var topic = about(session).topic?.replacingOccurrences(of: "…", with: "") else { return agentName(session, cwd: cwd) }
+        if topic.count > 30, let space = topic.prefix(30).lastIndex(of: " ") { topic = String(topic[..<space]) + "…" }
+        return topic
+    }
+
+    func agentDetail(_ session: String, cwd: String, life: ClaudeSessions.Life) -> String {
+        let state = life == .working ? "working" : life == .gone ? "ended" : "idle"
+        return about(session).topic == nil ? state : "\(agentName(session, cwd: cwd)) · \(state)"
     }
 
     func agents() -> [ClaudeSessions.Live] {
