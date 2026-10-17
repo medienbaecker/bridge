@@ -1031,10 +1031,17 @@ function __bridgeInit(options) {
   const cursorColors = ['#e8590c', '#1c7ed6', '#2f9e44', '#ae3ec9', '#f08c00', '#0c8599', '#d6336c', '#5c7cfa'];
   const cursors = { tracking: false, list: [], els: new Map(), sentAt: 0, timer: null, last: undefined };
 
-  function cursorColor(person) {
-    let h = 2166136261;
-    for (const ch of person) h = Math.imul(h ^ ch.codePointAt(0), 16777619);
-    return cursorColors[(h >>> 0) % cursorColors.length];
+  function colorsFor(people) {
+    const taken = new Set(), out = new Map();
+    for (const person of [...people].sort()) {
+      let h = 2166136261;
+      for (const ch of person) h = Math.imul(h ^ ch.codePointAt(0), 16777619);
+      let i = (h >>> 0) % cursorColors.length;
+      for (let n = 0; n < cursorColors.length && taken.has(i); n++) i = (i + 1) % cursorColors.length;
+      taken.add(i);
+      out.set(person, cursorColors[i]);
+    }
+    return out;
   }
 
   function sendCursor(anchor) {
@@ -1056,6 +1063,7 @@ function __bridgeInit(options) {
 
   function placeCursors() {
     const seen = new Set();
+    const colors = colorsFor(cursors.list.map((c) => c.person));
     for (const c of cursors.list) {
       seen.add(c.person);
       let el = cursors.els.get(c.person);
@@ -1066,7 +1074,7 @@ function __bridgeInit(options) {
         document.body.appendChild(el);
         cursors.els.set(c.person, el);
       }
-      el.style.setProperty('--bridge-cursor', cursorColor(c.person));
+      el.style.setProperty('--bridge-cursor', c.agent ? '#5f6670' : colors.get(c.person));
       el.querySelector('span').textContent = c.person;
       const target = c.anchor && resolve(c.anchor);
       el.hidden = !target;
