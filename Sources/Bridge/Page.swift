@@ -596,7 +596,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
 
     func addComment(anchor: JSONValue, target: String, text: String) -> Comment {
         let id = String(UUID().uuidString.prefix(8)).lowercased()
-        let c = Comment(id: id, text: text, target: target, anchor: anchor, version: sidecar.version)
+        let c = Comment(id: id, text: text, target: target, anchor: anchor, version: sidecar.version, person: Person.current)
         sidecar.comments.append(c)
         save()
         model.onChange()
@@ -624,7 +624,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
 
     func reply(to id: String, text: String, by: String = "agent") {
         guard let i = sidecar.comments.firstIndex(where: { $0.id == id }) else { return }
-        sidecar.comments[i].said.append(Say(by: by, text: text))
+        sidecar.comments[i].said.append(Say(by: by, text: text, person: Person.current))
         if by == "user", sidecar.comments[i].state == "done" { sidecar.comments[i].state = "open" }
         save(); pushNotes(); model.onChange()
         if by == "agent" { model.markUnread(location) }
@@ -634,7 +634,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         guard let i = sidecar.comments.firstIndex(where: { $0.id == id }) else { return }
         let (newState, event) = state == "done" ? ("done", "marked done") : state == "reopen" ? ("open", "reopened") : ("working", "working on it")
         sidecar.comments[i].state = newState
-        sidecar.comments[i].said.append(Say(by: by, text: event, kind: "status"))
+        sidecar.comments[i].said.append(Say(by: by, text: event, kind: "status", person: Person.current))
         save(); pushNotes(); model.onChange()
     }
 

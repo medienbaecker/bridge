@@ -5,9 +5,10 @@ public struct Say: Codable, Equatable, Sendable {
     public var at: Date
     public var text: String
     public var kind: String
+    public var person: String?
 
-    public init(by: String, text: String, kind: String = "reply", at: Date = Date()) {
-        self.by = by; self.text = text; self.kind = kind; self.at = at
+    public init(by: String, text: String, kind: String = "reply", at: Date = Date(), person: String? = nil) {
+        self.by = by; self.text = text; self.kind = kind; self.at = at; self.person = person
     }
 }
 
@@ -21,10 +22,11 @@ public struct Comment: Codable, Equatable, Sendable, Identifiable {
     public var anchor: JSONValue
     public var said: [Say]
     public var lost: Bool?
+    public var person: String?
 
-    public init(id: String, text: String, target: String, anchor: JSONValue, version: Int, at: Date = Date()) {
+    public init(id: String, text: String, target: String, anchor: JSONValue, version: Int, at: Date = Date(), person: String? = nil) {
         self.id = id; self.text = text; self.target = target; self.anchor = anchor
-        self.version = version; self.at = at; self.state = "open"; self.said = []
+        self.version = version; self.at = at; self.state = "open"; self.said = []; self.person = person
     }
 }
 
@@ -60,6 +62,7 @@ public struct Sidecar: Codable, Equatable, Sendable {
     public var fingerprint: String?
     public var questions: [String] = []
     public var answers: [String: JSONValue] = [:]
+    public var people: [String: [String: JSONValue]] = [:]
     public var proposed: [String: JSONValue] = [:]
     public var sentAnswers: [String: JSONValue]?
     public var withdrawn: [String] = []
@@ -91,7 +94,7 @@ public struct Sidecar: Codable, Equatable, Sendable {
     }
 
     private static let known: Set<String> = [
-        "status", "version", "fingerprint", "questions", "answers", "defaults", "proposed", "sentAnswers", "withdrawn", "sentAt", "closedAt",
+        "status", "version", "fingerprint", "questions", "answers", "people", "defaults", "proposed", "sentAnswers", "withdrawn", "sentAt", "closedAt",
         "collectedAt", "collectedBy", "comments", "history", "presented", "page",
     ]
 
@@ -111,6 +114,7 @@ public struct Sidecar: Codable, Equatable, Sendable {
         fingerprint = try optional("fingerprint")
         questions = try field("questions", or: [])
         answers = try field("answers", or: [:])
+        people = try field("people", or: [:])
         proposed = try field("proposed", or: [:])
         sentAnswers = try optional("sentAnswers")
         withdrawn = try field("withdrawn", or: [])
@@ -136,6 +140,7 @@ public struct Sidecar: Codable, Equatable, Sendable {
         try c.encodeIfPresent(fingerprint, forKey: .named("fingerprint"))
         try c.encode(questions, forKey: .named("questions"))
         try c.encode(answers, forKey: .named("answers"))
+        if !people.isEmpty { try c.encode(people, forKey: .named("people")) }
         if !proposed.isEmpty { try c.encode(proposed, forKey: .named("proposed")) }
         try c.encodeIfPresent(sentAnswers, forKey: .named("sentAnswers"))
         if !withdrawn.isEmpty { try c.encode(withdrawn, forKey: .named("withdrawn")) }

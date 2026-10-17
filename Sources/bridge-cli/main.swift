@@ -8,6 +8,7 @@ bridge-dev <file|url> [more files]      present; a URL opens the live site
 bridge-dev --links <mode> <file|url>    where its links open: window (in Bridge), browser, or external (other hosts in the browser; a URL's default)
 bridge-dev --site <url> <file.html>     run the page as part of that site: its imports and frames are the site's
 bridge-dev --read   <file>              what they have answered so far, JSON, no blocking
+bridge-dev --name [name]                who answers on this Mac, as a shared page shows it; with a name, set it
 bridge-dev --sidecar <file>             where their record for that page lives (in the app's store)
 bridge-dev --seed-from <flavour>        once, into an empty flavour: copy that flavour's list and records here
 bridge-dev --wait   <file> [--timeout 900]   block until they click Send, then print
@@ -143,15 +144,18 @@ func readOut(_ loc: String) -> JSONValue {
     }
     if s.answered { collect(loc) }
     out["answers"] = .object(s.answers)
+    if !s.people.isEmpty { out["people"] = .object(s.people.mapValues { .object($0) }) }
     out["defaults"] = .object(s.defaults)
     if !s.withdrawn.isEmpty { out["withdrawn"] = .array(s.withdrawn.map { .string($0) }) }
     if let t = s.sentAt { out["sent"] = .string(ISO8601DateFormatter().string(from: t)) }
     out["comments"] = .array(s.comments.map { c in
-        .object([
+        var o: [String: JSONValue] = [
             "id": .string(c.id), "text": .string(c.text), "target": .string(c.target),
             "state": .string(c.state), "version": .number(Double(c.version)), "lost": .bool(c.lost ?? false),
-            "said": .array(c.said.map { .object(["by": .string($0.by), "at": .string(ISO8601DateFormatter().string(from: $0.at)), "text": .string($0.text), "kind": .string($0.kind)]) }),
-        ])
+            "said": .array(c.said.map { said($0, at: true) }),
+        ]
+        if let p = c.person { o["person"] = .string(p) }
+        return .object(o)
     })
     if let g = s.presented?.ground {
         var ground: [String: JSONValue] = ["repo": .string(g.repo), "branch": .string(g.branch), "commit": .string(g.commit)]
@@ -162,6 +166,13 @@ func readOut(_ loc: String) -> JSONValue {
         out["history"] = .array(s.history.map { .object(["version": .number(Double($0.n)), "answers": .object(Sidecar.own($0))]) })
     }
     return .object(out)
+}
+
+func said(_ s: Say, at: Bool = false) -> JSONValue {
+    var o: [String: JSONValue] = ["by": .string(s.by), "text": .string(s.text), "kind": .string(s.kind)]
+    if at { o["at"] = .string(ISO8601DateFormatter().string(from: s.at)) }
+    if let p = s.person { o["person"] = .string(p) }
+    return .object(o)
 }
 
 func modifyOffline(_ loc: String, _ change: (inout Sidecar) -> Void) {
@@ -255,6 +266,13 @@ case "--help", "-h":
 case "--read":
     print(json: readOut(location(args.dropFirst().first)))
 
+case "--name":
+    if let name = args.dropFirst().first {
+        do { print(try Person.set(name)) } catch { fail("\(error)") }
+    } else {
+        print(Person.current)
+    }
+
 case "--sidecar":
     print(Paths.sidecar(for: location(args.dropFirst().first)).path)
 
@@ -336,10 +354,12 @@ case "--pins":
     let s: Sidecar
     do { s = try Sidecar.load(Paths.sidecar(for: location(args.dropFirst().first))) } catch { fail("\(error)") }
     print(json: JSONValue.array(s.openComments.map { c in
-        .object([
+        var o: [String: JSONValue] = [
             "id": .string(c.id), "text": .string(c.text), "target": .string(c.target), "state": .string(c.state), "lost": .bool(c.lost ?? false),
-            "said": .array(c.said.map { .object(["by": .string($0.by), "text": .string($0.text), "kind": .string($0.kind)]) }),
-        ])
+            "said": .array(c.said.map { said($0) }),
+        ]
+        if let p = c.person { o["person"] = .string(p) }
+        return .object(o)
     }))
 
 case "--reply":
@@ -350,7 +370,7 @@ case "--reply":
     else {
         modifyOffline(loc) { s in
             guard let i = s.comments.firstIndex(where: { $0.id == id }) else { return }
-            s.comments[i].said.append(Say(by: "agent", text: text))
+            s.comments[i].said.append(Say(by: "agent", text: text, person: Person.current))
         }
     }
 
@@ -363,7 +383,7 @@ case "--done", "--reopen", "--working":
         modifyOffline(loc) { s in
             guard let i = s.comments.firstIndex(where: { $0.id == args[2] }) else { return }
             s.comments[i].state = state == "done" ? "done" : state == "reopen" ? "open" : "working"
-            s.comments[i].said.append(Say(by: "agent", text: state == "done" ? "marked done" : state == "reopen" ? "reopened" : "working on it", kind: "status"))
+            s.comments[i].said.append(Say(by: "agent", text: state == "done" ? "marked done" : state == "reopen" ? "reopened" : "working on it", kind: "status", person: Person.current))
         }
     }
 

@@ -310,3 +310,18 @@ private let kitOfShapes = ".options { } .draft { } .bars { } .bar { }"
     ClaudeSessions.record("UserPromptSubmit", session: "s", pid: 999_999)
     #expect(ClaudeSessions.life(of: "s") == .gone)
 }
+
+@Test func personNamesFoldToPlainLowercase() {
+    #expect(Person.clean("Thomas") == "thomas")
+    #expect(Person.clean("Günther") == "gunther")
+    #expect(Person.clean("Mary-Jane O'Neil") == "mary-janeoneil")
+    #expect(Person.clean("  ") == nil)
+}
+
+@Test func peopleSurviveASidecarRoundTrip() throws {
+    var s = Sidecar()
+    s.people = ["yoshie": ["layout": .string("list")]]
+    let back = try JSON.decoder.decode(Sidecar.self, from: s.data())
+    #expect(back.people == s.people)
+    #expect(String(decoding: Sidecar().data(), as: UTF8.self).contains("people") == false)
+}
