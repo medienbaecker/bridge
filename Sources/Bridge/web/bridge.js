@@ -643,6 +643,7 @@ function __bridgeInit(options) {
     propose(proposals(doc));
     notes.place();
     placeCursors();
+    drawPeople();
     return { reload: false };
   }
 
@@ -1093,6 +1094,31 @@ function __bridgeInit(options) {
     for (const [person, el] of cursors.els) if (!seen.has(person)) { el.remove(); cursors.els.delete(person); }
   }
 
+  const people = { list: [] };
+
+  function drawPeople() {
+    for (const dot of document.querySelectorAll('.bridge-pick')) dot.remove();
+    const colors = colorsFor(people.list);
+    for (const p of people.list) {
+      for (const [key, value] of Object.entries(p.answers || {})) {
+        const els = [...document.querySelectorAll(`[data-record="${CSS.escape(key)}"]`)].filter((el) => !ours(el));
+        const radio = els.find((el) => el.matches('input[type=radio]') && el.value === String(value));
+        const card = els.find((el) => el.dataset.value !== undefined && el.dataset.value === String(value)) || radio?.parentElement;
+        const dot = document.createElement('span');
+        dot.className = 'bridge-pick';
+        dot.style.setProperty('--bridge-cursor', colors.get(p.person));
+        dot.title = `${p.person} picked this`;
+        dot.textContent = p.person;
+        if (card) card.appendChild(dot);
+        else if (els.length) {
+          dot.textContent = `${p.person}: ${typeof value === 'string' ? value : JSON.stringify(value)}`;
+          dot.classList.add('bridge-pick-value');
+          els[els.length - 1].insertAdjacentElement('afterend', dot);
+        }
+      }
+    }
+  }
+
   document.addEventListener('pointermove', trackCursor, { capture: true, passive: true });
   document.documentElement.addEventListener('pointerleave', () => { if (cursors.tracking) sendCursor(null); });
   addEventListener('scroll', () => { if (cursors.list.length) placeCursors(); }, { capture: true, passive: true });
@@ -1113,6 +1139,8 @@ function __bridgeInit(options) {
     refreshMedia,
     trackCursor: (on) => { cursors.tracking = on; if (!on) sendCursor(null); },
     cursors: (list) => { cursors.list = list || []; placeCursors(); },
+    people: (list) => { people.list = list || []; drawPeople(); },
+    answers: (answers) => { state.answers = answers || {}; applyAnswers(state.answers); },
   };
   globalThis.__bridgeNotes = notes;
 

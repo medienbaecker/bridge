@@ -53,6 +53,7 @@ final class Link {
     var sessions: [String: Session] = [:]
     var connecting: Set<String> = []
     var nearby: [String: Bonjour.Endpoint] = [:]
+    var seen: [Bonjour.Endpoint] = []
     var pairingUntil: Date?
     var pairingWith: String?
     var words: [String]?
@@ -60,6 +61,7 @@ final class Link {
     var onMessage: (Peer, [String: JSONValue]) -> Void = { _, _ in }
     var onChange: () -> Void = {}
     var onDrop: (Peer) -> Void = { _ in }
+    var onConnect: (Peer) -> Void = { _ in }
     var onWords: (String, [String]) -> Void = { _, _ in }
     private var listener: Task<Void, Never>?
     private var browser: Task<Void, Never>?
@@ -77,7 +79,6 @@ final class Link {
         txt["id"] = me
         txt["name"] = Person.current
         if !group.isEmpty { txt["group"] = group }
-        if pairing { txt["pairing"] = "1" }
         let provider = BonjourListenerProvider(name: Person.current, type: Self.service, txtRecord: txt)
         listener = Task { [weak self] in
             do {
@@ -101,7 +102,24 @@ final class Link {
         }
     }
 
+    func attempt(_ id: String, _ work: @escaping () async -> Void) {
+        connecting.insert(id)
+        let task = Task {
+            await work()
+            connecting.remove(id)
+            if sessions[id] == nil { DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self.map { $0.saw($0.seen) } } }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
+            guard let self, self.connecting.contains(id), self.sessions[id] == nil, self.words == nil else { return }
+            task.cancel()
+            self.connecting.remove(id)
+            if self.pairingWith != nil, self.words == nil { self.pairingWith = nil }
+            self.saw(self.seen)
+        }
+    }
+
     func saw(_ endpoints: [Bonjour.Endpoint]) {
+        seen = endpoints
         let unpaired = endpoints.filter { e in
             guard let id = e.txtRecord["id"], id != me, (e.txtRecord["group"] ?? "") == group else { return false }
             return !peers.contains { $0.id == id }
@@ -110,12 +128,10 @@ final class Link {
         if Set(now.keys) != Set(nearby.keys) { nearby = now; onChange() } else { nearby = now }
         for endpoint in endpoints {
             guard let id = endpoint.txtRecord["id"], id != me, me < id, !connecting.contains(id), (endpoint.txtRecord["group"] ?? "") == group else { continue }
-            if pairing, pairingWith == nil, endpoint.txtRecord["pairing"] == "1" {
-                connecting.insert(id)
-                Task { await pair(Connection(to: endpoint) { TLV { TCP() } }, initiator: true); connecting.remove(id) }
+            if pairing, pairingWith == nil, !peers.contains(where: { $0.id == id }) {
+                attempt(id) { await self.pair(Connection(to: endpoint) { TLV { TCP() } }, initiator: true) }
             } else if let peer = peers.first(where: { $0.id == id }), sessions[id] == nil {
-                connecting.insert(id)
-                Task { await open(Connection(to: endpoint) { TLV { TCP() } }, as: peer); connecting.remove(id) }
+                attempt(id) { await self.open(Connection(to: endpoint) { TLV { TCP() } }, as: peer) }
             }
         }
     }
@@ -138,22 +154,17 @@ final class Link {
 
     func startPairing(for seconds: TimeInterval = 120) {
         pairingUntil = Date().addingTimeInterval(seconds)
-        listen()
         onChange()
-        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
-            guard let self, !self.pairing else { return }
-            self.listen()
-            self.onChange()
-        }
+        saw(seen)
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in self?.onChange() }
     }
 
     var nearbyNames: [String] { nearby.values.compactMap { $0.txtRecord["name"] }.sorted() }
 
     func pair(with name: String) {
         guard pairingWith == nil, let (id, endpoint) = nearby.first(where: { $0.value.txtRecord["name"] == name }), !connecting.contains(id) else { return }
-        connecting.insert(id)
         pairingWith = name
-        Task { await pair(Connection(to: endpoint) { TLV { TCP() } }, initiator: true); connecting.remove(id) }
+        attempt(id) { await self.pair(Connection(to: endpoint) { TLV { TCP() } }, initiator: true) }
     }
 
     func answer(_ yes: Bool) {
@@ -202,7 +213,6 @@ final class Link {
             peers.append(peer)
             try Peers.save(peers)
             pairingUntil = nil
-            listen()
         } catch { Env.log("\(error)") }
         answer(false)
         pairingWith = nil
@@ -241,6 +251,7 @@ final class Link {
 
     func run(_ session: Session) async throws {
         sessions[session.peer.id] = session
+        onConnect(session.peer)
         onChange()
         defer {
             if sessions[session.peer.id] === session { sessions[session.peer.id] = nil }

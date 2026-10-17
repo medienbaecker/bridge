@@ -71,3 +71,46 @@ func meet(_ a: SharedRecord, _ b: SharedRecord) throws {
     let again = try SharedRecord(bytes: thomas.save(), person: "thomas")
     #expect(try again.people["thomas"]?["layout"] == .object(["columns": .number(3)]))
 }
+
+@Test func whatAPageRecordedIsTakenInOnceAndOnlyAsItsOwnPerson() throws {
+    let (thomas, yoshie) = try pair()
+    var page = Sidecar()
+    page.answers = ["layout": .string("grid")]
+    var note = Comment(id: "n1", text: "too tall", target: "h1", anchor: .null, version: 1)
+    note.said = [Say(by: "agent", text: "on it")]
+    page.comments = [note]
+    #expect(try thomas.absorb(page))
+    #expect(try thomas.absorb(page) == false)
+
+    try meet(thomas, yoshie)
+    var hers = Sidecar()
+    try yoshie.project(into: &hers)
+    #expect(hers.answers.isEmpty)
+    #expect(hers.people["thomas"] == ["layout": .string("grid")])
+    #expect(hers.comments.first?.person == "thomas")
+    #expect(hers.comments.first?.said.map(\.person) == ["thomas"])
+
+    hers.answers = ["layout": .string("list")]
+    hers.comments[0].state = "done"
+    hers.comments[0].said.append(Say(by: "user", text: "fine now"))
+    #expect(try yoshie.absorb(hers))
+    try meet(thomas, yoshie)
+    var mine = Sidecar()
+    try thomas.project(into: &mine)
+    #expect(mine.answers == ["layout": .string("grid")])
+    #expect(mine.people["yoshie"] == ["layout": .string("list")])
+    #expect(mine.comments[0].state == "done")
+    #expect(mine.comments[0].said.map(\.text) == ["on it", "fine now"])
+    #expect(mine.comments[0].said.last?.person == "yoshie")
+}
+
+@Test func takingBackAPickClearsItForTheOtherMac() throws {
+    let (thomas, yoshie) = try pair()
+    var page = Sidecar()
+    page.answers = ["layout": .string("grid")]
+    try thomas.absorb(page)
+    page.answers = [:]
+    try thomas.absorb(page)
+    try meet(thomas, yoshie)
+    #expect(try yoshie.people["thomas"] == nil)
+}

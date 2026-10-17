@@ -41,6 +41,7 @@ final class Model {
     var onChange: () -> Void = {}
     var onCursor: (String, JSONValue) -> Void = { _, _ in }
     var onReady: (Page) -> Void = { _ in }
+    var onSaved: (Page) -> Void = { _ in }
     var waiters: [Waiter] = []
     var lives: [String: ClaudeSessions.Life] = [:]
 

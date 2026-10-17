@@ -7,6 +7,8 @@ final class Sharing {
     unowned let model: Model
     var shares = Shares.load()
     var cursors: [String: [String: JSONValue]] = [:]
+    var colours: [String: String] = [:]
+    var records: [String: SharedRecord] = [:]
 
     init(link: Link, model: Model) {
         self.link = link
@@ -15,6 +17,8 @@ final class Sharing {
         model.onReady = { [weak self] page in self?.ready(page) }
         link.onMessage = { [weak self] peer, message in self?.received(message, from: peer) }
         link.onDrop = { [weak self] peer in self?.dropped(peer) }
+        link.onConnect = { [weak self] _ in self?.sendRecords() }
+        model.onSaved = { [weak self] page in self?.saved(page) }
     }
 
     func share(at location: String) -> String? { shares.first { $0.location == location }?.id }
@@ -28,13 +32,85 @@ final class Sharing {
             shares.append(Share(id: id, location: location, from: Person.current, title: title))
             try Shares.save(shares)
         }
+        let rec = try record(id) ?? SharedRecord(person: Person.current)
+        records[id] = rec
+        try rec.absorb(model.page(for: location).sidecar)
+        try store(id)
         link.send([
             "kind": .string("share"), "share": .string(id), "from": .string(Person.current), "title": .string(title),
             "html": .string(bundle.html), "files": .object(bundle.files.mapValues { .string($0.base64EncodedString()) }),
+            "record": .string(rec.save().base64EncodedString()),
         ])
         if let page = model.pages[location], page.ready { ready(page) }
         model.onChange()
         return .object(["share": .string(id), "to": .array(link.sessions.values.map { .string($0.peer.name) })])
+    }
+
+    func recordURL(_ id: String) -> URL { Shares.folder.appendingPathComponent(id).appendingPathComponent("record.automerge") }
+
+    func record(_ id: String) throws -> SharedRecord? {
+        if let rec = records[id] { return rec }
+        guard let data = try? Data(contentsOf: recordURL(id)) else { return nil }
+        let rec = try SharedRecord(bytes: data, person: Person.current)
+        records[id] = rec
+        return rec
+    }
+
+    func store(_ id: String) throws {
+        guard let rec = records[id] else { return }
+        try FileManager.default.createDirectory(at: recordURL(id).deletingLastPathComponent(), withIntermediateDirectories: true)
+        try rec.save().write(to: recordURL(id), options: .atomic)
+    }
+
+    func saved(_ page: Page) {
+        guard let id = share(at: page.location), let rec = try? record(id), (try? rec.absorb(page.sidecar)) == true else { return }
+        try? store(id)
+        link.send(["kind": .string("record"), "share": .string(id), "record": .string(rec.save().base64EncodedString())])
+    }
+
+    func sendRecords() {
+        for share in shares {
+            guard let rec = try? record(share.id) else { continue }
+            if let page = model.pages[share.location] { try? rec.absorb(page.sidecar) }
+            link.send(["kind": .string("record"), "share": .string(share.id), "record": .string(rec.save().base64EncodedString())])
+        }
+    }
+
+    func merge(_ id: String, _ encoded: String?) throws {
+        guard let encoded, let data = Data(base64Encoded: encoded), let share = shares.first(where: { $0.id == id }) else { return }
+        let incoming = try SharedRecord(bytes: data, person: Person.current)
+        guard let rec = try record(id) else {
+            records[id] = incoming
+            try store(id)
+            return try project(share)
+        }
+        if let page = model.pages[share.location] { try rec.absorb(page.sidecar) }
+        try rec.merge(incoming)
+        try store(id)
+        try project(share)
+    }
+
+    func project(_ share: Share) throws {
+        guard let rec = records[share.id] else { return }
+        if let page = model.pages[share.location] {
+            try rec.project(into: &page.sidecar)
+            page.save()
+            page.pushNotes()
+            if page.ready { page.call("__bridge.answers(answers)", ["answers": page.any(.object(page.sidecar.answers))]) }
+            drawPeople(share.id)
+            model.onChange()
+        } else {
+            try Sidecar.modify(Paths.sidecar(for: share.location)) { s in try? rec.project(into: &s) }
+        }
+    }
+
+    func drawPeople(_ id: String) {
+        guard let share = shares.first(where: { $0.id == id }), let page = model.pages[share.location], page.ready, let rec = records[id] else { return }
+        let people = (try? rec.people) ?? [:]
+        let list: [JSONValue] = people.keys.sorted().filter { $0 != Person.current }.map { person in
+            .object(["person": .string(person), "color": colours[person].map { .string($0) } ?? .null, "answers": .object(people[person] ?? [:])])
+        }
+        page.call("__bridge.people(list)", ["list": page.any(.array(list))])
     }
 
     func moved(_ location: String, _ anchor: JSONValue) {
@@ -49,6 +125,7 @@ final class Sharing {
         guard let id = share(at: page.location) else { return }
         page.call("__bridge.trackCursor(true)")
         draw(id)
+        if (try? record(id)) != nil { drawPeople(id) }
     }
 
     func draw(_ id: String) {
@@ -62,6 +139,7 @@ final class Sharing {
         switch message["kind"]?.stringValue {
         case "cursor":
             let person = message["person"]?.stringValue ?? peer.name
+            if let colour = message["color"]?.stringValue, colours[person] != colour { colours[person] = colour; drawPeople(id) }
             if message["anchor"] == nil || message["anchor"] == .null {
                 cursors[id]?[person] = nil
             } else {
@@ -69,7 +147,12 @@ final class Sharing {
             }
             draw(id)
         case "share":
-            do { try install(id, message, from: peer) } catch { Env.log("share from \(peer.name): \(error)") }
+            do {
+                try install(id, message, from: peer)
+                try merge(id, message["record"]?.stringValue)
+            } catch { Env.log("share from \(peer.name): \(error)") }
+        case "record":
+            do { try merge(id, message["record"]?.stringValue) } catch { Env.log("record from \(peer.name): \(error)") }
         default:
             break
         }

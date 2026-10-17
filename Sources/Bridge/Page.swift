@@ -703,6 +703,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         let data = sidecar.data()
         lastWritten = data
         try? data.write(to: sidecarURL, options: .atomic)
+        model.onSaved(self)
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {

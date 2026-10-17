@@ -96,6 +96,35 @@ public final class SharedRecord {
         }
     }
 
+    @discardableResult
+    public func absorb(_ sidecar: Sidecar) throws -> Bool {
+        var changed = false
+        let mine = try people[person] ?? [:]
+        for (key, value) in sidecar.answers where mine[key] != value { try pick(key, value); changed = true }
+        for key in mine.keys where sidecar.answers[key] == nil { try clear(key); changed = true }
+        let known = Dictionary(uniqueKeysWithValues: try comments.map { ($0.id, $0) })
+        for var comment in sidecar.comments {
+            guard let there = known[comment.id] else {
+                guard comment.person == nil || comment.person == person else { continue }
+                comment.person = person
+                let said = comment.said
+                comment.said = []
+                try add(comment)
+                for var say in said { say.person = say.person ?? person; try reply(to: comment.id, say) }
+                changed = true
+                continue
+            }
+            for say in comment.said.dropFirst(there.said.count) where say.person == nil || say.person == person {
+                var say = say
+                say.person = person
+                try reply(to: comment.id, say)
+                changed = true
+            }
+            if comment.state != there.state { try setState(comment.id, comment.state); changed = true }
+        }
+        return changed
+    }
+
     public func project(into sidecar: inout Sidecar) throws {
         let people = try people
         sidecar.people = people

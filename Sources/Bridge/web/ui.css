@@ -116,3 +116,7 @@ html[data-bridge-pointing] * { cursor: crosshair !important; }
 .bridge-cursor i::before { background: var(--bridge-cursor); }
 .bridge-cursor i::after { background: white; mask-mode: luminance; }
 .bridge-cursor span { position: absolute; left: calc(var(--bridge-arrow-x) + 11px); top: calc(var(--bridge-arrow-y) + 16px); padding: 0 6px; border-radius: 6px; background: var(--bridge-cursor); color: white; font: 600 11px/17px -apple-system, system-ui, sans-serif; white-space: nowrap; }
+[data-record][data-value]:has(> .bridge-pick), :has(> input[type=radio]):has(> .bridge-pick) { position: relative; }
+.bridge-pick { position: absolute; top: 8px; right: 8px; padding: 0 7px; border-radius: 9px; background: var(--bridge-cursor); color: white; font: 600 11px/18px -apple-system, system-ui, sans-serif; pointer-events: none; }
+.bridge-pick + .bridge-pick { right: auto; }
+.bridge-pick.bridge-pick-value { position: static; display: inline-block; margin-left: 8px; vertical-align: middle; }
