@@ -59,7 +59,7 @@ final class Model {
     func bridges(in scope: Scope) -> [BridgeEntry] {
         let all = listing.bridges.sorted { $0.presentedAt > $1.presentedAt }
         switch scope {
-        case .waiting: return all.filter { !$0.crossed && status(of: $0) == "open" }
+        case .waiting: return all.filter { !$0.crossed && status(of: $0) == "open" && attended($0) }
         case .all: return all.filter { !$0.crossed } + (showCrossed ? all.filter { $0.crossed } : [])
         case .project(let p): return all.filter { $0.project == p && !$0.crossed } + (showCrossed ? all.filter { $0.project == p && $0.crossed } : [])
         case .agent(let s): return all.filter { $0.session == s && !$0.crossed }
@@ -101,7 +101,26 @@ final class Model {
     }
 
     func waitingCount(in project: String? = nil) -> Int {
-        listing.bridges.filter { (project == nil || $0.project == project) && !$0.crossed && status(of: $0) == "open" }.count
+        listing.bridges.filter { (project == nil || $0.project == project) && !$0.crossed && status(of: $0) == "open" && attended($0) }.count
+    }
+
+    func received(_ entry: BridgeEntry) -> Bool { entry.location.hasPrefix(Paths.shared.path + "/") }
+
+    func attended(_ entry: BridgeEntry) -> Bool {
+        received(entry) || (lives[entry.session] ?? ClaudeSessions.life(of: entry.session)) != .gone
+    }
+
+    static let endedAfter = ProcessInfo.processInfo.environment["BRIDGE_ENDED_AFTER"].flatMap(Double.init) ?? 24 * 3600
+
+    @discardableResult
+    func crossEnded() -> Int {
+        let now = Date()
+        let ended = listing.bridges.filter { entry in
+            !entry.crossed && !received(entry) && now.timeIntervalSince(entry.presentedAt) > Self.endedAfter
+                && ClaudeSessions.life(of: entry.session) == .gone
+        }
+        for entry in ended { cross(entry.location, true) }
+        return ended.count
     }
 
     func settleSelection() {

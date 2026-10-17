@@ -436,6 +436,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         if command == "relaunch" { (NSApp.delegate as? AppDelegate)?.relaunch(); return true }
         switch command {
         case "select": return select(argument)
+        case "cleanup": model.crossEnded(); return true
         case "drop":
             let parts = (argument ?? "").components(separatedBy: "|")
             guard parts.count == 2 else { return false }

@@ -87,6 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     @objc func updateTick() {
         checkUpdate()
+        model.crossEnded()
         window?.sidebar.refreshTimes()
     }
 

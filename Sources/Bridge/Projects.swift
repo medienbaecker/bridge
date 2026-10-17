@@ -185,7 +185,7 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
             let i = rows.firstIndex(of: row)!
             let f = table.convert(table.rect(ofRow: i), to: nil)
             let top = table.window.map { $0.frame.height - f.maxY } ?? 0
-            return .object(["key": .string(s.key), "name": .string(ScopeCell.name(of: s, model: model)), "count": .number(Double(ScopeCell.count(of: s, model: model))),
+            return .object(["key": .string(s.key), "name": .string(ScopeCell.name(of: s, model: model)), "count": .number(Double(ScopeCell.count(of: s, model: model))), "countShown": .bool((table.view(atColumn: 0, row: i, makeIfNecessary: false) as? ScopeCell)?.count.stringValue.isEmpty == false),
                             "top": .number(Double(top)), "height": .number(Double(f.height))])
         })]
     }
@@ -257,6 +257,6 @@ final class ScopeCell: NSTableCellView {
         icon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: Self.name(of: scope, model: model))?.withSymbolConfiguration(.init(pointSize: 13, weight: .regular))
         name.stringValue = Self.name(of: scope, model: model)
         let n = Self.count(of: scope, model: model)
-        count.stringValue = n > 0 ? "\(n)" : ""
+        if case .project = scope { count.stringValue = "" } else { count.stringValue = n > 0 ? "\(n)" : "" }
     }
 }
