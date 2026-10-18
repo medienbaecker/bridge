@@ -573,6 +573,235 @@ function __bridgeInit(options) {
     host.innerHTML = marked.parse(source.content.textContent);
   }
 
+  // ---- diagrams: flow and sequence blocks, drawn next to their source
+
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const diagramErrors = new Set();
+
+  function svgEl(name, attrs, parent) {
+    const el = document.createElementNS(svgNS, name);
+    for (const [k, v] of Object.entries(attrs || {})) el.setAttribute(k, v);
+    if (parent) parent.appendChild(el);
+    return el;
+  }
+
+  let measureContext;
+  function textWidth(text, weight) {
+    measureContext ||= document.createElement('canvas').getContext('2d');
+    measureContext.font = `${weight || 400} 13px ${getComputedStyle(document.body).fontFamily}`;
+    return Math.ceil(measureContext.measureText(text).width);
+  }
+
+  function label(parent, x, y, text, attrs) {
+    const t = svgEl('text', { x, y, 'text-anchor': 'middle', 'dominant-baseline': 'central', ...attrs }, parent);
+    t.textContent = text;
+    return t;
+  }
+
+  function arrowhead(parent, from, to, cls) {
+    const a = Math.atan2(to.y - from.y, to.x - from.x), s = 8;
+    const p = (d) => `${to.x - s * Math.cos(a + d)},${to.y - s * Math.sin(a + d)}`;
+    svgEl('polygon', { points: `${to.x},${to.y} ${p(0.45)} ${p(-0.45)}`, class: cls }, parent);
+  }
+
+  function nodeOf(raw) {
+    let text = raw.trim(), shape = 'box', hot = false;
+    if (text.startsWith('*')) { hot = true; text = text.slice(1).trim(); }
+    if (/^\[\(.*\)\]$/.test(text)) { shape = 'db'; text = text.slice(2, -2); }
+    else if (/^\(.*\)$/.test(text)) { shape = 'pill'; text = text.slice(1, -1); }
+    else if (/^\{.*\}$/.test(text)) { shape = 'decision'; text = text.slice(1, -1); }
+    return { text: text.trim(), shape, hot };
+  }
+
+  function parseFlow(source) {
+    const nodes = new Map(), edges = [], errors = [];
+    let dir = 'TB';
+    const add = (raw) => {
+      const n = nodeOf(raw);
+      const had = nodes.get(n.text);
+      if (!had) nodes.set(n.text, n);
+      else { if (n.shape !== 'box') had.shape = n.shape; if (n.hot) had.hot = true; }
+      return n.text;
+    };
+    source.split('\n').forEach((line, i) => {
+      const text = line.trim();
+      if (!text || text.startsWith('#')) return;
+      if (/^(TB|LR|RL|BT)$/.test(text)) { dir = text; return; }
+      const steps = text.split(/\s*(-->|->)\s*/);
+      if (steps.length === 1) { if (text.includes(':') || /[<>=]/.test(text)) errors.push([i + 1, text]); else add(text); return; }
+      const last = steps[steps.length - 1];
+      const colon = last.indexOf(':');
+      const tail = colon >= 0 ? last.slice(0, colon) : last;
+      const edgeLabel = colon >= 0 ? last.slice(colon + 1).trim() : '';
+      steps[steps.length - 1] = tail;
+      if (steps.some((s, k) => k % 2 === 0 && !s.trim())) { errors.push([i + 1, text]); return; }
+      for (let k = 0; k + 2 < steps.length; k += 2) {
+        edges.push({ from: add(steps[k]), to: add(steps[k + 2]), dashed: steps[k + 1] === '-->', label: k + 3 === steps.length ? edgeLabel : '' });
+      }
+    });
+    return { nodes, edges, errors, dir };
+  }
+
+  function drawFlow(svg, { nodes, edges, dir }) {
+    const g = new dagre.graphlib.Graph({ multigraph: true });
+    g.setGraph({ rankdir: dir, nodesep: 28, ranksep: 46, edgesep: 16, marginx: 2, marginy: 2 });
+    g.setDefaultEdgeLabel(() => ({}));
+    for (const n of nodes.values()) {
+      const w = textWidth(n.text, n.hot ? 600 : 400);
+      g.setNode(n.text, n.shape === 'decision' ? { width: w + 56, height: 52 } : { width: w + 28, height: n.shape === 'db' ? 44 : 34 });
+    }
+    edges.forEach((e, i) => g.setEdge(e.from, e.to, e.label ? { width: textWidth(e.label) + 10, height: 18, labelpos: 'c' } : {}, String(i)));
+    dagre.layout(g);
+    const edgeLayer = svgEl('g', {}, svg);
+    edges.forEach((e, i) => {
+      const pts = g.edge(e.from, e.to, String(i)).points.map((p) => ({ ...p }));
+      const onDiamond = (end, toward, name) => {
+        if (nodes.get(name).shape !== 'decision') return;
+        const c = g.node(name), dx = toward.x - c.x, dy = toward.y - c.y;
+        const t = 1 / (Math.abs(dx) / (c.width / 2) + Math.abs(dy) / (c.height / 2));
+        end.x = c.x + dx * t; end.y = c.y + dy * t;
+      };
+      onDiamond(pts[0], pts[1], e.from);
+      onDiamond(pts[pts.length - 1], pts[pts.length - 2], e.to);
+      let d = `M${pts[0].x},${pts[0].y}`;
+      for (let k = 1; k < pts.length - 1; k++) d += ` Q${pts[k].x},${pts[k].y} ${(pts[k].x + pts[k + 1].x) / 2},${(pts[k].y + pts[k + 1].y) / 2}`;
+      d += ` L${pts[pts.length - 1].x},${pts[pts.length - 1].y}`;
+      const hot = nodes.get(e.from).hot && nodes.get(e.to).hot;
+      const cls = 'edge' + (hot ? ' hot' : '');
+      svgEl('path', { d, class: cls + (e.dashed ? ' dashed' : '') }, edgeLayer);
+      arrowhead(edgeLayer, pts[pts.length - 2], pts[pts.length - 1], cls + ' head');
+      if (e.label) {
+        const l = g.edge(e.from, e.to, String(i));
+        svgEl('rect', { x: l.x - l.width / 2, y: l.y - 9, width: l.width, height: 18, rx: 4, class: 'edge-label' }, edgeLayer);
+        label(edgeLayer, l.x, l.y, e.label, { class: 'edge-text' });
+      }
+    });
+    for (const n of nodes.values()) {
+      const p = g.node(n.text);
+      const box = svgEl('g', { class: 'node' + (n.hot ? ' hot' : ''), 'data-node': n.text }, svg);
+      const x = p.x - p.width / 2, y = p.y - p.height / 2;
+      if (n.shape === 'decision') svgEl('polygon', { points: `${p.x},${y} ${x + p.width},${p.y} ${p.x},${y + p.height} ${x},${p.y}` }, box);
+      else if (n.shape === 'db') {
+        svgEl('path', { d: `M${x},${y + 6} A${p.width / 2},6 0 0 0 ${x + p.width},${y + 6} V${y + p.height - 6} A${p.width / 2},6 0 0 1 ${x},${y + p.height - 6} Z` }, box);
+        svgEl('path', { d: `M${x},${y + 6} A${p.width / 2},6 0 0 1 ${x + p.width},${y + 6}`, fill: 'none' }, box);
+      } else svgEl('rect', { x, y, width: p.width, height: p.height, rx: n.shape === 'pill' ? p.height / 2 : 6 }, box);
+      label(box, p.x, p.y + (n.shape === 'db' ? 3 : 0), n.text);
+    }
+    const graph = g.graph();
+    return { width: graph.width + 4, height: graph.height + 4 };
+  }
+
+  function parseSequence(source) {
+    const people = new Map(), steps = [], errors = [];
+    const who = (raw) => {
+      let name = raw.trim(), hot = false;
+      if (name.startsWith('*')) { hot = true; name = name.slice(1).trim(); }
+      if (!people.has(name)) people.set(name, { name, hot });
+      else if (hot) people.get(name).hot = true;
+      return name;
+    };
+    source.split('\n').forEach((line, i) => {
+      const text = line.trim();
+      if (!text || text.startsWith('#')) return;
+      let m = text.match(/^note\s+([^:]+):\s*(.*)$/i);
+      if (m) { steps.push({ note: m[2], over: m[1].split(',').map(who) }); return; }
+      m = text.match(/^(.+?)\s*(-->|->)\s*(.+?)\s*(?::\s*(.*))?$/);
+      if (m && m[1].trim() && m[3].trim()) { steps.push({ from: who(m[1]), to: who(m[3]), dashed: m[2] === '-->', text: m[4] || '' }); return; }
+      errors.push([i + 1, text]);
+    });
+    return { people, steps, errors };
+  }
+
+  function drawSequence(svg, { people, steps }) {
+    const names = [...people.keys()];
+    const col = new Map(names.map((n, i) => [n, i]));
+    const boxW = names.map((n) => textWidth(n, 600) + 28);
+    const gaps = names.slice(1).map((_, i) => Math.max(110, (boxW[i] + boxW[i + 1]) / 2 + 24));
+    for (const s of steps) {
+      if (s.note || s.from === s.to) continue;
+      const a = Math.min(col.get(s.from), col.get(s.to)), b = Math.max(col.get(s.from), col.get(s.to));
+      const need = textWidth(s.text) + 32, have = gaps.slice(a, b).reduce((x, y) => x + y, 0);
+      if (need > have) for (let k = a; k < b; k++) gaps[k] += (need - have) / (b - a);
+    }
+    const x = [boxW[0] / 2 + 2];
+    gaps.forEach((gap, i) => x.push(x[i] + gap));
+    let y = 34 + 26;
+    const rows = steps.map((s) => { const at = y; y += s.note ? 40 : s.from === s.to ? 50 : 38; return at; });
+    const bottom = y;
+    for (const n of names) svgEl('line', { x1: x[col.get(n)], y1: 34, x2: x[col.get(n)], y2: bottom, class: 'lifeline' }, svg);
+    names.forEach((n, i) => {
+      const box = svgEl('g', { class: 'node' + (people.get(n).hot ? ' hot' : ''), 'data-node': n }, svg);
+      svgEl('rect', { x: x[i] - boxW[i] / 2, y: 2, width: boxW[i], height: 32, rx: 6 }, box);
+      label(box, x[i], 18, n);
+    });
+    let right = x[x.length - 1] + boxW[boxW.length - 1] / 2;
+    steps.forEach((s, i) => {
+      const at = rows[i];
+      const group = svgEl('g', { class: s.note ? 'note' : 'message' }, svg);
+      if (s.note) {
+        const cols = s.over.map((n) => x[col.get(n)]);
+        const w = Math.max(textWidth(s.note) + 24, Math.max(...cols) - Math.min(...cols) + 60);
+        const mid = (Math.max(...cols) + Math.min(...cols)) / 2;
+        svgEl('rect', { x: mid - w / 2, y: at - 4, width: w, height: 28, rx: 5 }, group);
+        label(group, mid, at + 10, s.note);
+        return;
+      }
+      const hot = people.get(s.from).hot || people.get(s.to).hot;
+      const cls = 'edge' + (hot ? ' hot' : '');
+      const x1 = x[col.get(s.from)], x2 = x[col.get(s.to)];
+      if (x1 === x2) {
+        svgEl('path', { d: `M${x1},${at + 4} h28 v18 h-28`, class: cls + (s.dashed ? ' dashed' : '') }, group);
+        arrowhead(group, { x: x1 + 28, y: at + 22 }, { x: x1 + 1, y: at + 22 }, cls + ' head');
+        label(group, x1 + 36, at + 13, s.text, { 'text-anchor': 'start', class: 'edge-text' });
+        right = Math.max(right, x1 + 40 + textWidth(s.text));
+        return;
+      }
+      const end = x2 + (x2 > x1 ? -1 : 1);
+      svgEl('line', { x1, y1: at + 14, x2: end, y2: at + 14, class: cls + (s.dashed ? ' dashed' : '') }, group);
+      arrowhead(group, { x: x1, y: at + 14 }, { x: end, y: at + 14 }, cls + ' head');
+      if (s.text) label(group, (x1 + x2) / 2, at + 3, s.text, { class: 'edge-text' });
+    });
+    return { width: right + 2, height: bottom + 2 };
+  }
+
+  function diagrams() {
+    const sources = new Set();
+    for (const code of document.querySelectorAll('pre > code.language-flow, pre > code.language-sequence')) {
+      const pre = code.parentElement;
+      if (ours(pre) || pre.closest('[class*="bridge-"]:not(.bridge-md)')) continue;
+      const kind = code.classList.contains('language-flow') ? 'flow' : 'sequence';
+      const source = code.textContent;
+      sources.add(pre);
+      let figure = pre.nextElementSibling;
+      if (figure?.classList.contains('bridge-diagram') && figure.dataset.source === kind + '\n' + source) continue;
+      if (!figure?.classList.contains('bridge-diagram')) {
+        figure = document.createElement('figure');
+        figure.className = 'bridge-diagram';
+        pre.after(figure);
+      }
+      figure.dataset.source = kind + '\n' + source;
+      figure.replaceChildren();
+      const svg = svgEl('svg', { role: 'img' }, figure);
+      const parsed = kind === 'flow' ? parseFlow(source) : parseSequence(source);
+      try {
+        const size = kind === 'flow' ? drawFlow(svg, parsed) : drawSequence(svg, parsed);
+        svg.setAttribute('viewBox', `0 0 ${size.width} ${size.height}`);
+        svg.setAttribute('width', size.width);
+        svg.setAttribute('aria-label', svg.textContent);
+      } catch (e) { parsed.errors.push([0, String(e)]); }
+      const hint = kind === 'flow' ? 'write A -> B, A --> B (dashed) or A -> B: label' : 'write A -> B: text, A --> B: text (dashed) or note A, B: text';
+      for (const [line, text] of parsed.errors) {
+        const message = `${kind} diagram, line ${line}: "${text}" is not a step; ${hint}`;
+        const p = document.createElement('figcaption');
+        p.className = 'bridge-diagram-error';
+        p.textContent = message;
+        figure.appendChild(p);
+        if (!diagramErrors.has(message)) { diagramErrors.add(message); post('error', { text: message }); }
+      }
+    }
+    for (const figure of document.querySelectorAll('.bridge-diagram')) if (!sources.has(figure.previousElementSibling)) figure.remove();
+  }
+
   // Elements a page owes to its markup, not to a script: everything except the
   // runtime's furniture, Prism's tokens and rendered markdown.
   function structure(root) {
@@ -653,6 +882,7 @@ function __bridgeInit(options) {
     state.patches += 1;
     renderMarkdown();
     highlight();
+    diagrams();
     enhance();
     applyMediaVersions();
     reportMedia();
@@ -964,7 +1194,7 @@ function __bridgeInit(options) {
   };
 
   function pointAt(e) {
-    const target = e.target.closest?.('*');
+    const target = e.target.closest?.('.bridge-diagram [data-node]') || e.target.closest?.('*');
     if (!target || ours(target) || target.closest('.bridge-pin, .bridge-thread')) return;
     e.preventDefault();
     e.stopPropagation();
@@ -1079,7 +1309,7 @@ function __bridgeInit(options) {
 
   function texts(el) {
     const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
-      acceptNode: (n) => (n.parentElement.closest('[class*="bridge-"]') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+      acceptNode: (n) => (n.parentElement.closest('[class*="bridge-"]:not(.bridge-md)') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
     });
     const out = [];
     while (walker.nextNode()) out.push(walker.currentNode);
@@ -1104,7 +1334,7 @@ function __bridgeInit(options) {
     const range = sel.getRangeAt(0);
     let el = range.commonAncestorContainer;
     if (el.nodeType !== 1) el = el.parentElement;
-    if (!el || !el.parentElement || ours(el) || el.closest('[class*="bridge-"]')) return null;
+    if (!el || !el.parentElement || el.closest('[class*="bridge-"]:not(.bridge-md)')) return null;
     const start = offsetIn(el, range.startContainer, range.startOffset), end = offsetIn(el, range.endContainer, range.endOffset);
     return end > start ? { anchor: describe(el, 0, 0).anchor, start, end } : null;
   }
@@ -1343,6 +1573,7 @@ function __bridgeInit(options) {
     currentScripts = scriptSignature(document);
     renderMarkdown();
     highlight();
+    diagrams();
     enhance();
     const picture = document.querySelector('.doc-image img');
     if (picture) {

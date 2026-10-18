@@ -9,7 +9,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         let web = Bundle.module.url(forResource: "web", withExtension: nil)!
         func read(_ name: String) -> String { (try? String(contentsOf: web.appendingPathComponent(name), encoding: .utf8)) ?? "" }
         let css = ["page": read("page.css"), "ui": read("ui.css")]
-        return "const __BRIDGE_CSS = \(JSON.string(css, pretty: false));\nconst __BRIDGE_ARROW = \(JSON.string(arrow, pretty: false));\n" + read("idiomorph.js") + "\n" + read("marked.js") + "\n" + read("prism.js") + "\n" + read("bridge.js")
+        return "const __BRIDGE_CSS = \(JSON.string(css, pretty: false));\nconst __BRIDGE_ARROW = \(JSON.string(arrow, pretty: false));\n" + read("idiomorph.js") + "\n" + read("marked.js") + "\n" + read("prism.js") + "\n" + read("dagre.js") + "\n" + read("bridge.js")
     }()
     static let arrow: [String: JSONValue] = {
         let cursor = NSCursor.arrow
