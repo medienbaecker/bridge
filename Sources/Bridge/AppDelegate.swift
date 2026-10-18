@@ -262,6 +262,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             out["zoom"] = .number(Double((page.zoom * 100).rounded() / 100))
             out["links"] = .string(page.links.rawValue)
             out["cursor"] = page.cursor
+            out["selection"] = page.selection
         }
         if let w = window.window {
             out["windowNumber"] = .number(Double(w.windowNumber))

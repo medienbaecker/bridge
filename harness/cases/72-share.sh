@@ -38,6 +38,11 @@ for i in $(seq 1 40); do [ "$(cursor b "$there")" != "none" ] && break; sleep 0.
 check "his cursor shows on her Mac, in his colour" "$(cursor b "$there")" "thomas #e8590c"
 check "on the same element" "$(b --js "$there" "@bridge const c = document.querySelector('.bridge-cursor'), r = document.querySelector('[data-value=grid]').getBoundingClientRect(); return Math.abs(parseFloat(c.style.left) - (r.left + r.width * 0.3)) < 2")" "true"
 
+bridge --js "$page" "const t = document.querySelector('h1').firstChild; const r = document.createRange(); r.setStart(t, 0); r.setEnd(t, 4); getSelection().removeAllRanges(); getSelection().addRange(r); return 1" >/dev/null
+painted() { b --js "$there" "@bridge const h = CSS.highlights.get('bridge-selection-0'); return h ? [...h][0].toString() : ''" | jq -r .; }
+for i in $(seq 1 40); do [ -n "$(painted)" ] && break; sleep 0.1; done
+check "what he selects is painted on her Mac" "$(painted)" "Card"
+
 b --shot "$CASE_DIR/shots/her-mac.png" >/dev/null
 point b "$there"
 for i in $(seq 1 40); do [ "$(cursor bridge "$page")" != "none" ] && break; sleep 0.1; done

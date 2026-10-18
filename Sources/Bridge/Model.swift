@@ -41,7 +41,7 @@ final class Model {
     var showCrossed: Bool = Model.remembered("showCrossed") as? Bool ?? true { didSet { Self.remember(showCrossed, "showCrossed") } }
     var pages: [String: Page] = [:]
     var onChange: () -> Void = {}
-    var onCursor: (String, JSONValue) -> Void = { _, _ in }
+    var onCursor: (String, JSONValue, JSONValue) -> Void = { _, _, _ in }
     var onReady: (Page) -> Void = { _ in }
     var onSaved: (Page) -> Void = { _ in }
     var onRewrite: (Page) -> Void = { _ in }

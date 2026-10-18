@@ -15,7 +15,7 @@ final class Sharing {
     init(link: Link, model: Model) {
         self.link = link
         self.model = model
-        model.onCursor = { [weak self] location, anchor in self?.moved(location, anchor) }
+        model.onCursor = { [weak self] location, anchor, selection in self?.moved(location, anchor, selection) }
         model.onReady = { [weak self] page in self?.ready(page) }
         link.onMessage = { [weak self] peer, message in self?.received(message, from: peer) }
         link.onDrop = { [weak self] peer in self?.dropped(peer) }
@@ -193,11 +193,11 @@ final class Sharing {
         page.call("__bridge.people(list)", ["list": page.any(.array(list))])
     }
 
-    func moved(_ location: String, _ anchor: JSONValue) {
+    func moved(_ location: String, _ anchor: JSONValue, _ selection: JSONValue) {
         guard let id = share(at: location) else { return }
         link.send([
             "kind": .string("cursor"), "share": .string(id), "person": .string(Person.current),
-            "color": Person.colour.map { .string($0) } ?? .null, "anchor": anchor,
+            "color": Person.colour.map { .string($0) } ?? .null, "anchor": anchor, "selection": selection,
         ])
     }
 
@@ -220,10 +220,11 @@ final class Sharing {
         case "cursor":
             let person = message["person"]?.stringValue ?? peer.name
             if let colour = message["color"]?.stringValue, colours[person] != colour { colours[person] = colour; drawPeople(id) }
-            if message["anchor"] == nil || message["anchor"] == .null {
+            let anchor = message["anchor"] ?? .null, selection = message["selection"] ?? .null
+            if anchor == .null && selection == .null {
                 cursors[id]?[person] = nil
             } else {
-                cursors[id, default: [:]][person] = .object(["person": .string(person), "color": message["color"] ?? .null, "anchor": message["anchor"] ?? .null])
+                cursors[id, default: [:]][person] = .object(["person": .string(person), "color": message["color"] ?? .null, "anchor": anchor, "selection": selection])
             }
             draw(id)
         case "share":

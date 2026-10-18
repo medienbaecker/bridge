@@ -57,6 +57,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
     var watcher: Watcher?
     var media: [String: Date] = [:]
     var cursor: JSONValue = .null
+    var selection: JSONValue = .null
     var sharedSeen: Data?
     var buildFailed = false
     var buildMs: Int?
@@ -350,7 +351,8 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
             replyHandler(nil, nil)
         case "cursor":
             cursor = JSONValue(any: body["anchor"] ?? NSNull())
-            model.onCursor(location, cursor)
+            selection = JSONValue(any: body["selection"] ?? NSNull())
+            model.onCursor(location, cursor, selection)
             replyHandler(nil, nil)
         case "size":
             if kind == .image, !preview, let w = body["width"] as? Int, let h = body["height"] as? Int {

@@ -17,7 +17,7 @@ struct LinkError: Error, CustomStringConvertible {
 }
 
 final class Session {
-    let peer: Peer
+    var peer: Peer
     let connection: Connection
     var channel: Channel
     var queue: [Data] = []
@@ -126,7 +126,7 @@ final class Link {
                 if refused.insert(id).inserted { Env.log("link: \(peers[i].name) came back with another key; refused"); onChange() }
                 return nil
             }
-            if let name, peers[i].name != name { peers[i].name = name; try? Peers.save(peers); onChange() }
+            if let name, peers[i].name != name { peers[i].name = name; sessions[id]?.peer.name = name; try? Peers.save(peers); onChange() }
             return peers[i]
         }
         let peer = Peer(id: id, name: name ?? "Mac", key: key)
@@ -185,7 +185,7 @@ final class Link {
 
     func serve(_ connection: Connection, hello: Data) async throws {
         guard let theirs = Hello(hello), theirs.id != me else { throw LinkError("link: a hello that makes no sense") }
-        guard let peer = trust(theirs.id, name: nil, key: theirs.identity) else { throw LinkError("link: refused a Mac whose key changed") }
+        guard let peer = trust(theirs.id, name: seen.first { $0.txtRecord["id"] == theirs.id }?.txtRecord["name"], key: theirs.identity) else { throw LinkError("link: refused a Mac whose key changed") }
         let secret = try secret(peer)
         let ephemeral = Curve25519.KeyAgreement.PrivateKey()
         let mine = Hello(id: me, key: ephemeral.publicKey.rawRepresentation, identity: key)

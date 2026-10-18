@@ -39,7 +39,19 @@ snap colours "Three cursors on one option, one with a chosen colour"
 
 js "@bridge __bridge.cursors([{ person: 'yoshie', anchor: { tag: 'section', selector: 'section.gone', classes: ['gone'], index: 0, text: '', x: 0.5, y: 0.5 } }]); return 1" >/dev/null
 check "a cursor on something this page doesn't have hides" "$(at | jq -r .)" "hidden"
+js "const h = document.querySelector('h1'); const t = h.firstChild; const r = document.createRange(); r.setStart(t, 2); r.setEnd(t, 8); getSelection().removeAllRanges(); getSelection().addRange(r); return 1" >/dev/null
+settle 0.3
+picked=$(js "return document.querySelector('h1').textContent.slice(2, 8)" | jq -r .)
+selection=$(bridge --state | jq -c '.selection')
+check_json "selecting text reports where it is" "$selection" '.end - .start' "6"
+js "getSelection().removeAllRanges(); return 1" >/dev/null
+settle 0.3
+check_json "and deselecting clears it" "$(bridge --state)" '.selection' "null"
+js "@bridge __bridge.cursors([{ person: 'yoshie', anchor: null, selection: $selection }]); return 1" >/dev/null
+check "her selection is painted on the same words" "$(js "@bridge return [...CSS.highlights.get('bridge-selection-0')][0].toString()" | jq -r .)" "$picked"
+snap selection "Yoshie's selection in the heading"
 js "@bridge __bridge.cursors([]); return 1" >/dev/null
+check "and goes when she leaves" "$(js "@bridge return CSS.highlights.size")" "0"
 check "when she leaves, her cursor goes" "$(js "@bridge return document.querySelectorAll('.bridge-cursor').length")" "0"
 js "const s = document.createElement('div'); s.style.height = '3000px'; document.querySelector('h1').after(s); scrollTo(0, 0); return 1" >/dev/null
 note=$(js "@bridge const t = document.querySelector('textarea'); const r = t.getBoundingClientRect(); return { selector: 'textarea', tag: 'textarea', classes: [], index: 0, text: '', x: 0.5, y: 0.5 }" | jq -c .)

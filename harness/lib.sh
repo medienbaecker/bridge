@@ -50,7 +50,7 @@ with_b() {
   bridge --name "${1:-thomas}" >/dev/null; b --name "${2:-yoshie}" >/dev/null
   bridge --peers >/dev/null; b --peers >/dev/null
   local i
-  for i in $(seq 1 160); do [ -n "$(bridge --peers | jq -r '.connected | join(",")')" ] && [ -n "$(b --peers | jq -r '.connected | join(",")')" ] && break; sleep 0.25; done
+  for i in $(seq 1 160); do [ "$(bridge --peers | jq -r '.connected | join(",")')" = "${2:-yoshie}" ] && [ "$(b --peers | jq -r '.connected | join(",")')" = "${1:-thomas}" ] && break; sleep 0.25; done
 }
 
 # A fault found inside a command substitution, where an assignment to FAILS is

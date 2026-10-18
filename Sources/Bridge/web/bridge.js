@@ -1050,7 +1050,7 @@ function __bridgeInit(options) {
   // ---- cursors: the other person's pointer, anchored to the element under it
 
   const cursorColors = ['#e8590c', '#1c7ed6', '#2f9e44', '#ae3ec9', '#f08c00', '#0c8599', '#d6336c', '#5c7cfa'];
-  const cursors = { tracking: false, list: [], els: new Map(), sentAt: 0, timer: null, last: undefined, following: null };
+  const cursors = { tracking: false, list: [], els: new Map(), sentAt: 0, timer: null, last: undefined, following: null, anchor: null, selection: null };
 
   function colorsFor(list) {
     const taken = new Set(), out = new Map();
@@ -1067,12 +1067,85 @@ function __bridgeInit(options) {
   }
 
   function sendCursor(anchor) {
-    const key = JSON.stringify(anchor);
+    cursors.anchor = anchor;
+    const key = JSON.stringify([anchor, cursors.selection]);
     if (key === cursors.last) return;
     cursors.last = key;
     cursors.sentAt = Date.now();
-    post('cursor', { anchor });
+    post('cursor', { anchor, selection: cursors.selection });
   }
+
+  // ---- selections: the other person's selected text, painted in their colour
+
+  function texts(el) {
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
+      acceptNode: (n) => (n.parentElement.closest('[class*="bridge-"]') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+    });
+    const out = [];
+    while (walker.nextNode()) out.push(walker.currentNode);
+    return out;
+  }
+
+  function offsetIn(el, node, offset) {
+    const at = document.createRange();
+    at.setStart(node, offset);
+    let n = 0;
+    for (const t of texts(el)) {
+      if (t === node) return n + offset;
+      if (at.comparePoint(t, 0) >= 0) return n;
+      n += t.length;
+    }
+    return n;
+  }
+
+  function describeSelection() {
+    const sel = getSelection();
+    if (!sel.rangeCount || sel.isCollapsed) return null;
+    const range = sel.getRangeAt(0);
+    let el = range.commonAncestorContainer;
+    if (el.nodeType !== 1) el = el.parentElement;
+    if (!el || !el.parentElement || ours(el) || el.closest('[class*="bridge-"]')) return null;
+    const start = offsetIn(el, range.startContainer, range.startOffset), end = offsetIn(el, range.endContainer, range.endOffset);
+    return end > start ? { anchor: describe(el, 0, 0).anchor, start, end } : null;
+  }
+
+  function rangeFor(selection) {
+    const el = selection && resolve(selection.anchor);
+    if (!el) return null;
+    const range = document.createRange();
+    let n = 0, started = false;
+    for (const t of texts(el)) {
+      if (!started && selection.start <= n + t.length) { range.setStart(t, selection.start - n); started = true; }
+      if (started && selection.end <= n + t.length) { range.setEnd(t, selection.end - n); return range; }
+      n += t.length;
+    }
+    return null;
+  }
+
+  const selections = { sheet: new CSSStyleSheet(), names: [] };
+  document.adoptedStyleSheets = [...document.adoptedStyleSheets, selections.sheet];
+
+  function drawSelections(colors) {
+    for (const name of selections.names) CSS.highlights.delete(name);
+    selections.names = [];
+    const rules = [];
+    cursors.list.forEach((c, i) => {
+      const range = rangeFor(c.selection);
+      if (!range) return;
+      const name = `bridge-selection-${i}`;
+      CSS.highlights.set(name, new Highlight(range));
+      selections.names.push(name);
+      rules.push(`::highlight(${name}) { background-color: color-mix(in srgb, ${colors.get(c.person)} 32%, transparent); }`);
+    });
+    selections.sheet.replaceSync(rules.join('\n'));
+  }
+
+  document.addEventListener('selectionchange', () => {
+    if (!cursors.tracking) return;
+    cursors.selection = describeSelection();
+    clearTimeout(cursors.timer);
+    cursors.timer = setTimeout(() => sendCursor(cursors.anchor), 60);
+  });
 
   function trackCursor(e) {
     if (!cursors.tracking) return;
@@ -1123,6 +1196,7 @@ function __bridgeInit(options) {
       el.style.top = `${y}px`;
     }
     for (const [person, el] of cursors.els) if (!seen.has(person)) { el.remove(); cursors.els.delete(person); }
+    drawSelections(colors);
   }
 
   const people = { list: [] };
