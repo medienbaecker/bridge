@@ -234,42 +234,26 @@ percent of the widest.
 </div>
 ```
 
-### Diagrams: flow and sequence
+### Diagrams: Mermaid
 
-Never compute boxes, coordinates or arrows yourself. Write the steps in a
-`flow` or `sequence` block and Bridge lays them out and draws them, in the
-window's colours, light and dark. In Markdown it is a fenced block; in HTML,
-`<pre><code class="language-flow">` with the same lines. They can pin any box.
+Never compute boxes, coordinates or arrows yourself. Write a `mermaid` block
+and Bridge draws it (with [Pele](https://pele.run), every Mermaid diagram
+type) in the window's colours, light and dark. In Markdown it is a fenced
+block; in HTML, `<pre><code class="language-mermaid">`. They can pin any box.
 
-```flow
-LR
-(Agent writes page) -> Bridge -> {Shared?}
-{Shared?} -> *Link: yes
-{Shared?} --> Stays here: no
-Bridge -> [(shares.json)]
+```mermaid
+flowchart LR
+  A([Agent writes page]) --> B[Bridge] --> C{Shared?}
+  C -->|yes| L[Link]:::hot
+  C -.->|no| S[Stays here]
+  B --> D[(shares.json)]
 ```
 
-- `A -> B`, `A -> B: label`, `A --> B` (dashed), chains `A -> B -> C`.
-- A box is named by its text. Mark it once: `(text)` rounded, `{text}` a
-  decision, `[(text)]` a store; later lines may use the bare text.
-- `*text` makes it the loud part, and an arrow between two loud boxes too.
-  Mark the one or two that are the point, not more.
-- `LR` on the first line runs left to right (`TB`, the default, top down).
+- `:::hot` makes a node the loud part. Mark the one or two that are the
+  point, not more; leave colours to Bridge instead of `style` or `classDef`.
 
-```sequence
-Ana -> *Link: page + record
-*Link -> Ben: page + record
-Ben --> *Link: her picks
-note Ana, Ben: both show the same answers
-Ana -> Ana: redraw
-```
-
-- People appear in the order they are first named; `*name` marks one.
-- `A -> B: text` a message, `A --> B: text` a reply, `A -> A: text` to
-  itself, `note A: text` or `note A, B: text` across them.
-
-A line that is not a step is drawn as an error under the diagram and printed
-when you present the page; fix it there.
+A block Pele cannot read is printed when you present the page, with the line;
+fix it there.
 
 ### Aligned data: the annotated table
 

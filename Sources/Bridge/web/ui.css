@@ -132,22 +132,9 @@ html[data-bridge-pointing] * { cursor: crosshair !important; }
 [data-bridge-changed] { outline: 2px solid #5f6670; outline-offset: 3px; border-radius: 3px; animation: bridge-changed 3s ease forwards; }
 @keyframes bridge-changed { 0%, 60% { outline-color: #5f6670; } 100% { outline-color: transparent; } }
 
-pre:has(> code:is(.language-flow, .language-sequence)) { display: none; }
-.bridge-diagram { --line: color-mix(in srgb, CanvasText 38%, transparent); --fill: color-mix(in srgb, CanvasText 5%, Canvas); --hot: AccentColor; margin: 0; overflow-x: auto; }
-.bridge-diagram svg { display: block; max-width: 100%; height: auto; font: 13px -apple-system, system-ui, sans-serif; color: CanvasText; overflow: visible; }
-.bridge-diagram .node > * { fill: var(--fill); stroke: var(--line); stroke-width: 1; }
-.bridge-diagram .node > text, .bridge-diagram text { fill: currentColor; stroke: none; }
-.bridge-diagram .node.hot > :not(text) { fill: color-mix(in srgb, var(--hot) 16%, Canvas); stroke: var(--hot); stroke-width: 1.5; }
-.bridge-diagram .node.hot > text { font-weight: 600; }
-.bridge-diagram .edge { fill: none; stroke: var(--line); stroke-width: 1.25; }
-.bridge-diagram .edge.dashed { stroke-dasharray: 5 4; }
-.bridge-diagram .edge.head { fill: var(--line); stroke: none; }
-.bridge-diagram .edge.hot { stroke: var(--hot); }
-.bridge-diagram .edge.hot.head { fill: var(--hot); }
-.bridge-diagram .edge-label { fill: Canvas; }
-.bridge-diagram .edge-text { font-size: 12px; fill: color-mix(in srgb, CanvasText 70%, transparent); }
-.bridge-diagram .lifeline { stroke: var(--line); stroke-dasharray: 2 4; }
-.bridge-diagram .note rect { fill: color-mix(in srgb, #f5c542 22%, Canvas); stroke: color-mix(in srgb, #c99a1a 50%, transparent); }
-.bridge-diagram-error { color: #d6336c; font-size: 12px; }
+pre:has(> code.language-mermaid) { display: none; }
+.bridge-diagram { margin: 0; --pele-bg: Canvas; --pele-fg: CanvasText; --pele-muted: color-mix(in srgb, CanvasText 60%, Canvas); --pele-line: color-mix(in srgb, CanvasText 45%, Canvas); --pele-surface: color-mix(in srgb, CanvasText 5%, Canvas); --pele-surface-alt: color-mix(in srgb, CanvasText 9%, Canvas); --pele-border: color-mix(in srgb, CanvasText 30%, Canvas); --pele-accent: AccentColor; --pele-error: #d6336c; }
+.bridge-diagram .pele-node.hot > :not(text) { fill: color-mix(in srgb, AccentColor 16%, Canvas); stroke: AccentColor; stroke-width: 1.5; }
+.bridge-diagram .pele-node.hot .pele-label { font-weight: 600; }
 
 code:is([data-quote], [data-quoted])::before { content: attr(data-quote) attr(data-quoted); display: block; margin-bottom: 6px; font: 11px -apple-system, system-ui, sans-serif; color: color-mix(in srgb, CanvasText 55%, transparent); }

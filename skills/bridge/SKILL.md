@@ -142,7 +142,7 @@ it on the same page.
 | Paste a draft (mail, message, commit text) | `reply.txt` | Shown readably with a word count and a Copy button that yields the file byte for byte. Never `pbcopy`. For a draft with options around it, `draft.html` with `data-copy` (pages.md "Draft"). |
 | Look at one picture | `shot.png` (also jpg, gif, webp, heic, tiff, bmp) | Shown at a sensible size; they can point at any spot, the note carries the coordinate. |
 | Read a PDF | `spec.pdf` | Scrollable. No pins. |
-| See how things connect or talk | A `flow` or `sequence` block in any page | Laid out and drawn for you; never place boxes and arrows by hand. See pages.md "Diagrams". |
+| See how things connect or talk | A `mermaid` block in any page | Laid out and drawn for you, every Mermaid type; never place boxes and arrows by hand. See pages.md "Diagrams". |
 | See a diagram no block can draw | `diagram.svg` | Rendered inline as a document that scales; they can pin its elements. |
 | Look at several things | `bridge a.html b.png c.txt` | All arrive in their list, the first is selected. |
 | Understand how some code works | An explorable `.html` that runs the real code | They drag, scrub and step through it. See pages.md "Explorable". |
