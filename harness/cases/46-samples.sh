@@ -14,6 +14,8 @@ for i, b in enumerate(re.findall(r'```html\n(.*?)```', md, re.S)):
     page = b if b.lstrip().startswith('<!doctype') else f'<!doctype html><html><head><title>Sample {i}</title></head><body>\n{b}\n</body></html>\n'
     (out / f'sample-{i:02d}.html').write_text(page)
 PY
+mkdir -p "$CASE_DIR/pages/site/templates"
+for i in $(seq 1 40); do echo "<?= \$page->title() ?> $i"; done > "$CASE_DIR/pages/site/templates/article.php"
 repo
 n=$(ls "$CASE_DIR/pages"/sample-*.html | wc -l | tr -d ' ')
 check "pages.md has html samples to test" "$([ "$n" -ge 10 ] && echo many)" "many"

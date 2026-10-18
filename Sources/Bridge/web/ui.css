@@ -149,3 +149,5 @@ pre:has(> code:is(.language-flow, .language-sequence)) { display: none; }
 .bridge-diagram .lifeline { stroke: var(--line); stroke-dasharray: 2 4; }
 .bridge-diagram .note rect { fill: color-mix(in srgb, #f5c542 22%, Canvas); stroke: color-mix(in srgb, #c99a1a 50%, transparent); }
 .bridge-diagram-error { color: #d6336c; font-size: 12px; }
+
+code:is([data-quote], [data-quoted])::before { content: attr(data-quote) attr(data-quoted); display: block; margin-bottom: 6px; font: 11px -apple-system, system-ui, sans-serif; color: color-mix(in srgb, CanvasText 55%, transparent); }

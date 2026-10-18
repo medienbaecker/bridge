@@ -363,6 +363,18 @@ from `@bridge` to reach an embedded site.
 
 ### Code as evidence
 
+Code from a file is quoted, never retyped: name the file and the lines and
+Bridge reads them in, with the path and range shown above. A path is relative
+to the page's folder, or absolute. Leave the block empty.
+
+```html
+<pre><code class="language-php" data-quote="site/templates/article.php:12-30"></code></pre>
+```
+
+In Markdown: a fence with `quote=site/templates/article.php:12-30` after the
+language. A path that cannot be read is printed when you present the page.
+Shared with someone else, the page carries only the quoted lines, not the file.
+
 A `pre` is already a panel. Never wrap it in `.evidence`: the kit paints
 nothing for a surface inside a surface, so the doubled box cannot appear,
 but the padding you meant is lost too. `.evidence` is for a factual line or

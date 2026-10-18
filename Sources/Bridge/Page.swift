@@ -346,6 +346,11 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
                 watch()
             }
             replyHandler(nil, nil)
+        case "quote":
+            switch Quote.read(body["spec"] as? String ?? "", in: URL(fileURLWithPath: location).deletingLastPathComponent()) {
+            case .success(let text): replyHandler(["text": text], nil)
+            case .failure(let f): replyHandler(["error": f.message], nil)
+            }
         case "draft":
             if let key = body["key"] as? String { model.onDraft(location, key, JSONValue(any: body["value"] ?? NSNull())) }
             replyHandler(nil, nil)

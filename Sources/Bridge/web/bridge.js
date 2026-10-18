@@ -570,7 +570,43 @@ function __bridgeInit(options) {
     const source = document.getElementById('markdown-source');
     const host = document.querySelector('.bridge-md');
     if (!source || !host || typeof marked === 'undefined') return;
-    host.innerHTML = marked.parse(source.content.textContent);
+    host.innerHTML = marked.parse(source.content.textContent, { renderer: quoteRenderer });
+  }
+
+  // ---- quotes: code blocks that show lines from a real file
+
+  const quoted = new Map();
+  const quoteErrors = new Set();
+  const quoteRenderer = typeof marked === 'undefined' ? null : Object.assign(new marked.Renderer(), {
+    code(token) {
+      const m = /\b(quote|quoted)=(\S+)/.exec(token.lang || '');
+      if (!m) return marked.Renderer.prototype.code.call(this, token);
+      const code = document.createElement('code');
+      const lang = (token.lang || '').match(/^\S*/)[0];
+      if (lang && !lang.includes('=')) code.className = 'language-' + lang;
+      code.setAttribute(m[1] === 'quote' ? 'data-quote' : 'data-quoted', m[2]);
+      code.textContent = m[1] === 'quote' ? (quoted.get(m[2]) ?? '') : token.text;
+      return `<pre>${code.outerHTML}</pre>\n`;
+    },
+  });
+
+  function fillQuote(code, text) {
+    if (code.textContent === text) return false;
+    code.textContent = text;
+    return true;
+  }
+
+  function quotes() {
+    const codes = [...document.querySelectorAll('code[data-quote]')];
+    for (const code of codes) if (quoted.has(code.dataset.quote)) fillQuote(code, quoted.get(code.dataset.quote));
+    return Promise.all(codes.map(async (code) => {
+      const spec = code.dataset.quote;
+      const reply = await post('quote', { spec });
+      const text = reply?.error ?? reply?.text ?? '';
+      if (reply?.error && !quoteErrors.has(spec + text)) { quoteErrors.add(spec + text); post('error', { text: `quote ${spec}: ${text}` }); }
+      quoted.set(spec, text);
+      if (fillQuote(code, text)) highlight();
+    }));
   }
 
   // ---- diagrams: flow and sequence blocks, drawn next to their source
@@ -881,6 +917,7 @@ function __bridgeInit(options) {
     document.title = doc.title;
     state.patches += 1;
     renderMarkdown();
+    quotes();
     highlight();
     diagrams();
     enhance();
@@ -1572,6 +1609,7 @@ function __bridgeInit(options) {
     started = true;
     currentScripts = scriptSignature(document);
     renderMarkdown();
+    await quotes();
     highlight();
     diagrams();
     enhance();

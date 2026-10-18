@@ -73,3 +73,17 @@ func scratch() throws -> URL {
     #expect(!share.older(than: 3, by: "a"))
     #expect(!share.older(than: 3, by: "b"))
 }
+
+@Test func aSharedPageCarriesTheQuotedLinesButNeverTheFile() throws {
+    let here = try scratch()
+    try Data("let secret = 1\n    func shown() {\n        return 2\n    }\nlet other = 3\n".utf8).write(to: here.appendingPathComponent("code.swift"))
+    let page = here.appendingPathComponent("page.html")
+    try Data(#"<pre><code class="language-swift" data-quote="code.swift:2-4"></code></pre>"#.utf8).write(to: page)
+    let bundle = try PageBundle.make(page: page)
+    #expect(bundle.files.isEmpty)
+    #expect(bundle.html == #"<pre><code class="language-swift" data-quoted="code.swift:2-4">func shown() {"# + "\n    return 2\n}</code></pre>")
+
+    let md = here.appendingPathComponent("plan.md")
+    try Data("# Plan\n\n```swift quote=code.swift:3\nold\n```\n\nAfter.\n".utf8).write(to: md)
+    #expect(try PageBundle.make(page: md).html == "# Plan\n\n```swift quoted=code.swift:3\nreturn 2\n```\n\nAfter.\n")
+}

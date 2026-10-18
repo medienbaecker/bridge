@@ -44,6 +44,7 @@ public struct PageBundle: Codable, Equatable, Sendable {
             return bundle
         }
         let folder = page.deletingLastPathComponent()
+        html = Quote.inline(html, in: folder)
         var files: [String: Data] = [:]
         var origins: [String: String] = [:]
         var total = 0
