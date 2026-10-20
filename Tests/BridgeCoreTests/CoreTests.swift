@@ -247,6 +247,16 @@ private let kitOfShapes = ".options { } .draft { } .bars { } .bar { }"
     #expect(Lint(kitCSS: kitOfShapes).run(html: short).isEmpty)
 }
 
+@Test func lintRefusesOptionsThatCannotRecord() {
+    let split = "<body>\n<div class=\"options\" data-record=\"nav\">\n<button data-value=\"nav\">nav</button><button data-value=\"ul\">ul</button></div>"
+    let found = Lint(kitCSS: kitOfShapes).run(html: split).filter { $0.text.contains("records nothing") }
+    #expect(found.count == 1 && found.first?.level == .error && found.first?.line == 3 && found.first?.text.contains("data-record=\"nav\" data-value=\"nav\"") == true)
+    let whole = "<body><div class=\"options\"><button data-record=\"nav\" data-value=\"nav\">nav</button></div>"
+    #expect(Lint(kitCSS: kitOfShapes).run(html: whole).isEmpty)
+    let own = "<body><div><button data-value=\"a\">a</button></div><select data-record=\"s\"><option value=\"a\">a</option></select>"
+    #expect(Lint(kitCSS: kitOfShapes).run(html: own).isEmpty)
+}
+
 @Test func lintNamesTextOnlyCheckboxAndRadioCards() {
     let prose = "Nothing references it and the README already says so. It is still compiled into every build."
     let checkboxes = "<body><div data-record=\"cuts\" class=\"options stack\">\n<label><input type=\"checkbox\" value=\"logo\"><strong>Logo</strong> \(prose)</label>\n<label><input type=\"checkbox\" value=\"alpha\"><strong>Alpha</strong> \(prose)</label>\n</div>"

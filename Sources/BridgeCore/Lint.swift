@@ -83,6 +83,20 @@ public struct Lint {
             let line = lineOf(html.distance(from: html.startIndex, to: m.inner.lowerBound) + js.distance(from: js.startIndex, to: at.lowerBound))
             out.append(Finding(line: line, level: .warning, text: "an AudioWorklet module from a blob URL is refused by some WebKit versions (the page is a file:// document): write the processor to a .js file beside the page and addModule('that.js') (pages.md, Sound)"))
         }
+        let code = Self.ranges(#"(?is)<(script|style|template|pre)\b.*?</\1>"#, in: html).map(\.whole)
+        let groups = Self.ranges(#"(?i)<(\w+)\b[^>]*\sdata-record\b[^>]*>"#, in: html).compactMap { m -> (whole: Range<String.Index>, key: String)? in
+            let tag = String(html[m.inner])
+            guard let whole = Self.element(in: html, at: m.whole, tag: tag) else { return nil }
+            return (whole, Self.matches(#"(?i)\sdata-record\s*=\s*["']([^"']*)["']"#, in: String(html[m.whole])).first ?? "")
+        }
+        var named: Set<String.Index> = []
+        for m in Self.ranges(#"(?i)<(?!input\b|option\b)\w+\b[^>]*\sdata-value\s*=\s*["']([^"']*)["'][^>]*>"#, in: html)
+        where !Self.escaped(html, at: m.whole.lowerBound) && !code.contains(where: { $0.contains(m.whole.lowerBound) })
+            && html[m.whole].range(of: #"(?i)\sdata-record\b"#, options: .regularExpression) == nil {
+            guard let group = groups.last(where: { $0.whole.contains(m.whole.lowerBound) }), named.insert(group.whole.lowerBound).inserted else { continue }
+            let value = String(html[m.inner])
+            out.append(Finding(line: lineOf(html.distance(from: html.startIndex, to: m.whole.lowerBound)), level: .error, text: "`data-value` without `data-record` on the same element records nothing when clicked: put both on each option (`data-record=\"\(group.key)\" data-value=\"\(value)\"`) (pages.md, How recording works)"))
+        }
         out += textWalls(html: html, lineOf: lineOf)
         return out.sorted { $0.line < $1.line }
     }
