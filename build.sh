@@ -19,7 +19,7 @@ swift build -c "$CONFIG" 2>&1 | grep -E "error:|Build complete" | sed 's/\x1b\[[
 BIN="$(swift build -c "$CONFIG" --show-bin-path)"
 test -x "$BIN/Bridge" || { echo "build failed"; exit 1; }
 
-APP="build.noindex/$NAME.app"; RES="$APP/Contents/Resources"
+APP="$PWD/build.noindex/$NAME.app"; RES="$APP/Contents/Resources"
 rm -rf "$APP"; mkdir -p "$APP/Contents/MacOS" "$RES"
 cp "$BIN/Bridge" "$APP/Contents/MacOS/$EXE"
 cp -R "$BIN/bridge_Bridge.bundle" "$RES/"
@@ -27,7 +27,7 @@ cp "$BIN/bridge-cli" "build.noindex/$CLI"
 
 # Warnings go to stderr because run.sh discards this script's stdout.
 if [ -d "assets/$ICON.icon" ]; then
-  said="$(xcrun actool "assets/$ICON.icon" --compile "$RES" --platform macosx --minimum-deployment-target 13.0 \
+  said="$(xcrun actool "$PWD/assets/$ICON.icon" --compile "$RES" --platform macosx --minimum-deployment-target 13.0 \
     --app-icon "$ICON" --include-all-app-icons --output-partial-info-plist /dev/null 2>&1)" || echo "warning: actool failed for $ICON: $said" >&2
   test -s "$RES/Assets.car" || echo "warning: no Assets.car was produced for $ICON: $said" >&2
 else
