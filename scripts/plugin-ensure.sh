@@ -33,8 +33,8 @@ update() {
   "$new/bridge" --help >/dev/null
   "$new/toolkit/bin/esbuild" --version >/dev/null
 
-  # Never write over a running Mach-O in place: the Stop hook keeps the old
-  # CLI running for hours. Copy, then rename.
+  # Never write over a running Mach-O in place: a `--wait` keeps the old CLI
+  # running. Copy, then rename.
   mkdir -p "$prefix/Applications" "$prefix/.local/bin" "$share/toolkit"
   app="$prefix/Applications/Bridge.app"
   rm -rf "$app.new" "$app.old"

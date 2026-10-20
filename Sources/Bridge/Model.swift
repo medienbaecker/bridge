@@ -47,7 +47,9 @@ final class Model {
     var onRewrite: (Page) -> Void = { _ in }
     var onDraft: (String, String, JSONValue) -> Void = { _, _, _ in }
     var waiters: [Waiter] = []
-    var lives: [String: ClaudeSessions.Life] = [:]
+    var agents: [String: ClaudeSessions.Live] = [:]
+
+    func life(of session: String) -> ClaudeSessions.Life { ClaudeSessions.life(of: session, in: agents) }
 
     var selectedPage: Page? { selected.map { page(for: $0) } }
 
@@ -80,16 +82,12 @@ final class Model {
     }
 
     func listening(_ entry: BridgeEntry) -> Bool {
-        waiters.contains { $0.session == entry.session || $0.locations.contains(entry.location) }
+        agents[entry.session] != nil || waiters.contains { $0.locations.contains(entry.location) }
     }
 
     func unheard(_ entry: BridgeEntry) -> String? {
         guard !entry.crossed, status(of: entry) == "open", !listening(entry) else { return nil }
-        switch lives[entry.session] ?? ClaudeSessions.life(of: entry.session) {
-        case .gone: return "session ended"
-        case .working: return "agent working"
-        default: return "no agent waiting"
-        }
+        return life(of: entry.session) == .gone ? "session ended" : "no agent waiting"
     }
 
     func resolved(_ entry: BridgeEntry) -> String? {
@@ -105,7 +103,7 @@ final class Model {
     func received(_ entry: BridgeEntry) -> Bool { entry.location.hasPrefix(Paths.shared.path + "/") }
 
     func attended(_ entry: BridgeEntry) -> Bool {
-        received(entry) || (lives[entry.session] ?? ClaudeSessions.life(of: entry.session)) != .gone
+        received(entry) || life(of: entry.session) != .gone
     }
 
     static let endedAfter = ProcessInfo.processInfo.environment["BRIDGE_ENDED_AFTER"].flatMap(Double.init) ?? 24 * 3600
@@ -115,7 +113,7 @@ final class Model {
         let now = Date()
         let ended = listing.bridges.filter { entry in
             !entry.crossed && !received(entry) && now.timeIntervalSince(entry.presentedAt) > Self.endedAfter
-                && ClaudeSessions.life(of: entry.session) == .gone
+                && life(of: entry.session) == .gone
         }
         for entry in ended { cross(entry.location, true) }
         return ended.count
@@ -133,6 +131,41 @@ final class Model {
     }
 
     var showAllProjects: Bool = Model.remembered("showAllProjects") as? Bool ?? false { didSet { Self.remember(showAllProjects, "showAllProjects") } }
+
+    func deliver(_ page: Page) {
+        let s = page.sidecar
+        guard s.answered, s.changedSinceCollected, let session = s.presented?.session,
+              let agent = agents[session] ?? ClaudeSessions.live()[session],
+              ClaudeSessions.post(s.handOver(page.location, cli: Flavor.name), to: agent) else { return }
+        page.collected(by: session)
+    }
+
+    func deliver(toNew sessions: Set<String>) {
+        for entry in listing.bridges where sessions.contains(entry.session) {
+            if let page = pages[entry.location] { deliver(page); continue }
+            let url = Paths.sidecar(for: entry.location)
+            let s = Sidecar.peek(url)
+            guard s.answered, s.changedSinceCollected, let session = s.presented?.session, let agent = agents[session],
+                  ClaudeSessions.post(s.handOver(entry.location, cli: Flavor.name), to: agent) else { continue }
+            try? Sidecar.modify(url) { $0.collectedAt = Date(); $0.collectedBy = session }
+        }
+    }
+
+    func hand(_ location: String, to session: String) {
+        guard listing.entry(location) != nil else { return }
+        let page = page(for: location)
+        page.sidecar.collectedAt = nil
+        page.sidecar.collectedBy = nil
+        if session.isEmpty {
+            page.sidecar.presented = nil
+            page.save()
+        } else {
+            let cwd = agents[session]?.cwd ?? page.sidecar.presented?.cwd ?? ""
+            page.presented(Presentation(session: session, cwd: cwd, ground: cwd.isEmpty ? nil : Ground.current(in: cwd)))
+        }
+        listing.update(location) { $0.session = session }
+        changed()
+    }
 
     func page(for location: String) -> Page {
         if let p = pages[location] { return p }

@@ -3,6 +3,8 @@ source "$(dirname "$0")/../lib.sh"
 
 export AGENT=her-agent
 with_b
+claude_session her-agent
+claude_session "test-$CASE_NAME"
 
 page=$(fixture decision.html)
 (cd "$CASE_DIR/pages" && bridge decision.html)
@@ -19,8 +21,8 @@ for i in $(seq 1 60); do [ "$(b --state | jq -r '.ready')" = "true" ] && break; 
 b --js "$there" "document.querySelector('[data-value=list]').click(); return 1" >/dev/null
 sleep 0.3
 b --do send >/dev/null
-hook() { printf '{"session_id":"%s"}' "$2" | "$1" --hook stop --timeout 3 2>&1; }
-check "her Send wakes the agent holding it" "$(hook b her-agent | grep -q 'Bridge: The user answered' && echo yes)" "yes"
-check "with her pick" "$(hook b her-agent; b --read "$there" | jq -r '.answers.layout')" "list"
-check "and his agent sleeps on" "$(hook bridge "test-$CASE_NAME" | grep -c 'answered')" "0"
+check "her Send wakes the agent holding it" "$(inbox her-agent | grep -q 'Bridge: The user answered' && echo yes)" "yes"
+check "with her pick" "$(b --read "$there" | jq -r '.answers.layout')" "list"
+settle 1
+check "and his agent sleeps on" "$(inbox "test-$CASE_NAME" 1 | grep -c 'answered')" "0"
 finish

@@ -54,23 +54,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     func pollWaiters() {
         let found = Waiters.all()
         let listeningBefore = Set(model.waiters.map { "\($0.pid) \($0.session)" })
-        let livesBefore = model.lives
+        let agentsBefore = model.agents
         model.waiters = found
-        model.lives = Dictionary(Set(model.listing.bridges.filter { !$0.crossed }.map(\.session)).map { ($0, ClaudeSessions.life(of: $0)) }, uniquingKeysWith: { a, _ in a })
+        model.agents = ClaudeSessions.live()
+        let arrived = Set(model.agents.values.filter { agentsBefore[$0.session]?.pid != $0.pid }.map(\.session))
+        if !arrived.isEmpty { model.deliver(toNew: arrived) }
         let total = found.reduce(0) { $0 + ($1.bytes ?? 0) }
         let size = total >= Self.pileupBytes ? String(format: "%.1f GB", Double(total) / 1e9) : "\(total / 1_000_000) MB"
         let text = found.count >= Self.pileupCount || total >= Self.pileupBytes
             ? "\(found.count) agent\(found.count == 1 ? "" : "s") waiting · \(size)" : nil
         if text != pileupText { pileupText = text; window?.projects.showPileup(text) }
-        if Set(found.map { "\($0.pid) \($0.session)" }) != listeningBefore || model.lives != livesBefore { window?.sidebar.reload() }
+        if Set(found.map { "\($0.pid) \($0.session)" }) != listeningBefore || model.agents != agentsBefore { window?.sidebar.reload(); window?.updateAgent() }
     }
 
     func applicationDidBecomeActive(_ notification: Notification) { checkUpdate() }
 
     // MARK: Update
 
-    // The Stop hook keeps the app alive for hours, so a build installed underneath
-    // this process would otherwise go unnoticed.
+    // The app stays open for days, so a build installed underneath this process
+    // would otherwise go unnoticed.
     let launchedAt = Date()
     var updateText: String?
 

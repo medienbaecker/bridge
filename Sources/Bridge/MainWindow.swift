@@ -22,7 +22,7 @@ final class SplitController: NSSplitViewController {
     }
 }
 
-final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate, NSToolbarItemValidation, NSMenuItemValidation {
+final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate, NSToolbarItemValidation, NSMenuItemValidation, NSMenuDelegate {
     let model: Model
     let sidebar: SidebarController
     let content = ContentController()
@@ -31,6 +31,8 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
 
     static let point = NSToolbarItem.Identifier("point")
     static let share = NSToolbarItem.Identifier("share")
+    static let agent = NSToolbarItem.Identifier("agent")
+    let agentMenu = NSMenu()
     static let notesId = NSToolbarItem.Identifier("notes")
     static let send = NSToolbarItem.Identifier("send")
 
@@ -159,7 +161,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
     }
 
     var toolbarItems: [NSToolbarItem] {
-        (window?.toolbar?.items ?? []).filter { [Self.share, Self.point, Self.notesId, Self.send].contains($0.itemIdentifier) }
+        (window?.toolbar?.items ?? []).filter { [Self.agent, Self.share, Self.point, Self.notesId, Self.send].contains($0.itemIdentifier) }
     }
 
     var bannerText: String? { model.selectedPage?.bannerText }
@@ -272,8 +274,47 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         window?.toolbar?.validateVisibleItems()
     }
 
+    func agentName(_ agent: ClaudeSessions.Live) -> String {
+        agent.name.isEmpty ? String(agent.session.prefix(8)) : agent.name
+    }
+
+    func updateAgent() {
+        guard let item = toolbarItems.first(where: { $0.itemIdentifier == Self.agent }) else { return }
+        let session = shownPage?.sidecar.presented?.session
+        let title = session.map { s in model.agents[s].map(agentName) ?? "Session ended" } ?? "No agent"
+        item.title = title
+        item.label = title
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        guard menu === agentMenu else { return }
+        menu.removeAllItems()
+        let current = shownPage?.sidecar.presented?.session
+        for agent in model.agents.values.sorted(by: { agentName($0) < agentName($1) }) {
+            let project = agent.cwd.isEmpty ? "" : " · " + (Ground.projectRoot(for: agent.cwd) as NSString).lastPathComponent
+            let item = NSMenuItem(title: agentName(agent) + project + (agent.life == .working ? " · busy" : " · idle"), action: #selector(chooseAgent(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = agent.session
+            item.state = agent.session == current ? .on : .off
+            menu.addItem(item)
+        }
+        if menu.items.isEmpty { menu.addItem(withTitle: "No Claude sessions running", action: nil, keyEquivalent: "").isEnabled = false }
+        menu.addItem(.separator())
+        let none = NSMenuItem(title: "No agent: Send only records", action: #selector(chooseAgent(_:)), keyEquivalent: "")
+        none.target = self
+        none.representedObject = ""
+        none.state = current == nil ? .on : .off
+        menu.addItem(none)
+    }
+
+    @objc func chooseAgent(_ sender: NSMenuItem) {
+        guard let page = shownPage else { return }
+        model.hand(page.location, to: sender.representedObject as? String ?? "")
+    }
+
     func refresh() {
         updateShare()
+        updateAgent()
         projects.reload()
         sidebar.reload()
         for (location, pageWindow) in windows where model.listing.entry(location) == nil { pageWindow.close() }
@@ -297,7 +338,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         // AppKit puts the window title after the sidebar separator, over the list, and
         // handing that identifier to the second divider hangs the toolbar. So the
         // window's title is hidden and the toolbar carries its own two titles.
-        [.toggleSidebar, .sidebarTrackingSeparator, Self.listName, Self.bridgesSeparator, Self.docTitle, .flexibleSpace, Self.share, Self.point, Self.notesId, .space, Self.send]
+        [.toggleSidebar, .sidebarTrackingSeparator, Self.listName, Self.bridgesSeparator, Self.docTitle, .flexibleSpace, Self.agent, Self.share, Self.point, Self.notesId, .space, Self.send]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -311,6 +352,16 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
             listHeader.indent = 8.5
             item.view = listHeader
             item.label = "List"
+            return item
+        }
+        if id == Self.agent {
+            let item = NSMenuToolbarItem(itemIdentifier: id)
+            agentMenu.delegate = self
+            item.menu = agentMenu
+            item.showsIndicator = true
+            item.label = "Agent"
+            item.toolTip = "The Claude session your Send wakes"
+            item.image = Self.symbol("terminal", "Agent")
             return item
         }
         if id == Self.docTitle {
@@ -386,6 +437,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
             pointShownOn = on
             return page != nil && page?.viewingVersion == nil && page?.kind != .pdf
         case Self.notesId: return page.map { !$0.sidecar.comments.isEmpty } ?? false
+        case Self.agent: return page.map { $0.kind != .url && $0.viewingVersion == nil } ?? false
         case Self.share:
             guard let sharing = (NSApp.delegate as? AppDelegate)?.sharing else { return false }
             if sharing.link.peers.isEmpty { return false }
@@ -430,6 +482,10 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         if command == "relaunch" { (NSApp.delegate as? AppDelegate)?.relaunch(); return true }
         switch command {
         case "select": return select(argument)
+        case "agent":
+            guard let page = shownPage else { return false }
+            model.hand(page.location, to: argument == "none" ? "" : argument ?? "")
+            return true
         case "cleanup": model.crossEnded(); return true
         case "dropon":
             let parts = (argument ?? "").components(separatedBy: "|")

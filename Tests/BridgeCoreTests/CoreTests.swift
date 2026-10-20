@@ -292,23 +292,38 @@ private let kitOfShapes = ".options { } .draft { } .bars { } .bar { }"
     #expect(texts.count == 1 && texts.first?.hasPrefix("`.faint` styles nothing") == true)
 }
 
-@Test func sessionLifeFollowsTheHook() throws {
+@Test func sessionLifeFollowsClaudeCodesRegistry() throws {
     let dir = FileManager.default.temporaryDirectory.appendingPathComponent("bridge-sessions-\(UUID().uuidString)")
     let own = ClaudeSessions.dir
     ClaudeSessions.dir = dir
     defer { ClaudeSessions.dir = own; try? FileManager.default.removeItem(at: dir) }
+    func register(_ pid: Int32, _ session: String, _ status: String) throws {
+        let entry: [String: Any] = ["pid": Int(pid), "sessionId": session, "cwd": "/tmp", "status": status, "messagingSocketPath": "/tmp/x.sock"]
+        try JSONSerialization.data(withJSONObject: entry).write(to: dir.appendingPathComponent("\(pid).json"))
+    }
     #expect(ClaudeSessions.life(of: "s") == .unknown)
-    ClaudeSessions.record("SessionStart", session: "s", pid: getpid())
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    try register(getpid(), "s", "idle")
     #expect(ClaudeSessions.life(of: "s") == .idle)
     #expect(ClaudeSessions.life(of: "other") == .gone)
-    ClaudeSessions.record("UserPromptSubmit", session: "s", pid: getpid())
+    try register(getpid(), "s", "busy")
     #expect(ClaudeSessions.life(of: "s") == .working)
-    ClaudeSessions.record("Stop", session: "s", pid: 0)
-    #expect(ClaudeSessions.life(of: "s") == .idle)
-    ClaudeSessions.record("SessionEnd", session: "s", pid: 0)
-    #expect(ClaudeSessions.life(of: "s") == .gone)
-    ClaudeSessions.record("UserPromptSubmit", session: "s", pid: 999_999)
-    #expect(ClaudeSessions.life(of: "s") == .gone)
+    #expect(ClaudeSessions.live()["s"]?.socket == "/tmp/x.sock")
+    try register(999_999, "dead", "idle")
+    #expect(ClaudeSessions.life(of: "dead") == .gone)
+}
+
+@Test func theHandOverCarriesTheAnswerAndWhatToRun() {
+    var s = Sidecar()
+    s.status = "sent"
+    s.answers = ["layout": .string("grid")]
+    let text = s.handOver("/p/page.html", cli: "bridge")
+    #expect(text.hasPrefix("Bridge: The user answered /p/page.html (version 1): {\"layout\":\"grid\"}."))
+    #expect(text.hasSuffix("Full answer: `bridge --read /p/page.html`. Act on it, then `bridge --cross /p/page.html`."))
+    s.collectedAt = Date()
+    #expect(s.handOver("/p/page.html", cli: "bridge").contains("wrote more"))
+    s.status = "closed"
+    #expect(s.handOver("/p/page.html", cli: "bridge").contains("closed /p/page.html without answering"))
 }
 
 @Test func personNamesFoldToPlainLowercase() {

@@ -29,7 +29,7 @@ cp toolkit/package.json toolkit/build.mjs toolkit/scaffold.jsx toolkit/bridge.js
 echo "installing the app and the CLI"
 mkdir -p "$HOME/Applications" "$HOME/.local/bin" "$SHARE"
 # Never write over a running Mach-O in place: the process is killed on its next
-# exec, and the Stop hook keeps the old one running for hours. Copy, then rename.
+# exec. Copy, then rename.
 APP="$HOME/Applications/$NAME.app"
 rm -rf "$APP.new" "$APP.old"
 cp -R "build.noindex/$NAME.app" "$APP.new"
@@ -57,6 +57,6 @@ else
   echo "done: ~/Applications/$NAME.app, ~/.local/bin/$CLI (no skill for beta; the skill is bridge)"
 fi
 echo
-echo "Not done for you: the Claude Code hooks (Stop, PostToolUse and the session hooks). Merge install/stop-hook.json into"
-echo "~/.claude/settings.json; any flavour's CLI serves it, and it watches every flavour's state dir."
+echo "Not done for you: the Claude Code PostToolUse hook. Merge install/hooks.json into ~/.claude/settings.json;"
+echo "any flavour's CLI serves it. Earlier Stop and session hooks for bridge can go: they now do nothing."
 case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) echo "note: ~/.local/bin is not on your PATH" ;; esac

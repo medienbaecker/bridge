@@ -13,9 +13,9 @@ if git rev-parse -q --verify "refs/tags/$tag" >/dev/null || [ -n "$(git ls-remot
   echo "$tag exists: bump the version in .claude-plugin/plugin.json, commit and push" >&2; exit 1
 fi
 
-# The plugin's hooks and install/stop-hook.json must stay the same list.
-normalize='.hooks |= (with_entries(.value |= (map(.hooks |= map(select(.command | contains("plugin-ensure") | not) | .command |= sub(".*/bin/bridge"; "bridge"))) | map(select(.hooks | length > 0)))))'
-[ "$(jq -S "$normalize" hooks/hooks.json)" = "$(jq -S . install/stop-hook.json)" ] || { echo "hooks/hooks.json and install/stop-hook.json differ" >&2; exit 1; }
+# The plugin's hooks and install/hooks.json must stay the same list.
+normalize='.hooks |= (with_entries(.value |= (map(.hooks |= map(select(.command | contains("plugin-ensure") | not) | .command |= sub(".*/bin/bridge"; "bridge"))) | map(select(.hooks | length > 0)))) | with_entries(select(.value | length > 0)))'
+[ "$(jq -S "$normalize" hooks/hooks.json)" = "$(jq -S . install/hooks.json)" ] || { echo "hooks/hooks.json and install/hooks.json differ" >&2; exit 1; }
 
 zip=build.noindex/bridge.zip
 ./scripts/package.sh "$zip"

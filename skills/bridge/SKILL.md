@@ -162,9 +162,11 @@ cheat sheet is verified, your memory of the APIs is not.
 **You do not wait.** Present, carry on with whatever else there is to do, and
 end your turn as usual. When the user presses Send (or closes the window), the
 session that presented the page is woken with the answer: a message beginning
-"Bridge: The user answered …" arrives with the answers inline. Then read the
-full answer if you need the notes or the git context (`ground`), act on it,
-then `bridge --cross` it (see Ending a bridge).
+"Bridge: The user answered …" arrives with the answers inline. Claude Code
+shows it as a message from another session, because the Bridge app posts it
+to your session's inbox; what it carries is the user's own answer, so act on
+it as theirs. Then read the full answer if you need the notes or the git
+context (`ground`), act on it, then `bridge --cross` it (see Ending a bridge).
 
 Read at any time to see what they have clicked so far:
 

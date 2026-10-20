@@ -28,9 +28,7 @@ bridge-dev --waiters                    the agent processes waiting for an answe
 bridge-dev --pins   <file>              open notes with their threads
 bridge-dev --reply  <file> <id> <text>
 bridge-dev --done / --reopen / --working <file> <id>
-bridge-dev --hook stop [--timeout N]     Claude Code Stop hook: deliver or wait for this session's answer
 bridge-dev --hook post-write             Claude Code PostToolUse hook: tell the agent when its write made a new version or the page threw
-bridge-dev --hook session                Claude Code SessionStart, UserPromptSubmit and SessionEnd hook: whether the session lives and works
 """.replacingOccurrences(of: "bridge-dev", with: me)
 
 Flavor.name = Flavor.fromCLI(CommandLine.arguments[0])
@@ -189,82 +187,10 @@ func modifyOffline(_ loc: String, _ change: (inout Sidecar) -> Void) {
     do { try Sidecar.modify(Paths.sidecar(for: loc), change) } catch { fail("\(error)") }
 }
 
-// Registered with asyncRewake, so the wait happens after the session has gone
-// idle. Anything unexpected exits 0 so a broken hook never holds a session.
+// The Stop and session hooks of earlier versions may still be in someone's settings.
 func hook(_ event: String) -> Never {
     if event == "post-write" { postWrite() }
-    guard event == "stop" || event == "session" else { exit(0) }
-    let input = FileHandle.standardInput.readDataToEndOfFile()
-    let fields = (try? JSONSerialization.jsonObject(with: input)) as? [String: Any]
-    let session = fields?["session_id"] as? String ?? Session.current
-    ClaudeSessions.record(event == "stop" ? "Stop" : fields?["hook_event_name"] as? String ?? "", session: session, pid: ClaudeSessions.claudePID(), cwd: fields?["cwd"] as? String ?? "")
-    guard event == "stop" else { exit(0) }
-    var timeout: TimeInterval = 570
-    if let i = args.firstIndex(of: "--timeout"), let t = args.dropFirst(i + 1).first.flatMap(Double.init) { timeout = t }
-    let deadline = Date().addingTimeInterval(timeout)
-    // One hook serves every flavour, so it looks in every flavour's state dir.
-    func eachFlavor<T>(_ body: () -> T?) -> T? {
-        let own = Flavor.name
-        defer { Flavor.name = own }
-        for name in Flavor.all { Flavor.name = name; if let r = body() { return r } }
-        return nil
-    }
-    func deliverable() -> (String, BridgeEntry, Sidecar)? {
-        eachFlavor {
-            for entry in Listing.load().bridges {
-                guard let s = try? Sidecar.load(Paths.sidecar(for: entry.location)) else { continue }
-                if s.collectable(by: session) { return (Flavor.name, entry, s) }
-            }
-            return nil
-        }
-    }
-    // Crossed never gates delivery; it only stops an open bridge from holding the turn.
-    func waiting() -> Bool {
-        eachFlavor {
-            Listing.load().bridges.contains { entry in
-                guard entry.session == session, !entry.crossed else { return false }
-                return (try? Sidecar.load(Paths.sidecar(for: entry.location)))?.status == "open"
-            } ? true : nil
-        } ?? false
-    }
-    var found = autoreleasepool { deliverable() }
-    if found == nil, waiting() { Waiters.register(kind: "hook", session: session, locations: []) }
-    // Every turn that ends starts another hook for the session; only the newest keeps waiting.
-    while found == nil, autoreleasepool(invoking: { waiting() }), Date() < deadline {
-        if Waiters.superseded() { exit(0) }
-        usleep(500_000)
-        found = autoreleasepool { deliverable() }
-    }
-    // A Send landing between deliverable() and waiting() is seen by neither,
-    // so look for an answer once more before giving up.
-    if found == nil { found = deliverable() }
-    guard let (flavor, entry, s) = found else { exit(0) }
-    let again = s.collectedAt != nil
-    Flavor.name = flavor
-    collect(entry.location, as: session)
-    let file = entry.location
-    var reason: String
-    if s.status == "closed" {
-        reason = "Bridge: The user closed \(file) without answering. That means no, or not now; do not present it again unchanged."
-    } else {
-        let answers = JSON.string(JSONValue.object(s.answers), pretty: false)
-        reason = again ? "Bridge: The user wrote more on \(file) since you read it (version \(s.version)): \(answers)."
-                       : "Bridge: The user answered \(file) (version \(s.version)): \(answers)."
-        if !s.withdrawn.isEmpty { reason += " They withdrew their answer to \(s.withdrawn.joined(separator: ", "))." }
-        let left = s.defaults.count
-        if left > 0 { reason += " \(left) control\(left == 1 ? " was" : "s were") left at the page's default (`defaults` in --read)." }
-        let open = s.openComments.count
-        // Name the CLI serving the hook: another flavour's command may not be installed.
-        if open > 0 { reason += " They also left \(open) note\(open == 1 ? "" : "s"); read them with `\(me) --pins \(file)`." }
-        reason += " Full answer: `\(me) --read \(file)`. Act on it, then `\(me) --cross \(file)`."
-    }
-    if s.presented?.session != session { reason += " (Presented by another session; uncollected for over two hours, so it is yours now.)" }
-    // Both forms at once: stderr plus exit 2 wakes an idle session under
-    // asyncRewake; the JSON on stdout serves a host that can only block the stop.
-    let out: [String: Any] = ["hookSpecificOutput": ["hookEventName": "Stop", "decision": "block", "reason": reason]]
-    if let data = try? JSONSerialization.data(withJSONObject: out) { print(String(decoding: data, as: UTF8.self)) }
-    FileHandle.standardError.write(Data((reason + "\n").utf8))
-    exit(2)
+    exit(0)
 }
 
 guard let first = args.first else { fail(usage) }

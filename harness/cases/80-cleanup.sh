@@ -5,7 +5,7 @@ export BRIDGE_ENDED_AFTER=1
 alive=$(fixture decision.html alive.html)
 ended=$(fixture decision.html ended.html)
 repo
-printf '{"session_id":"alive-agent","hook_event_name":"SessionStart","cwd":"%s"}' "$CASE_DIR/pages" | bridge --hook session
+claude_session alive-agent
 (cd "$CASE_DIR/pages" && BRIDGE_SESSION=alive-agent bridge alive.html && BRIDGE_SESSION=ended-agent bridge ended.html)
 wait_ready
 

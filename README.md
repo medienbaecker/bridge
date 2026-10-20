@@ -2,7 +2,7 @@
 
 # Bridge
 
-Agents write faster than we can read. The human world is much more visual. Bridge connects the two: the agent builds visual pages from ready-made components, and what you click and point at goes back to it using a hook.
+Agents write faster than we can read. The human world is much more visual. Bridge connects the two: the agent builds visual pages from ready-made components, and what you click and point at goes back to it through Claude Code's session inbox.
 
 Inspired by [Planning with Agents](https://maggieappleton.com/planning-agents).
 

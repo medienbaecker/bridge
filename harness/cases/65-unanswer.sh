@@ -23,6 +23,7 @@ cat > "$page" <<'HTML'
 </body></html>
 HTML
 repo
+claude_session "$BRIDGE_SESSION"
 (cd "$CASE_DIR/pages" && bridge unanswer.html 2>/dev/null); wait_ready; settle 0.6
 js() { bridge --js "$page" "$1"; }
 read() { bridge --read "$page"; }
@@ -74,7 +75,7 @@ check_json "sent with two answers" "$(read)" '"\(.status) \(.answers | keys | jo
 js "document.getElementById('grid').click(); return 1" >/dev/null; settle 0.4
 check_json "withdrawing after a Send reopens the page" "$(read)" '.status' "open"
 bridge --do send >/dev/null; settle 0.3
-out=$(printf '%s' "{\"session_id\":\"$BRIDGE_SESSION\"}" | bridge --hook stop --timeout 3 2>&1 >/dev/null)
+out=$(inbox "$BRIDGE_SESSION" | tail -1)
 check "the agent is told only the answer, the withdrawal and the defaults" "$(printf '%s' "$out" | grep -o 'version 1): .*page.s default' | head -1)" 'version 1): {"fit":"crop"}. They withdrew their answer to layout. 1 control was left at the page'"'"'s default'
 check_json "the next Send names what was withdrawn" "$(read)" '"\(.status) \(.withdrawn | join(","))"' "sent layout"
 finish

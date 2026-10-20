@@ -68,13 +68,6 @@ check_json "and a reader drops it" "$(waiters)" "[.[] | select(.pid == $w1)] | l
 check "the file is gone" "$(ls "$XDG_STATE_HOME/bridge-dev/waiters" | grep -c "^$w1.json$")" "0"
 check "the subtitle says so again" "$(row "$page" subtitle)" "pages · no agent waiting"
 
-# The Stop hook registers too, as a hook, and takes its file back when it exits.
-printf '{"session_id":"test-51-waiters"}' | "$CLI" --hook stop --timeout 3 >/dev/null 2>&1 & h=$!
-settle 0.6
-check_json "the Stop hook registers while it waits" "$(waiters)" "[.[] | select(.pid == $h)][0].kind" "hook"
-wait "$h" 2>/dev/null
-check_json "and leaves nothing behind when it exits" "$(waiters)" "length" "0"
-
 # Past the limit (2 here, 10 by default) the projects column says how many and how much.
 check_json "no pile-up row under the limit" "$(bridge --state)" '.pileupRow | length' "0"
 "$CLI" --wait "$page" --timeout 60 >/dev/null & w2=$!

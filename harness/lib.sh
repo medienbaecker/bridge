@@ -10,6 +10,7 @@ export XDG_STATE_HOME="$CASE_DIR/state"
 export BRIDGE_TEST=1
 export BRIDGE_DEV_APP="$ROOT/build.noindex/Bridge Dev.app"
 export BRIDGE_SESSION="test-$CASE_NAME"
+export BRIDGE_CLAUDE_SESSIONS="$CASE_DIR/claude-sessions"
 export BRIDGE_LINK_GROUP="$CASE_NAME"
 export BRIDGE_SCREEN="${BRIDGE_SCREEN-Test Screen}"
 FAILS=0
@@ -41,6 +42,20 @@ wait_ready() {
 }
 
 settle() { sleep "${1:-0.2}"; }
+
+claude_session() {  # claude_session <session id> [idle|busy]
+  python3 "$ROOT/harness/fake-claude.py" "$BRIDGE_CLAUDE_SESSIONS" "$1" "$CASE_DIR/inbox-$1" "/tmp/bh-$$-$1.sock" "${2:-idle}" &
+  local i
+  for i in $(seq 1 50); do grep -qs "\"$1\"" "$BRIDGE_CLAUDE_SESSIONS"/*.json && return 0; sleep 0.05; done
+  fault "the stand-in session $1 never registered"
+}
+end_session() { pkill -f "fake-claude.py $BRIDGE_CLAUDE_SESSIONS $1 " 2>/dev/null; settle 0.2; }
+# What the session was sent, one message a line; waits a little for the first.
+inbox() {
+  local i
+  for i in $(seq 1 ${2:-30}); do [ -s "$CASE_DIR/inbox-$1" ] && break; sleep 0.1; done
+  jq -r . "$CASE_DIR/inbox-$1" 2>/dev/null
+}
 
 b() { XDG_STATE_HOME="$CASE_DIR/state-b" BRIDGE_SESSION="${AGENT:-test-$CASE_NAME-b}" bridge "$@"; }
 
@@ -139,6 +154,7 @@ check_json() {
 
 finish() {
   bridge --quit >/dev/null 2>&1 || true
+  pkill -f "fake-claude.py $BRIDGE_CLAUDE_SESSIONS " 2>/dev/null
   sleep 0.2
   if [ -s "$CASE_DIR/faults" ]; then
     while IFS= read -r f; do echo "  FAIL $f"; echo FAIL >> "$CASE_DIR/checks"; done < "$CASE_DIR/faults"

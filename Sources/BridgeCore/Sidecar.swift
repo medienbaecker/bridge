@@ -207,6 +207,21 @@ public struct Sidecar: Codable, Equatable, Sendable {
         guard answered, changedSinceCollected else { return false }
         return presented?.session == session || stale
     }
+
+    public func handOver(_ file: String, cli: String) -> String {
+        if status == "closed" {
+            return "Bridge: The user closed \(file) without answering. That means no, or not now; do not present it again unchanged."
+        }
+        let answers = JSON.string(JSONValue.object(answers), pretty: false)
+        var text = collectedAt != nil ? "Bridge: The user wrote more on \(file) since you read it (version \(version)): \(answers)."
+                                      : "Bridge: The user answered \(file) (version \(version)): \(answers)."
+        if !withdrawn.isEmpty { text += " They withdrew their answer to \(withdrawn.joined(separator: ", "))." }
+        let left = defaults.count
+        if left > 0 { text += " \(left) control\(left == 1 ? " was" : "s were") left at the page's default (`defaults` in --read)." }
+        let open = openComments.count
+        if open > 0 { text += " They also left \(open) note\(open == 1 ? "" : "s"); read them with `\(cli) --pins \(file)`." }
+        return text + " Full answer: `\(cli) --read \(file)`. Act on it, then `\(cli) --cross \(file)`."
+    }
 }
 
 public final class FileLock {

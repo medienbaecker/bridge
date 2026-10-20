@@ -21,7 +21,6 @@ bridge --waiters                       agent processes waiting for an answer, wi
 bridge --pins   <file>                 open notes with their threads
 bridge --reply  <file> <id> <text>
 bridge --done / --reopen / --working <file> <id>
-bridge --hook stop [--timeout N]        the Claude Code Stop hook (installed once, not for agents)
 bridge --share <file>                  send a page and the files it shows to the other connected Macs
 bridge --peers                         the other Macs with Bridge this one knows, and which are connected, JSON
 bridge --name [name]                   this Mac's person on shared pages; with a name, set it
@@ -113,24 +112,21 @@ both people see each other's cursors, picks, typing and notes.
   `person`.
 - A page that arrived from the other Mac lives in Bridge's state dir under
   `shared/`. Reading it (`--read` or `--pins`) makes your session its holder,
-  so this Mac's Send wakes you. The person can also hand it to a session
-  by dropping it on that agent in the sidebar.
+  so this Mac's Send wakes you. The person can also hand it to another
+  session with the agent menu in the toolbar.
 - Rewrite a shared page as you would any page. The rewrite reaches the other
   Mac and its window patches in place. Image paths are mapped for you.
   If the other agent rewrote it since you read it, Claude Code asks you to
   read it again; do, and keep their change.
 - Each person's Send wakes only their own agent.
 
-## The Stop hook
+## How an answer reaches you
 
-`bridge --hook stop` is registered as a Claude Code Stop hook with
-`asyncRewake` (see `install/stop-hook.json`), so it is detached once the turn
-has ended and the session goes idle as usual. It looks for an uncollected
-answer to a bridge this session presented (or an answer nobody collected for
-two hours) and, if the session still has bridges open, keeps watching for
-one. When it has an answer it writes the hand-over to stderr and exits 2,
-which wakes the session with that text. It exits 0 at once when nothing is
-open and on any error.
+Claude Code keeps a record of every live session and gives each one an inbox
+socket. When the user sends or closes a page, the Bridge app posts the
+hand-over to the inbox of the session holding it, which wakes that session if
+it is idle. A session that has ended gets it when it is resumed. Reading the
+answer yourself first (`--read`) means nothing is posted.
 
 ## The write hook
 
@@ -139,10 +135,6 @@ Edit. When the file written is a bridge and the write made a new version, the
 agent's tool result carries the new version number and what changed. When the
 page threw after the write, the tool result says what. Any other write is
 silent.
-
-`bridge --hook session`, on SessionStart, UserPromptSubmit and SessionEnd,
-records whether a session is alive and in a turn, so a row nobody waits on
-says "agent working" or "session ended" instead of "no agent waiting".
 
 ## Files on disk
 
