@@ -138,7 +138,8 @@ it on the same page.
 
 | The user needs to | Write | Notes |
 | --- | --- | --- |
-| Read a plan or a summary | `plan.md` | Rendered as it is, patched in place when you rewrite it. |
+| Read a plan or a summary | `plan.html` | Draw what it decides: a mock with the real labels, peers' screenshots, the timeline. See pages.md "Plan". |
+| Read pure text (notes, a document that is only prose) | `notes.md` | Rendered as it is, patched in place when you rewrite it. Never for a plan. |
 | Paste a draft (mail, message, commit text) | `reply.txt` | Shown readably with a word count and a Copy button that yields the file byte for byte. Never `pbcopy`. For a draft with options around it, `draft.html` with `data-copy` (pages.md "Draft"). |
 | Look at one picture | `shot.png` (also jpg, gif, webp, heic, tiff, bmp) | Shown at a sensible size; they can point at any spot, the note carries the coordinate. |
 | Read a PDF | `spec.pdf` | Scrollable. No pins. |

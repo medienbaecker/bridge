@@ -439,8 +439,13 @@ those two headers. A proxy that passes them through is still refused.
 
 ### Plan
 
-Write `plan.md`. Headings, lists, tables, task lists and code all render.
-Nothing to answer: the user crosses it when they have read it, or leaves notes.
+Write `plan.html`, never `plan.md`. A plan exists to settle something, so
+put that thing on the page: a mock of the window or page with the real labels,
+screenshots of the peers your research looked at, the steps as a timeline,
+the choice as a Decision. Research findings become those pictures, not bullets
+under bullets. Keep prose to what no picture carries. Before presenting,
+`--shot` it and look at it as the user will. Nothing to answer: the user
+crosses it when they have read it, or leaves notes.
 
 ### Sound
 
