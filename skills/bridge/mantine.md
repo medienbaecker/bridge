@@ -19,7 +19,7 @@ becomes the window title.
 `decision.jsx`:
 
 ```jsx
-import { Title, Text, SimpleGrid, Card, Slider, Textarea, Stack } from '@mantine/core';
+import { Title, Text, SimpleGrid, Card, Slider, Stack } from '@mantine/core';
 import { useRecord } from '@bridge';
 
 export default function Page({ data }) {
@@ -41,7 +41,6 @@ export default function Page({ data }) {
       </SimpleGrid>
       <Title order={2}>Corner radius</Title>
       <Slider value={radius} onChange={setRadius} min={0} max={24} w={240} />
-      <Textarea data-record="note" placeholder="Optional" autosize minRows={2} />
     </Stack>
   );
 }

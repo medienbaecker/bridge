@@ -94,9 +94,6 @@ removed.
 
 <h2>Corner radius</h2>
 <label>Radius <input type="range" data-record="radius" min="0" max="24" value="8"></label>
-
-<h2>Anything else</h2>
-<textarea data-record="note" placeholder="Optional"></textarea>
 </body>
 </html>
 ```
