@@ -47,7 +47,8 @@ yours, the message suggests a prefix from the title). Warnings (exit 0):
 colours of the page's own with no dark variant, or a colour in a `style`
 attribute, which no dark variant can reach; a `pre`
 whose lines are columns spaced by hand, or `language-*` on text that is not
-that language. A page that loads a stylesheet from elsewhere is not checked
+that language; two or more `h2`/`h3` sections where one sits in no element
+with an `id` or `data-record`, so notes on it carry no name. A page that loads a stylesheet from elsewhere is not checked
 for unknown classes, since that sheet may define anything. Presenting runs
 the same lint first: a page with errors is not presented (exit 1) and the
 window stays where it is; warnings do not stop it. The
@@ -69,7 +70,7 @@ broken in the user's window; fix it before they look.
   "withdrawn": [ "tone" ],                                            // answered at the last Send, taken back since; only when there is one
   "sent": "2026-09-20T13:31:32Z",
   "comments": [
-    { "id": "3f9a1c2b", "text": "too heavy at phone width", "target": "strong \"List\"",
+    { "id": "3f9a1c2b", "text": "too heavy at phone width", "target": "strong \"List\" in #layout › layout=list",
       "state": "open | working | done", "version": 2, "lost": false,
       "said": [ { "by": "agent", "at": "…", "text": "working on it", "kind": "status" },
                 { "by": "agent", "at": "…", "text": "Dropped the padding", "kind": "reply" } ] }

@@ -75,7 +75,7 @@ check "a link to a file beside it opens that file, outside Bridge" "$(bridge --s
 bridge --do point >/dev/null
 bridge --js "$beside" "const el = document.querySelector('#styled'); const r = el.getBoundingClientRect(); el.dispatchEvent(new MouseEvent('click', {bubbles: true, clientX: r.left + 5, clientY: r.top + 5})); return 1" >/dev/null; settle 0.3
 bridge --js "$beside" "const t = document.querySelector('.bridge-thread:popover-open textarea'); t.value = 'why this colour'; t.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', metaKey: true, bubbles: true})); return 1" >/dev/null; settle 0.4
-check_json "a note pinned on a site page is recorded" "$(bridge --pins "$beside")" '.[0] | "\(.text) | \(.target)"' 'why this colour | p "styled"'
+check_json "a note pinned on a site page is recorded" "$(bridge --pins "$beside")" '.[0] | "\(.text) | \(.target)"' 'why this colour | p "styled" in #styled'
 shotme="$CASE_DIR/pages/shotme.html"
 printf '<!doctype html><title>Shot</title><style>body{margin:0}iframe{display:block;border:0;width:400px;height:150px}</style><iframe id="f"></iframe><script>document.getElementById("f").src = "/red.html"</script>' > "$shotme"
 r=$(bridge --shot "$shotme" "$CASE_DIR/shots/shotme.png" --width 600 --site "http://127.0.0.1:$port/")

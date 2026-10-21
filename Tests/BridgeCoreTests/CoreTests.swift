@@ -350,3 +350,15 @@ private let kitOfShapes = ".options { } .draft { } .bars { } .bar { }"
     #expect(back.people == s.people)
     #expect(String(decoding: Sidecar().data(), as: UTF8.self).contains("people") == false)
 }
+
+@Test func lintNamesSectionsWithoutAnId() {
+    let unnamed = "<body>\n<h2>Buttons</h2>\n<p>a</p>\n<h2>Tints</h2>\n<p>b</p>"
+    #expect(Lint(kitCSS: "").run(html: unnamed).map(\.text).contains { $0.hasPrefix("2 of 2 sections have no id") })
+    let headingIdOnly = "<body>\n<h2 id=\"buttons\">Buttons</h2>\n<p>a</p>\n<h2 id=\"tints\">Tints</h2>\n<p>b</p>"
+    #expect(Lint(kitCSS: "").run(html: headingIdOnly).contains { $0.text.hasPrefix("2 of 2 sections have no id") })
+    let named = "<body>\n<section id=\"buttons\"><h2>Buttons</h2><p>a</p></section>\n<div data-record=\"tint\"><h3>Tints</h3></div>"
+    #expect(!Lint(kitCSS: "").run(html: named).contains { $0.text.contains("sections have no id") })
+    #expect(!Lint(kitCSS: "").run(html: "<body>\n<h2>Only one</h2>\n<p>a</p>").contains { $0.text.contains("sections have no id") })
+    let scripted = "<body>\n<section id=\"a\"><h2>A</h2></section>\n<script>el.innerHTML = '<h2>x</h2><h2>y</h2>'</script>"
+    #expect(!Lint(kitCSS: "").run(html: scripted).contains { $0.text.contains("sections have no id") })
+}

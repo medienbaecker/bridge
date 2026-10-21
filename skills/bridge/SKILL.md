@@ -177,7 +177,7 @@ bridge --read page.html
 
 ```json
 { "status": "open", "version": 1, "answers": { "layout": "grid", "radius": 12 }, "defaults": { "size": "m" },
-  "comments": [ { "id": "3f9a1c2b", "text": "too heavy at phone width", "target": "a.link \"Link text\"",
+  "comments": [ { "id": "3f9a1c2b", "text": "too heavy at phone width", "target": "a.link \"Link text\" in #footer",
                   "state": "open", "said": [ { "by": "agent", "at": "…", "text": "…" } ] } ],
   "ground": { "repo": "…", "branch": "main", "commit": "cfa73c0", "headMoved": 0 } }
 ```
@@ -219,6 +219,13 @@ bridge --working page.html <id>              # tell them you are on it
 bridge --reply page.html <id> "done, and…"   # answer on the thread
 bridge --done page.html <id>                 # close it (they can reopen)
 ```
+
+**Name what they might point at.** Give each section, question and figure an
+`id` in the topic's words (`<section id="small-card-buttons">`). A note's
+`target` then says where it is: `span "Open" in #small-card-buttons ›
+button=filled`, every `id` and `data-record` around it, outermost first. Without
+one it says only `div @ 40%, 60%` and you have to ask which part they meant.
+Keep the ids across rewrites.
 
 A pin is anchored to the element by its tag, classes, position and text. **Keep
 the classes on anything they might have pinned.** Rename or drop an element and

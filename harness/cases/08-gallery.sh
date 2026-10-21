@@ -45,7 +45,7 @@ settle 0.4
 check_json "highlighting survives a patch" "$(bridge --js "$page" "return document.querySelector('.language-diff .token.inserted')?.textContent.includes('sortBy')")" '.' "true"
 bridge --snap "$GALLERY/plain.png" >/dev/null
 snap plain "Plain gallery"
-bridge --js "$page" "document.querySelector('h2:nth-of-type(3)').scrollIntoView(); return 1" >/dev/null
+bridge --js "$page" "document.querySelector('#evidence').scrollIntoView(); return 1" >/dev/null
 settle 0.3
 bridge --snap "$GALLERY/plain-evidence.png" >/dev/null
 snap plain-evidence "Plain gallery: evidence, screenshots, draft"

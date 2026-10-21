@@ -98,12 +98,25 @@ public struct Lint {
             out.append(Finding(line: lineOf(html.distance(from: html.startIndex, to: m.whole.lowerBound)), level: .error, text: "`data-value` without `data-record` on the same element records nothing when clicked: put both on each option (`data-record=\"\(group.key)\" data-value=\"\(value)\"`) (pages.md, How recording works)"))
         }
         out += textWalls(html: html, lineOf: lineOf)
+        out += unnamedSections(html: html, lineOf: lineOf)
         return out.sorted { $0.line < $1.line }
     }
 
     static let blockWords = 40
     static let pageWords = 250
     static let cardWords = 15
+
+    func unnamedSections(html: String, lineOf: (Int) -> Int) -> [Finding] {
+        let masked = Self.masked(html)
+        let headings = Self.ranges(#"(?i)<h[23]\b[^>]*>"#, in: masked).map(\.whole.lowerBound)
+        guard headings.count >= 2 else { return [] }
+        let named = Self.ranges(#"(?i)<(\w+)\b[^>]*\s(?:id|data-record)\s*=[^>]*>"#, in: masked).compactMap {
+            Self.element(in: masked, at: $0.whole, tag: String(masked[$0.inner]))
+        }
+        let bare = headings.filter { h in !named.contains { $0.lowerBound < h && $0.contains(h) } }
+        guard let first = bare.first else { return [] }
+        return [Finding(line: lineOf(masked.distance(from: masked.startIndex, to: first)), level: .warning, text: "\(bare.count) of \(headings.count) sections \(bare.count == 1 ? "has" : "have") no id, so a note on them says only `div @ x%, y%`: wrap each in <section id=\"…\"> named in the topic's words (SKILL.md, Notes and pins)")]
+    }
 
     func textWalls(html: String, lineOf: (Int) -> Int) -> [Finding] {
         guard html.range(of: #"(?i)<!doctype html|<html\b|<body\b|<p\b|<div\b"#, options: .regularExpression) != nil else { return [] }

@@ -78,6 +78,7 @@ removed.
 <h1>Card layout for the archive</h1>
 <p class="muted">The archive has 140 entries. Two layouts survive the content; pick one.</p>
 
+<section id="layout">
 <h2>Layout</h2>
 <div class="options">
   <div data-record="layout" data-value="grid" tabindex="0">
@@ -91,9 +92,12 @@ removed.
     One entry per row. Nothing wraps; the page is 4.5 screens tall.
   </div>
 </div>
+</section>
 
+<section id="corner-radius">
 <h2>Corner radius</h2>
 <label>Radius <input type="range" data-record="radius" min="0" max="24" value="8"></label>
+</section>
 </body>
 </html>
 ```
