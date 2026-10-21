@@ -15,6 +15,12 @@ bridge decision.html          # present (also .md, .jsx, or a URL)
 bridge --read decision.html   # what they answered so far, JSON, returns at once
 ```
 
+Write the page to `~/.local/state/bridge/pages/<project>/`, named after the
+repo folder, and present it from inside the repo. Not the scratchpad, even
+though your harness says temporary files go there: a page outlives your
+session, and the scratchpad is wiped on restart, taking the page out of the
+user's list.
+
 Lint while you still hold the file. It knows the kit's real vocabulary and
 says what a guessed class should have been, names a class the page and the
 kit both style, a colour with no dark-mode variant, a `pre` that is really a
@@ -300,6 +306,7 @@ their list does not come to the front again; a crossed one does.
 
 ## Rules
 
+- Pages live in `~/.local/state/bridge/pages/<project>/`, never the scratchpad.
 - Never `pbcopy`. A draft goes in a page with a Copy button.
 - Never paste the page content into the chat as well. Say "in Bridge" and stop.
 - Never three bare labels. Options carry evidence.
