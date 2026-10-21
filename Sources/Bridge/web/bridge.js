@@ -777,6 +777,13 @@ function __bridgeInit(options) {
       const name = el.getAttribute('alt') || el.getAttribute('src')?.split('/').pop() || el.id;
       target += (name ? ` "${name}"` : '') + ` @ ${Math.round(anchor.x * 100)}%, ${Math.round(anchor.y * 100)}%`;
     }
+    const names = [];
+    for (let node = el; node && node !== document.body; node = node.parentElement) {
+      const key = node.dataset?.record;
+      if (key) names.unshift(node.dataset.value === undefined ? key : `${key}=${node.dataset.value}`);
+      if (node.id) names.unshift('#' + node.id);
+    }
+    if (names.length) target += ' in ' + names.join(' › ');
     return { anchor, target };
   }
 

@@ -25,7 +25,7 @@ settle 0.3
 pins=$(bridge --pins "$page")
 check_json "one open note" "$pins" 'length' "1"
 check_json "note text" "$pins" '.[0].text' "too heavy at phone width"
-check_json "note target" "$pins" '.[0].target' 'strong "List"'
+check_json "note target" "$pins" '.[0].target' 'strong "List" in layout=list'
 id=$(printf '%s' "$pins" | jq -r '.[0].id')
 check_json "a numbered pin is on the page" "$(js "return document.querySelector('.bridge-pin[data-n=\"1\"]') !== null")" '.' "true"
 check_json "pin is anchored to the element" "$(js "return document.querySelector('[data-value=list] strong').style.anchorName")" '.' "--bridge-at-$id"

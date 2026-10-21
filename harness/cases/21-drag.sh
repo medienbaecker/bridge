@@ -20,7 +20,7 @@ drag() { js "const pin = document.querySelector('.bridge-pin'); const p = pin.ge
 
 drag "[data-value=grid] strong"
 pins=$(bridge --pins "$page")
-check_json "the pin re-anchored to the element it landed on" "$pins" '.[0].target' 'strong "Grid"'
+check_json "the pin re-anchored to the element it landed on" "$pins" '.[0].target' 'strong "Grid" in layout=grid'
 check_json "same note, same id" "$pins" '.[0].id' "$id"
 check_json "the thread came with it" "$pins" '.[0].said[0].text' "on it"
 check_json "not lost" "$pins" '.[0].lost' "false"
@@ -31,7 +31,7 @@ check_json "a short press is still a click" "$(js "const pin = document.querySel
 snap moved "The pin moved onto Grid, thread along"
 
 sed -i '' 's/140 entries/141 entries/' "$page"; settle 0.5
-check_json "survives a patch" "$(bridge --pins "$page")" '.[0].target + " " + (.[0].lost | tostring)' 'strong "Grid" false'
+check_json "survives a patch" "$(bridge --pins "$page")" '.[0].target + " " + (.[0].lost | tostring)' 'strong "Grid" in layout=grid false'
 bridge --quit; sleep 0.4
 (cd "$CASE_DIR/pages" && bridge decision.html); wait_ready; settle 0.4
 check_json "survives a reload, re-resolved" "$(js "return document.querySelector('[data-value=grid] strong').style.anchorName")" '.' "--bridge-at-$id"
