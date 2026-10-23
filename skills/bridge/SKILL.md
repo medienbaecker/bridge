@@ -301,8 +301,8 @@ bridge --cross page.html
 ```
 
 Presenting the file again brings it back to the top of their list and marks it
-unread: that is how you say "I need you on this again". A page still open in
-their list does not come to the front again; a crossed one does.
+unread: that is how you say "I need you on this again". Bridge never comes to
+the front on its own; they get a notification and open it from there.
 
 ## Rules
 
