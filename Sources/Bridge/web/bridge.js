@@ -687,8 +687,12 @@ function __bridgeInit(options) {
 
   function reportMedia() {
     const paths = new Set();
-    eachMedia((el, attr, value, path) => paths.add(path));
-    post('media', { paths: [...paths] });
+    const broken = new Set();
+    eachMedia((el, attr, value, path) => {
+      paths.add(path);
+      if (el.localName === 'img' && el.complete && el.naturalWidth === 0) broken.add(path);
+    });
+    post('media', { paths: [...paths], broken: [...broken] });
   }
 
   function applyMediaVersions() {

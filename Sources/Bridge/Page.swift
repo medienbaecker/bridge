@@ -105,22 +105,33 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
 
     func watch() {
         let dir = URL(fileURLWithPath: location).deletingLastPathComponent()
-        let folders = Set(media.keys.map { ($0 as NSString).deletingLastPathComponent }).subtracting([dir.path])
+        let folders = Set(media.keys.map(Self.existingFolder)).subtracting([dir.path])
         let files = [location, sidecarURL.path, Paths.dataFile(for: location).path] + media.keys.sorted() + folders.sorted()
+        guard files != watcher?.files else { return }
         watcher = Watcher(directory: dir, files: files) { [weak self] in self?.fileChanged() }
     }
 
-    static func stamp(_ path: String) -> Date? {
-        (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date
+    static func existingFolder(of path: String) -> String {
+        var folder = (path as NSString).deletingLastPathComponent
+        while folder != "/", !FileManager.default.fileExists(atPath: folder) {
+            folder = (folder as NSString).deletingLastPathComponent
+        }
+        return folder
+    }
+
+    static func stamp(_ path: String) -> Date {
+        (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date ?? .distantPast
     }
 
     func refreshMedia() {
         var changed: [String: String] = [:]
         for (path, was) in media {
-            guard let now = Self.stamp(path), now != was else { continue }
+            let now = Self.stamp(path)
+            guard now != was else { continue }
             media[path] = now
             changed[path] = String(Int(now.timeIntervalSince1970 * 1000))
         }
+        watch()
         if !changed.isEmpty { call("__bridge.refreshMedia(changed)", ["changed": changed]) }
     }
 
@@ -292,8 +303,9 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         if site != nil, let files { html = files.rewrite(html); before = files.rewrite(before) }
         Task { @MainActor in
             let result = try? await run("return __bridge.patch(html, previous)", ["html": html, "previous": before], in: Page.world)
-            if result?["reload"]?.boolValue == true {
-                note = result?["reason"]?.stringValue == "script-built"
+            guard let result else { note = nil; load(); model.onChange(); return }
+            if result["reload"]?.boolValue == true {
+                note = result["reason"]?.stringValue == "script-built"
                     ? "This page builds itself with a script, so it was reloaded rather than patched."
                     : "The page's scripts changed, so it was reloaded."
                 load()
@@ -345,8 +357,9 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
             replyHandler(nil, nil)
         case "media":
             let paths = Set(body["paths"] as? [String] ?? [])
-            if !preview, kind != .url, paths != Set(media.keys) {
-                media = Dictionary(uniqueKeysWithValues: paths.compactMap { p in Self.stamp(p).map { (p, media[p] ?? $0) } })
+            let broken = Set(body["broken"] as? [String] ?? [])
+            if !preview, kind != .url {
+                media = Dictionary(uniqueKeysWithValues: paths.map { ($0, broken.contains($0) ? .distantPast : media[$0] ?? Self.stamp($0)) })
                 watch()
             }
             replyHandler(nil, nil)

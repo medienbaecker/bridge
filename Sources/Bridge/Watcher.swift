@@ -25,8 +25,8 @@ final class Watcher {
             guard fd >= 0 else { return nil }
             let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: [.write, .extend, .rename, .delete, .attrib], queue: .global())
             source.setCancelHandler { @Sendable in close(fd) }
-            source.setEventHandler { @Sendable [self] in
-                DispatchQueue.main.async { MainActor.assumeIsolated { self.fire() } }
+            source.setEventHandler { @Sendable [weak self] in
+                DispatchQueue.main.async { MainActor.assumeIsolated { self?.fire() } }
             }
             source.resume()
             return source

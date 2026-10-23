@@ -45,4 +45,21 @@ check_json "a later patch keeps the fresh image" "$(width far)" '.' "3"
 pixel "$CASE_DIR/elsewhere/far.png" 4
 settle 0.4
 check_json "and it is still watched after the patch" "$(width far)" '.' "4"
+
+sed -i '' "s|</body>|<img id=\"soon\" src=\"soon.png\"><img id=\"deep\" src=\"$CASE_DIR/later/sub/deep.png\"></body>|" "$page"
+settle 0.4
+check_json "images that do not exist yet show broken" "$(js "return [soon.naturalWidth, deep.naturalWidth].join(' ')")" '.' "0 0"
+pixel "$CASE_DIR/pages/soon.png" 5
+mkdir -p "$CASE_DIR/later"; settle 0.3; mkdir "$CASE_DIR/later/sub"; settle 0.3
+pixel "$CASE_DIR/later/sub/deep.png" 6
+settle 0.4
+check_json "an image created beside the page after it loaded appears" "$(width soon)" '.' "5"
+check_json "so does one created in a folder that did not exist yet" "$(width deep)" '.' "6"
+rm "$CASE_DIR/pages/soon.png"
+settle 0.4
+check_json "a deleted image shows broken" "$(js "return soon.naturalWidth")" '.' "0"
+pixel "$CASE_DIR/pages/soon.png" 7
+settle 0.4
+check_json "and appears again when it comes back" "$(width soon)" '.' "7"
+check_json "none of this reloaded the page" "$(js "return window.__marker")" '.' "alive"
 finish
