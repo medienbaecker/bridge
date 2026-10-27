@@ -55,6 +55,25 @@ check "in the photograph the three values' ink ends on one x, to the pixel" "$ed
 (cd "$CASE_DIR/pages" && bridge own.html 2> "$CASE_DIR/own.err"); wait_ready; settle 0.4
 check "a class the page styles in its own <style>, in a media rule too, is not reported" "$(cat "$CASE_DIR/own.err")" ""
 
+port=$((20000 + RANDOM % 20000))
+python3 -c 'import http.server, sys, time
+class Slow(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        time.sleep(3); self.send_response(200); self.send_header("Content-Type", "text/css"); self.end_headers(); self.wfile.write(b"body {}")
+    def log_message(self, *args): pass
+http.server.HTTPServer(("127.0.0.1", int(sys.argv[1])), Slow).serve_forever()' "$port" &
+server=$!
+trap 'kill $server 2>/dev/null; bridge --quit >/dev/null 2>&1 || true' EXIT
+sleep 0.5
+cat > "$CASE_DIR/pages/fonts.html" <<HTML
+<!doctype html><html><head><title>Fonts</title><link rel="stylesheet" href="http://127.0.0.1:$port/fonts.css"><style>.zebra { color: red }</style></head><body>
+<div class="card zebra">styled by the page</div>
+</body></html>
+HTML
+(cd "$CASE_DIR/pages" && bridge fonts.html 2> "$CASE_DIR/fonts.err"); wait_ready; settle 0.4
+check "a class in the page's <style> after a stylesheet still loading from elsewhere is not reported" "$(cat "$CASE_DIR/fonts.err")" ""
+bridge --cross "$CASE_DIR/pages/fonts.html" >/dev/null
+
 # Nothing left in Waiting: the list column says so instead of standing blank.
 bridge --cross "$page" >/dev/null; bridge --cross "$CASE_DIR/pages/own.html" >/dev/null; bridge --do project waiting >/dev/null; settle 0.4
 check_json "the list column names its empty state" "$(bridge --state)" '.listEmpty' "Nothing waiting"

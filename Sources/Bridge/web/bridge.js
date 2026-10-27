@@ -1378,10 +1378,9 @@ function __bridgeInit(options) {
     const note = (text, into) => { for (const m of text.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)) into.add(m[1]); };
     note(__BRIDGE_CSS.page, kit);
     const walk = (rules) => { for (const r of rules) { if (r.selectorText) note(r.selectorText, page); if (r.cssRules) walk(r.cssRules); } };
-    for (const sheet of document.styleSheets) {
-      if (ours(sheet.ownerNode)) continue;
-      // A sheet this page loads from elsewhere cannot be read; it may define anything, so nothing is unknown.
-      try { walk(sheet.cssRules); } catch { return { unknown: [], both: [] }; }
+    for (const element of document.querySelectorAll('style, link[rel~="stylesheet"]')) {
+      if (ours(element)) continue;
+      try { walk(element.sheet.cssRules); } catch { return { unknown: [], both: [] }; }
     }
     const unknown = new Set(), both = new Set();
     for (const el of document.querySelectorAll('[class]')) {
