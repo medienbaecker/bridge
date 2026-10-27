@@ -157,7 +157,7 @@ it on the same page.
 | Tune values | `.jsx` with Mantine controls, or `.html` with inputs | Read the numbers back with `--read`. |
 | Just look at a site | Nothing: the URL in your reply | The user has a browser. |
 | Point at, tune or judge a live site | An `<iframe>` in a page next to your evidence, controls or question; `bridge http://site.test/page` only when they should pin spots on it | See pages.md "Live site next to evidence". |
-| Compare screenshots | `.html` with `.shots` grid or `.wipe` | Absolute paths for local images. They can point at any spot. |
+| Compare screenshots | `.html` with `.shots` (full width, stacked) or `.wipe` | Absolute paths for local images. They can point at any spot. |
 | Anything with tabs, tables, comboboxes, date pickers | `.jsx` | Mantine, one file. See mantine.md. |
 
 Read `pages.md` for plain pages and `mantine.md` for Mantine pages before

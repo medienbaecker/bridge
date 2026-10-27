@@ -49,6 +49,11 @@ bridge --js "$page" "document.querySelector('#evidence').scrollIntoView(); retur
 settle 0.3
 bridge --snap "$GALLERY/plain-evidence.png" >/dev/null
 snap plain-evidence "Plain gallery: evidence, screenshots, draft"
+check_json "screenshots take the full width, one under another" "$(bridge --js "$page" "const [a, b] = [...document.querySelectorAll('.shots img')].map((i) => i.getBoundingClientRect()); const full = document.querySelector('#screenshots').getBoundingClientRect().width; return [Math.round(full - a.width), Math.round(full - b.width), b.top > a.bottom].join(',')")" '.' "0,0,true"
+bridge --js "$page" "document.querySelector('#screenshots').scrollIntoView(); return 1" >/dev/null
+settle 0.3
+bridge --snap "$GALLERY/plain-screenshots.png" >/dev/null
+snap plain-screenshots "Plain gallery: screenshots"
 
 jsx=$(fixture gallery.jsx); fixture gallery.data.json >/dev/null
 (cd "$CASE_DIR/pages" && bridge gallery.jsx)

@@ -190,7 +190,7 @@ lorem ipsum dolor sit amet …</pre>
 
 Never also print the draft in the chat.
 
-### Screenshots: grid and before/after
+### Screenshots: stacked and before/after
 
 ```html
 <h2>All four breakpoints</h2>
@@ -208,6 +208,11 @@ Never also print the draft in the chat.
 ```
 
 The user drags across the wipe. They can point at any pixel of either.
+
+Screenshots always take the full width, one under another: never side by
+side in `.compare` or a grid of your own, where each shrinks until nothing
+in it can be read. Crop each to the part that matters: a dialog in a whole
+window is still small at full width.
 
 ### Evidence: code, diffs, bars
 
@@ -493,7 +498,7 @@ answering looks the same on every page.
 `.row.between` with `.num` (label and value on one line), `.card` (bordered
 box), `.actions` (button row with top margin), `.compare` (two columns),
 `.evidence` (quiet panel for a factual line or two), `.draft` (pre-wrapped
-text panel), `.shots` (screenshot grid), `.wipe` (before/after), `.bars` and
+text panel), `.shots` (screenshots, full width, one under another), `.wipe` (before/after), `.bars` and
 `.bar` (compared numbers), `.metrics` (key and value), `.data` with `.remark`
 (annotated table), `.swatches` (a few colours to pick from), `.dials` and `.dial` (tuning by feel), `.color` (OKLCH colour),
 `.language-*` on `code` (highlighting; `.language-diff` for diffs),

@@ -159,8 +159,8 @@ table.data { width: auto; }
 }
 .wipe input[type=range] { position: absolute; inset: auto 0 0 0; width: 100%; margin: 0; opacity: 0; height: 100%; top: 0; cursor: ew-resize; }
 @layer bridge {
-.shots { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
-.shots img { border: 1px solid var(--bridge-line); }
+.shots { display: grid; gap: 24px; }
+.shots img { box-sizing: border-box; width: 100%; border: 1px solid var(--bridge-line); }
 
 .doc-text-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .doc-text { font: 13px/1.55 -apple-system, system-ui, sans-serif; }
