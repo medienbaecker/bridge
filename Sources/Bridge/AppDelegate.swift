@@ -263,6 +263,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             out["cursor"] = page.cursor
             out["selection"] = page.selection
         }
+        out["webViews"] = .number(Double(window.content.container.subviews.count))
         if let w = window.window {
             out["windowNumber"] = .number(Double(w.windowNumber))
             out["windowKey"] = .bool(w.isKeyWindow)

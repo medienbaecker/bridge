@@ -690,7 +690,7 @@ final class ContentController: NSViewController {
 
     func show(page: Page?) {
         guard shown !== page else { return }
-        shown?.webView.removeFromSuperview()
+        container.subviews.forEach { $0.removeFromSuperview() }
         shown = page
         guard let page else { return }
         let web = page.webView
