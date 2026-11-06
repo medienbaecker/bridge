@@ -328,14 +328,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         if let open = Freeze.current { return open.cancel() }
         let page = (NSApp.keyWindow?.windowController as? PageWindow)?.page ?? model.selectedPage
         let picked = fromBridge ? page.flatMap { model.listing.entry($0.location)?.session } : nil
-        guard CGPreflightScreenCaptureAccess() else {
-            CGRequestScreenCaptureAccess()
-            let alert = NSAlert()
-            alert.messageText = "Bridge can't see the screen"
-            alert.informativeText = "Allow Bridge in System Settings, Privacy & Security, Screen & System Audio Recording, then try again."
-            if !Env.test { alert.runModal() }
-            return
-        }
         Task {
             await Freeze.start(recipients: model.agentsByWork(), picked: picked, page: freezePage) { [weak self] freeze, outcome in
                 guard let self, outcome != .cancel, let location = model.newBridge(capture: freeze) else { return }

@@ -99,7 +99,6 @@ final class Freeze: NSObject {
         current = freeze
         freeze.previous = previous
         freeze.panel.orderFrontRegardless()
-        NSApp.activate()
         freeze.panel.makeKeyAndOrderFront(nil)
         freeze.panel.makeFirstResponder(page.webView)
         let list = freeze.recipients.map { ["session": $0.session, "name": $0.name.isEmpty ? $0.page : $0.name, "project": $0.project.isEmpty ? "No project" : $0.project, "busy": $0.busy, "picked": $0.session == freeze.picked] as [String: Any] }
@@ -357,8 +356,15 @@ final class Freeze: NSObject {
 
     func shoot(_ frame: CGRect) async -> Picture? {
         let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
-        guard let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true),
-              let display = content.displays.first(where: { $0.displayID == number }) else { return nil }
+        guard let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true) else {
+            if Self.current === self { cancel() }
+            let alert = NSAlert()
+            alert.messageText = "Bridge can't see the screen"
+            alert.informativeText = "Allow Bridge in System Settings, Privacy & Security, Screen & System Audio Recording, then try again."
+            if !Env.test { alert.runModal() }
+            return nil
+        }
+        guard let display = content.displays.first(where: { $0.displayID == number }) else { return nil }
         let filter = SCContentFilter(display: display, excludingWindows: content.windows.filter { $0.windowID == CGWindowID(panel.windowNumber) })
         let scale = CGFloat(filter.pointPixelScale)
         let config = SCStreamConfiguration()
