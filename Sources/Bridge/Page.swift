@@ -9,18 +9,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         let web = Bundle.module.url(forResource: "web", withExtension: nil)!
         func read(_ name: String) -> String { (try? String(contentsOf: web.appendingPathComponent(name), encoding: .utf8)) ?? "" }
         let css = ["page": read("page.css"), "ui": read("ui.css")]
-        return "const __BRIDGE_CSS = \(JSON.string(css, pretty: false));\nconst __BRIDGE_ARROW = \(JSON.string(arrow, pretty: false));\n" + read("idiomorph.js") + "\n" + read("marked.js") + "\n" + read("prism.js") + "\n" + read("bridge.js")
-    }()
-    static let arrow: [String: JSONValue] = {
-        let cursor = NSCursor.arrow
-        var rect = NSRect(origin: .zero, size: cursor.image.size)
-        guard let cg = cursor.image.cgImage(forProposedRect: &rect, context: nil, hints: [.ctm: AffineTransform(scale: 2)]),
-              let png = NSBitmapImageRep(cgImage: cg).representation(using: .png, properties: [:]) else { return [:] }
-        return [
-            "url": .string("data:image/png;base64," + png.base64EncodedString()),
-            "width": .number(cursor.image.size.width), "height": .number(cursor.image.size.height),
-            "x": .number(cursor.hotSpot.x), "y": .number(cursor.hotSpot.y),
-        ]
+        return "const __BRIDGE_CSS = \(JSON.string(css, pretty: false));\n" + read("idiomorph.js") + "\n" + read("marked.js") + "\n" + read("prism.js") + "\n" + read("bridge.js")
     }()
     static let pageAPI: String = {
         let web = Bundle.module.url(forResource: "web", withExtension: nil)!
@@ -38,14 +27,14 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
     let location: String
     let kind: Kind
     let preview: Bool
+    let freezing: Bool
     unowned let model: Model
-    let webView: WKWebView
+    let webView: PageWebView
     let files: LocalFiles?
     let sidecarURL: URL
     var sidecar: Sidecar
     var title: String
     var viewingVersion: Int?
-    var pointing = false
     var ready = false
     /// The file behind a listed bridge is gone, e.g. a crossed one whose session deleted its folder.
     var missing = false
@@ -60,9 +49,6 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
     var lastData: Data?
     var watcher: Watcher?
     var media: [String: Date] = [:]
-    var cursor: JSONValue = .null
-    var selection: JSONValue = .null
-    var sharedSeen: Data?
     var buildFailed = false
     var buildMs: Int?
     var frames: [WKFrameInfo] = []
@@ -74,9 +60,10 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
     var drives: [String: [String: Any]] = [:]
     var errors: [String] = []
 
-    init(location: String, model: Model, preview: Bool = false) {
+    init(location: String, model: Model, preview: Bool = false, freezing: Bool = false) {
         self.location = location
         self.preview = preview
+        self.freezing = freezing
         self.kind = Kind.of(location)
         self.model = model
         self.sidecarURL = Paths.sidecar(for: location)
@@ -92,11 +79,15 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
             config.setURLSchemeHandler(files, forURLScheme: LocalFiles.scheme)
             LocalFiles.register(in: config)
         }
-        webView = WKWebView(frame: .zero, configuration: config)
+        webView = PageWebView(frame: .zero, configuration: config)
         webView.isInspectable = true
         super.init()
         installScripts()
         config.userContentController.addScriptMessageHandler(self, contentWorld: Page.world, name: "bridge")
+        if Paths.inDrafts(location), !preview {
+            for path in Self.attached(sidecar) { files?.allow(path) }
+            webView.onFiles = { [weak self] urls in self?.attach(urls) }
+        }
         webView.navigationDelegate = self
         webView.uiDelegate = self
         webView.setValue(false, forKey: "drawsBackground")
@@ -138,7 +129,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
     func installScripts() {
         let controller = webView.configuration.userContentController
         controller.removeAllUserScripts()
-        let options = JSON.string(["local": kind != .url, "built": kind == .jsx], pretty: false)
+        let options = JSON.string(["local": kind != .url, "built": kind == .jsx, "freeze": freezing], pretty: false)
         controller.addUserScript(WKUserScript(source: Page.runtime + "\n__bridgeInit(\(options));", injectionTime: .atDocumentStart, forMainFrameOnly: false, in: Page.world))
         if kind != .url {
             let answers = JSON.string(JSONValue.object(sidecar.answers), pretty: false)
@@ -267,14 +258,9 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
     func fileChanged() {
         guard kind != .url else { return }
         refreshMedia()
-        if let data = try? Data(contentsOf: URL(fileURLWithPath: location)), data != sharedSeen {
-            if sharedSeen != nil { model.onRewrite(self) }
-            sharedSeen = data
-        }
         if let data = try? Data(contentsOf: sidecarURL), data != lastWritten, data != sidecar.data() {
             lastWritten = data
             do { sidecar = try Sidecar.load(sidecarURL); unreadable = nil } catch { unreadable = "\(error)" }
-            pushNotes()
             model.onChange()
         }
         if FileManager.default.fileExists(atPath: location) == missing {
@@ -329,7 +315,6 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
             collidingClasses = (classes?["both"] as? [String]) ?? []
             if let t = body["title"] as? String, !t.isEmpty, viewingVersion == nil, !buildFailed, !preview { title = t; model.setTitle(t, for: location) }
             checkFrames()
-            model.onReady(self)
             fallthrough
         case "shape":
             if !preview, viewingVersion == nil, !buildFailed, !missing, let shape = body["shape"] as? String {
@@ -370,14 +355,6 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
             }
         case "pele":
             webView.evaluateJavaScript(Page.pele, in: message.frameInfo, in: Page.world) { _ in replyHandler(nil, nil) }
-        case "draft":
-            if let key = body["key"] as? String { model.onDraft(location, key, JSONValue(any: body["value"] ?? NSNull())) }
-            replyHandler(nil, nil)
-        case "cursor":
-            cursor = JSONValue(any: body["anchor"] ?? NSNull())
-            selection = JSONValue(any: body["selection"] ?? NSNull())
-            model.onCursor(location, cursor, selection)
-            replyHandler(nil, nil)
         case "size":
             if kind == .image, !preview, let w = body["width"] as? Int, let h = body["height"] as? Int {
                 title = "\((location as NSString).lastPathComponent) · \(w)×\(h)"
@@ -396,33 +373,33 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         case "send":
             send()
             replyHandler(nil, nil)
+        case "attach":
+            replyHandler(nil, nil)
+            guard Paths.inDrafts(location), let window = webView.window else { return }
+            let panel = NSOpenPanel()
+            panel.allowsMultipleSelection = true
+            panel.beginSheetModal(for: window) { [weak self] response in
+                if response == .OK { self?.attach(panel.urls) }
+            }
+        case "freeze":
+            if let session = body["send"] as? String { Freeze.current?.send(to: session.isEmpty ? nil : session) } else { Freeze.current?.cancel() }
+            replyHandler(nil, nil)
+        case "hover":
+            if let freeze = Freeze.current {
+                if let x = body["x"] as? Double, let y = body["y"] as? Double { freeze.hover(CGPoint(x: x * freeze.screen.frame.width, y: y * freeze.screen.frame.height)) } else { freeze.unhover() }
+            }
+            replyHandler(nil, nil)
         case "pin":
-            let c = addComment(anchor: JSONValue(any: body["anchor"] ?? NSNull()), target: body["target"] as? String ?? "", text: body["text"] as? String ?? "")
-            replyHandler(["id": c.id, "notes": notesJSON()], nil)
+            guard freezing, let freeze = Freeze.current else { replyHandler(nil, "not freezing"); return }
+            let anchor = JSONValue(any: body["anchor"] ?? NSNull())
+            addComment(anchor: anchor, target: freeze.describe(anchor), text: body["text"] as? String ?? "")
+            replyHandler(["notes": notesJSON()], nil)
         case "note":
             let id = body["id"] as? String ?? ""
-            switch body["action"] as? String {
-            case "edit": editComment(id, text: body["text"] as? String ?? "")
-            case "delete": deleteComment(id)
-            case "done": setNote(id, state: "done", by: "user")
-            case "reopen": setNote(id, state: "reopen", by: "user")
-            case "reply": reply(to: id, text: body["text"] as? String ?? "", by: "user")
-            case "move": moveComment(id, anchor: JSONValue(any: body["anchor"] ?? NSNull()), target: body["target"] as? String ?? "")
-            default: break
-            }
+            if body["action"] as? String == "edit" { editComment(id, text: body["text"] as? String ?? "") } else { deleteComment(id) }
             replyHandler(notesJSON(), nil)
-        case "lost":
-            if let map = body["lost"] as? [String: Bool] {
-                for (id, lost) in map { if let i = sidecar.comments.firstIndex(where: { $0.id == id }), sidecar.comments[i].lost != lost { sidecar.comments[i].lost = lost } }
-                save()
-            }
-            replyHandler(nil, nil)
         case "error":
             if let text = body["text"] as? String, !errors.contains(text), errors.count < 10 { errors.append(text) }
-            replyHandler(nil, nil)
-        case "pointing":
-            pointing = body["on"] as? Bool ?? false
-            model.onChange()
             replyHandler(nil, nil)
         default:
             replyHandler(nil, "unknown message \(type)")
@@ -439,8 +416,6 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
             "previous": previous.map { any(.object($0)) } ?? NSNull(),
             "status": sidecar.status,
             "readOnly": viewingVersion != nil || unreadable != nil || missing,
-            "pointing": pointing,
-            "notes": notesJSON(),
             "version": sidecar.version,
             "proposed": any(.object(sidecar.proposed)),
         ]
@@ -466,13 +441,37 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         guard viewingVersion == nil else { return }
         note = nil
         sidecar.answers[key] = value
+        if key == "text" { nameDraft() }
         reopen()
         save()
         model.onChange()
     }
 
+    static func attached(_ sidecar: Sidecar) -> [String] {
+        guard case .array(let files)? = sidecar.answers["files"] else { return [] }
+        return files.compactMap { if case .string(let path) = $0 { return path } else { return nil } }
+    }
+
+    func attach(_ urls: [URL]) {
+        for url in urls { files?.allow(url.path) }
+        Task { _ = try? await run("document.dispatchEvent(new CustomEvent('bridge:attached', { detail: paths }))", ["paths": urls.map(\.path)], in: .page) }
+    }
+
+    var isDraft: Bool { model.listing.entry(location).map(model.isDraft) ?? false }
+
+    func nameDraft() {
+        guard Paths.inDrafts(location) else { return }
+        var line = ""
+        if case .string(let text)? = sidecar.answers["text"] {
+            line = text.split(whereSeparator: \.isNewline).first.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
+        }
+        title = line.isEmpty ? Model.untitled : line
+        model.setTitle(title, for: location)
+    }
+
     func clear(_ key: String) {
         guard viewingVersion == nil, sidecar.answers.removeValue(forKey: key) != nil else { return }
+        if key == "text" { nameDraft() }
         note = nil
         reopen()
         save()
@@ -483,15 +482,11 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         if sidecar.status != "open" { sidecar.status = "open"; sidecar.sentAt = nil; sidecar.collectedAt = nil; sidecar.collectedBy = nil }
     }
 
-    var sendLabel: String {
-        guard sidecar.status == "sent", let at = sidecar.sentAt else { return "Send" }
-        let fresh = sidecar.comments.contains { c in c.at > at || c.said.contains { $0.by != "agent" && $0.at > at } }
-        return fresh ? "Send again" : "Sent"
-    }
+    var sendLabel: String { sidecar.status == "sent" && sidecar.sentAt != nil ? "Sent" : "Send" }
 
     var sendToolTip: String {
         guard sidecar.status == "sent", let at = sidecar.sentAt else { return "Send your answer" }
-        return sendLabel == "Sent" ? "Sent \(Self.clock.string(from: at))" : "Sent \(Self.clock.string(from: at)); send what you added since"
+        return "Sent \(Self.clock.string(from: at))"
     }
 
     func send() {
@@ -614,7 +609,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
     }
 
     // Markdown, text, SVG and images are wrapped in HTML so the same runtime
-    // (pins, patching, versions) applies to them.
+    // (patching, versions) applies to them.
     func wrapped(_ data: Data?) -> String {
         let name = (location as NSString).lastPathComponent
         func esc(_ s: String) -> String { s.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: "\"", with: "&quot;") }
@@ -645,13 +640,11 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
 
     // MARK: Notes
 
-    func addComment(anchor: JSONValue, target: String, text: String) -> Comment {
+    func addComment(anchor: JSONValue, target: String, text: String) {
         let id = String(UUID().uuidString.prefix(8)).lowercased()
-        let c = Comment(id: id, text: text, target: target, anchor: anchor, version: sidecar.version, person: Person.current)
-        sidecar.comments.append(c)
+        sidecar.comments.append(Comment(id: id, text: text, target: target, anchor: anchor, version: sidecar.version))
         save()
         model.onChange()
-        return c
     }
 
     func editComment(_ id: String, text: String) {
@@ -660,49 +653,24 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         save(); model.onChange()
     }
 
-    func moveComment(_ id: String, anchor: JSONValue, target: String) {
-        guard let i = sidecar.comments.firstIndex(where: { $0.id == id }) else { return }
-        sidecar.comments[i].anchor = anchor
-        sidecar.comments[i].target = target
-        sidecar.comments[i].lost = false
-        save(); model.onChange()
-    }
-
     func deleteComment(_ id: String) {
         sidecar.comments.removeAll { $0.id == id }
         save(); model.onChange()
     }
 
-    func reply(to id: String, text: String, by: String = "agent") {
+    func setNote(_ id: String, done: Bool) {
         guard let i = sidecar.comments.firstIndex(where: { $0.id == id }) else { return }
-        sidecar.comments[i].said.append(Say(by: by, text: text, person: Person.current))
-        if by == "user", sidecar.comments[i].state == "done" { sidecar.comments[i].state = "open" }
-        save(); pushNotes(); model.onChange()
-        if by == "agent" { model.markUnread(location) }
-    }
-
-    func setNote(_ id: String, state: String, by: String = "agent") {
-        guard let i = sidecar.comments.firstIndex(where: { $0.id == id }) else { return }
-        let (newState, event) = state == "done" ? ("done", "marked done") : state == "reopen" ? ("open", "reopened") : ("working", "working on it")
-        sidecar.comments[i].state = newState
-        sidecar.comments[i].said.append(Say(by: by, text: event, kind: "status", person: Person.current))
-        save(); pushNotes(); model.onChange()
+        sidecar.comments[i].state = done ? "done" : "open"
+        save(); model.onChange()
     }
 
     func notesJSON() -> [Any] {
-        sidecar.comments.map { any(.object([
-            "id": .string($0.id), "text": .string($0.text), "target": .string($0.target), "state": .string($0.state),
-            "anchor": $0.anchor, "version": .number(Double($0.version)), "lost": .bool($0.lost ?? false),
-            "said": .array($0.said.map { s in .object(["by": .string(s.by), "text": .string(s.text), "kind": .string(s.kind), "at": .string(ISO8601DateFormatter().string(from: s.at))]) }),
-        ])) }
+        sidecar.comments.map { any(.object(["id": .string($0.id), "text": .string($0.text), "anchor": $0.anchor])) }
     }
 
-    func pushNotes() { call("__bridge.notes(notes)", ["notes": notesJSON()]) }
-    func reveal(_ id: String) { call("__bridge.reveal(id)", ["id": id]) }
-
-    func setPointing(_ on: Bool) {
-        pointing = on
-        call("__bridge.point(on)", ["on": on])
+    func startFreeze() {
+        sidecar.comments = []
+        call("__bridge.reset()")
     }
 
     // MARK: Plumbing
@@ -737,7 +705,6 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         let data = sidecar.data()
         lastWritten = data
         try? data.write(to: sidecarURL, options: .atomic)
-        model.onSaved(self)
         model.deliver(self)
     }
 
@@ -805,5 +772,29 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
         if let url = action.request.url, url.scheme != "about" { Self.openExternally(url) }
         return nil
+    }
+}
+
+final class PageWebView: WKWebView {
+    var onFiles: (([URL]) -> Void)?
+
+    func droppedFiles(_ sender: NSDraggingInfo) -> [URL] {
+        guard onFiles != nil else { return [] }
+        return sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        droppedFiles(sender).isEmpty ? super.draggingEntered(sender) : .copy
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        droppedFiles(sender).isEmpty ? super.draggingUpdated(sender) : .copy
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        let urls = droppedFiles(sender)
+        guard !urls.isEmpty else { return super.performDragOperation(sender) }
+        onFiles?(urls)
+        return true
     }
 }

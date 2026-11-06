@@ -14,6 +14,8 @@ final class LocalFiles: NSObject, WKURLSchemeHandler {
 
     init(folder: String) { self.folder = folder }
 
+    func allow(_ path: String) { allowed.insert(path) }
+
     func serves(_ path: String) -> Bool { allowed.contains(path) || path.hasPrefix(folder + "/") }
 
     func webView(_ webView: WKWebView, start task: WKURLSchemeTask) {

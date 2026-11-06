@@ -5,10 +5,9 @@ public struct Say: Codable, Equatable, Sendable {
     public var at: Date
     public var text: String
     public var kind: String
-    public var person: String?
 
-    public init(by: String, text: String, kind: String = "reply", at: Date = Date(), person: String? = nil) {
-        self.by = by; self.text = text; self.kind = kind; self.at = at; self.person = person
+    public init(by: String, text: String, kind: String = "reply", at: Date = Date()) {
+        self.by = by; self.text = text; self.kind = kind; self.at = at
     }
 }
 
@@ -22,11 +21,11 @@ public struct Comment: Codable, Equatable, Sendable, Identifiable {
     public var anchor: JSONValue
     public var said: [Say]
     public var lost: Bool?
-    public var person: String?
+    public var crop: String?
 
-    public init(id: String, text: String, target: String, anchor: JSONValue, version: Int, at: Date = Date(), person: String? = nil) {
+    public init(id: String, text: String, target: String, anchor: JSONValue, version: Int, at: Date = Date()) {
         self.id = id; self.text = text; self.target = target; self.anchor = anchor
-        self.version = version; self.at = at; self.state = "open"; self.said = []; self.person = person
+        self.version = version; self.at = at; self.state = "open"; self.said = []
     }
 }
 
@@ -62,7 +61,6 @@ public struct Sidecar: Codable, Equatable, Sendable {
     public var fingerprint: String?
     public var questions: [String] = []
     public var answers: [String: JSONValue] = [:]
-    public var people: [String: [String: JSONValue]] = [:]
     public var proposed: [String: JSONValue] = [:]
     public var sentAnswers: [String: JSONValue]?
     public var withdrawn: [String] = []
@@ -94,7 +92,7 @@ public struct Sidecar: Codable, Equatable, Sendable {
     }
 
     private static let known: Set<String> = [
-        "status", "version", "fingerprint", "questions", "answers", "people", "defaults", "proposed", "sentAnswers", "withdrawn", "sentAt", "closedAt",
+        "status", "version", "fingerprint", "questions", "answers", "defaults", "proposed", "sentAnswers", "withdrawn", "sentAt", "closedAt",
         "collectedAt", "collectedBy", "comments", "history", "presented", "page",
     ]
 
@@ -114,7 +112,6 @@ public struct Sidecar: Codable, Equatable, Sendable {
         fingerprint = try optional("fingerprint")
         questions = try field("questions", or: [])
         answers = try field("answers", or: [:])
-        people = try field("people", or: [:])
         proposed = try field("proposed", or: [:])
         sentAnswers = try optional("sentAnswers")
         withdrawn = try field("withdrawn", or: [])
@@ -140,7 +137,6 @@ public struct Sidecar: Codable, Equatable, Sendable {
         try c.encodeIfPresent(fingerprint, forKey: .named("fingerprint"))
         try c.encode(questions, forKey: .named("questions"))
         try c.encode(answers, forKey: .named("answers"))
-        if !people.isEmpty { try c.encode(people, forKey: .named("people")) }
         if !proposed.isEmpty { try c.encode(proposed, forKey: .named("proposed")) }
         try c.encodeIfPresent(sentAnswers, forKey: .named("sentAnswers"))
         if !withdrawn.isEmpty { try c.encode(withdrawn, forKey: .named("withdrawn")) }
@@ -195,12 +191,9 @@ public struct Sidecar: Codable, Equatable, Sendable {
     public static func own(_ v: Version) -> [String: JSONValue] { v.answers.filter { !(v.defaults ?? []).contains($0.key) } }
     public var stale: Bool { (sentAt ?? closedAt).map { Date().timeIntervalSince($0) > 2 * 3600 } ?? false }
 
-    /// A note or a Send after the agent collected makes the bridge collectable
-    /// again, so nothing the user writes goes undelivered.
     public var changedSinceCollected: Bool {
         guard let at = collectedAt else { return true }
-        if let sent = sentAt, sent > at { return true }
-        return comments.contains { c in c.at > at || c.said.contains { $0.by != "agent" && $0.at > at } }
+        return sentAt.map { $0 > at } ?? false
     }
 
     public func collectable(by session: String) -> Bool {
@@ -214,12 +207,13 @@ public struct Sidecar: Codable, Equatable, Sendable {
         }
         let answers = JSON.string(JSONValue.object(answers), pretty: false)
         var text = collectedAt != nil ? "Bridge: The user wrote more on \(file) since you read it (version \(version)): \(answers)."
-                                      : "Bridge: The user answered \(file) (version \(version)): \(answers)."
+            : Paths.inDrafts(file) ? "Bridge: The user wrote you a bridge, \(file): \(answers). It is their own request, not an answer to a page of yours." + (self.answers["screenshot"] == nil ? "" : " `screenshot` is their screen with their numbered notes drawn on it; each note's target says what it points at on screen, and a note drawn as a box has `crop`, that area on its own.") + (self.answers["files"] == nil ? "" : " `files` lists what they attached.")
+            : "Bridge: The user answered \(file) (version \(version)): \(answers)."
         if !withdrawn.isEmpty { text += " They withdrew their answer to \(withdrawn.joined(separator: ", "))." }
         let left = defaults.count
         if left > 0 { text += " \(left) control\(left == 1 ? " was" : "s were") left at the page's default (`defaults` in --read)." }
         let open = openComments.count
-        if open > 0 { text += " They also left \(open) note\(open == 1 ? "" : "s"); read them with `\(cli) --pins \(file)`." }
+        if open > 0, Paths.inDrafts(file) { text += " They also left \(open) note\(open == 1 ? "" : "s"); read them with `\(cli) --pins \(file)`." }
         return text + " Full answer: `\(cli) --read \(file)`. Act on it, then `\(cli) --cross \(file)`."
     }
 }

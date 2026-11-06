@@ -25,6 +25,7 @@ enum Preview {
         page.siteOverride = site
         let window = NSWindow(contentRect: NSRect(x: -30000, y: -30000, width: width, height: 900), styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
+        window.canHide = false
         window.appearance = NSApp.effectiveAppearance
         window.contentView = page.webView
         window.orderFrontRegardless()

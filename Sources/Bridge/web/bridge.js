@@ -27,7 +27,7 @@ function __bridgeInit(options) {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', announce); else announce();
     return;
   }
-  const state = { answers: {}, proposed: {}, status: 'open', readOnly: false, pointing: false, notes: [], previous: null, timers: {}, patches: 0, refused: {} };
+  const state = { answers: {}, proposed: {}, status: 'open', readOnly: false, previous: null, timers: {}, patches: 0, refused: {} };
   const root = document.documentElement;
 
   const style = document.createElement('style');
@@ -246,8 +246,6 @@ function __bridgeInit(options) {
     applyDials();
     applyPrevious(payload.previous);
     frameRefused();
-    notes.set(payload.notes || []);
-    point(payload.pointing);
     applyDrives();
   }
 
@@ -258,8 +256,7 @@ function __bridgeInit(options) {
   }
 
   document.addEventListener('click', (e) => {
-    if (state.pointing || e.button !== 0) return;
-    if (e.target.closest('.bridge-pin, .bridge-thread')) return;
+    if (e.button !== 0) return;
     const swatch = e.target.closest('.swatches [data-color]');
     if (swatch) { e.preventDefault(); swatches.pick(swatch); return; }
     const option = e.target.closest('[data-record][data-value]:not(.color)');
@@ -309,7 +306,7 @@ function __bridgeInit(options) {
     pressedRadio = radio && radio.checked ? radio : null;
   }, true);
   document.addEventListener('click', (e) => {
-    if (state.pointing || !e.target.matches?.('input[type=radio]') || e.target !== pressedRadio) return;
+    if (!e.target.matches?.('input[type=radio]') || e.target !== pressedRadio) return;
     pressedRadio = null;
     unanswerRadio(e.target);
   });
@@ -533,28 +530,10 @@ function __bridgeInit(options) {
   }
   let currentScripts = null;
 
-  const changed = new Set();
-  const blockOf = (node) => (node.nodeType === 1 ? node : node.parentElement)?.closest('h1,h2,h3,h4,p,li,pre,figure,img,table,blockquote,[data-record],.card,section,div');
   const morphCallbacks = {
     beforeNodeRemoved: (node) => !ours(node),
-    beforeNodeMorphed: (node, next) => {
-      if (ours(node)) return false;
-      if (cursors.tracking && node.nodeType === 3 && node.textContent !== next.textContent) changed.add(blockOf(node));
-      return true;
-    },
-    afterNodeAdded: (node) => { if (cursors.tracking && !ours(node)) changed.add(blockOf(node)); },
+    beforeNodeMorphed: (node) => !ours(node),
   };
-
-  function flashChanged() {
-    for (const el of changed) {
-      if (!el || el === document.body || ours(el)) continue;
-      el.removeAttribute('data-bridge-changed');
-      void el.offsetWidth;
-      el.setAttribute('data-bridge-changed', '');
-      setTimeout(() => el.removeAttribute('data-bridge-changed'), 3000);
-    }
-    changed.clear();
-  }
 
   function highlight() {
     if (typeof Prism === 'undefined') return;
@@ -722,11 +701,8 @@ function __bridgeInit(options) {
       const was = new DOMParser().parseFromString(previous, 'text/html');
       if (structure(document.body) !== structure(was.body)) return { reload: true, reason: 'script-built' };
     }
-    for (const our of document.querySelectorAll('.bridge-thread:popover-open')) notes.keepOpen = our.dataset.id;
     Idiomorph.morph(document.head, doc.head, { morphStyle: 'innerHTML', callbacks: morphCallbacks });
-    changed.clear();
     Idiomorph.morph(document.body, doc.body, { morphStyle: 'outerHTML', ignoreActiveValue: true, callbacks: morphCallbacks });
-    flashChanged();
     document.title = doc.title;
     state.patches += 1;
     renderMarkdown();
@@ -741,362 +717,267 @@ function __bridgeInit(options) {
     const payload = await post('shape', s);
     apply(payload);
     propose(proposals(doc));
-    notes.place();
-    placeCursors();
-    drawPeople();
     return { reload: false };
   }
 
-  // ---- point, pins, notes
+  // ---- the freeze: pins and boxes on a frozen screen, and the agents bar
 
-  function cssPath(el) {
-    const parts = [];
-    let node = el;
-    while (node && node !== document.body && parts.length < 6) {
-      if (node.id) { parts.unshift('#' + CSS.escape(node.id)); break; }
-      let part = node.localName;
-      const classes = [...node.classList].filter((c) => !c.startsWith('bridge-')).slice(0, 3);
-      if (classes.length) part += '.' + classes.map(CSS.escape).join('.');
-      const same = [...node.parentElement.children].filter((c) => c.localName === node.localName);
-      if (same.length > 1) part += `:nth-of-type(${same.indexOf(node) + 1})`;
-      parts.unshift(part);
-      node = node.parentElement;
-    }
-    return parts.join(' > ');
-  }
+  let freeze = { agents() {}, reset() {}, leave() {}, pinsAt() { return false; } };
+  if (options.freeze) {
+    root.setAttribute('data-bridge-freeze', '');
+    const notes = { list: [], pins: new Map(), boxes: new Map(), drafts: {}, pending: null };
+    const furniture = (el) => !!el?.closest?.('.bridge-pin, .bridge-thread, .bridge-box, .bridge-agents');
 
-  function describe(el, x, y) {
-    const rect = el.getBoundingClientRect();
-    const classes = [...el.classList].filter((c) => !c.startsWith('bridge-'));
-    const same = [...el.parentElement.children].filter((c) => c.localName === el.localName);
-    const text = (el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 80);
-    const frac = (v) => (Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.5);
-    const anchor = {
-      selector: cssPath(el), tag: el.localName, classes, index: same.indexOf(el), text,
-      x: frac(rect.width ? (x - rect.left) / rect.width : 0.5), y: frac(rect.height ? (y - rect.top) / rect.height : 0.5),
+    const place = (el, anchor) => {
+      el.style.left = `${anchor.x * 100}vw`;
+      el.style.top = `${anchor.y * 100}vh`;
     };
-    const short = text.length > 40 ? text.slice(0, 40) + '…' : text;
-    let target = el.localName + (classes.length ? '.' + classes.join('.') : '') + (short ? ` "${short}"` : '');
-    if (!short) {
-      const name = el.getAttribute('alt') || el.getAttribute('src')?.split('/').pop() || el.id;
-      target += (name ? ` "${name}"` : '') + ` @ ${Math.round(anchor.x * 100)}%, ${Math.round(anchor.y * 100)}%`;
-    }
-    const names = [];
-    for (let node = el; node && node !== document.body; node = node.parentElement) {
-      const key = node.dataset?.record;
-      if (key) names.unshift(node.dataset.value === undefined ? key : `${key}=${node.dataset.value}`);
-      if (node.id) names.unshift('#' + node.id);
-    }
-    if (names.length) target += ' in ' + names.join(' › ');
-    return { anchor, target };
-  }
 
-  function sameText(el, text) {
-    if (!text) return true;
-    const now = (el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ');
-    return now.startsWith(text.slice(0, 30));
-  }
-
-  function resolve(anchor) {
-    if (!anchor || !anchor.tag) return null;
-    try {
-      const hit = document.querySelector(anchor.selector);
-      if (hit && hit.localName === anchor.tag && sameText(hit, anchor.text)) return hit;
-    } catch (e) { /* selector no longer parses */ }
-    const candidates = [...document.getElementsByTagName(anchor.tag)].filter((el) =>
-      !ours(el) && (anchor.classes || []).every((c) => el.classList.contains(c)) && sameText(el, anchor.text));
-    if (!candidates.length) return null;
-    return candidates.find((el) => [...el.parentElement.children].filter((c) => c.localName === el.localName).indexOf(el) === anchor.index) || candidates[0];
-  }
-
-  const notes = { list: [], pins: new Map(), drafts: {}, keepOpen: null, pending: null };
-
-  notes.set = function (list) {
-    notes.list = list;
-    state.notes = list;
-    const ids = new Set(list.map((n) => n.id));
-    for (const [id, pin] of notes.pins) if (!ids.has(id) && id !== notes.pending?.id) { pin.remove(); notes.pins.delete(id); notes.thread(id)?.remove(); }
-    let n = 0;
-    for (const note of list) {
-      n += 1;
-      let pin = notes.pins.get(note.id);
-      if (!pin) {
-        pin = document.createElement('button');
-        pin.className = 'bridge-pin';
-        pin.setAttribute('popover', 'manual');
-        pin.dataset.id = note.id;
-        pin.style.anchorName = `--bridge-pin-${note.id}`;
-        pin.addEventListener('click', () => { if (!pin.dataset.dragged) notes.toggle(note.id); });
-        notes.draggable(pin, note.id);
-        root.appendChild(pin);
-        notes.pins.set(note.id, pin);
+    notes.add = function (id, anchor) {
+      if (anchor.w) {
+        const box = document.createElement('div');
+        box.className = 'bridge-box';
+        box.setAttribute('popover', 'manual');
+        place(box, anchor);
+        box.style.width = `${anchor.w * 100}vw`;
+        box.style.height = `${anchor.h * 100}vh`;
+        root.appendChild(box);
+        box.showPopover();
+        notes.boxes.set(id, box);
       }
-      pin.dataset.n = n;
-      pin.dataset.state = note.state;
-      pin.title = note.text;
-    }
-    notes.place();
-    const open = document.querySelector('.bridge-thread:popover-open');
-    if (open) notes.render(open.dataset.id);
-  };
-
-  notes.place = function () {
-    const anchored = new Map();
-    let lost = 0;
-    for (const [id, pin] of notes.pins) {
-      const note = notes.list.find((x) => x.id === id) || (notes.pending?.id === id ? notes.pending : null);
-      const el = note && resolve(note.anchor);
-      if (el) {
-        const names = anchored.get(el) || [];
-        names.push(`--bridge-at-${id}`);
-        anchored.set(el, names);
-        pin.removeAttribute('data-lost');
-        pin.style.pointerEvents = '';
-        pin.style.positionAnchor = `--bridge-at-${id}`;
-        pin.style.left = `calc(anchor(left) + anchor-size(width) * ${note.anchor.x ?? 0.5})`;
-        pin.style.top = `calc(anchor(top) + anchor-size(height) * ${note.anchor.y ?? 0.5})`;
-        pin.style.removeProperty('right');
-      } else {
-        pin.setAttribute('data-lost', '');
-        pin.style.positionAnchor = 'none';
-        pin.style.left = 'auto';
-        pin.style.top = `${52 + lost * 30}px`;
-        lost += 1;
-      }
-      if (!pin.matches(':popover-open')) pin.showPopover();
-      const thread = notes.thread(id);
-      if (thread) {
-        thread.querySelector('.bridge-lost')?.remove();
-        if (!el) thread.insertAdjacentHTML('afterbegin', '<div class="bridge-lost">Pointing at nothing now</div>');
-      }
-    }
-    for (const el of document.querySelectorAll('[style*="--bridge-at-"]')) if (!anchored.has(el) && !ours(el)) el.style.removeProperty('anchor-name');
-    for (const [el, names] of anchored) el.style.anchorName = names.join(', ');
-    const lostNow = {};
-    for (const note of notes.list) lostNow[note.id] = notes.pins.get(note.id)?.hasAttribute('data-lost') === true;
-    const changed = notes.list.some((n) => (n.lost === true) !== lostNow[n.id]);
-    if (changed) { for (const n of notes.list) n.lost = lostNow[n.id]; post('lost', { lost: lostNow }); }
-  };
-
-  // A press that moves under a few pixels is a click; past that it is a drag
-  // that re-anchors the pin to the element it lands on.
-  notes.draggable = function (pin, id) {
-    let start = null;
-    pin.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0) return;
-      start = { x: e.clientX, y: e.clientY, moved: false };
-      delete pin.dataset.dragged;
-      try { pin.setPointerCapture(e.pointerId); } catch (err) { /* synthetic pointer */ }
-    });
-    pin.addEventListener('pointermove', (e) => {
-      if (!start) return;
-      if (!start.moved && Math.hypot(e.clientX - start.x, e.clientY - start.y) < 4) return;
-      start.moved = true;
-      pin.dataset.dragged = '1';
-      pin.style.positionAnchor = 'none';
-      pin.style.left = e.clientX + 'px';
-      pin.style.top = e.clientY + 'px';
-      pin.style.pointerEvents = 'none';
-    });
-    const finish = (e) => {
-      if (!start) return;
-      const moved = start.moved;
-      start = null;
-      if (!moved) return;
-      // The pin sits under the pointer, so hit-test before it takes hits again.
-      const under = document.elementFromPoint(e.clientX, e.clientY);
-      pin.style.pointerEvents = '';
-      const target = under && !ours(under) && !under.closest('.bridge-pin, .bridge-thread') ? under : null;
-      if (target) notes.move(id, target, e.clientX, e.clientY); else notes.place();
-      setTimeout(() => delete pin.dataset.dragged, 0);
+      const pin = document.createElement('button');
+      pin.className = 'bridge-pin';
+      pin.setAttribute('popover', 'manual');
+      pin.dataset.id = id;
+      pin.style.anchorName = `--bridge-pin-${id}`;
+      pin.addEventListener('click', () => notes.toggle(id));
+      place(pin, anchor);
+      root.appendChild(pin);
+      pin.showPopover();
+      notes.pins.set(id, pin);
+      return pin;
     };
-    pin.addEventListener('pointerup', finish);
-    pin.addEventListener('pointercancel', finish);
-  };
 
-  notes.move = async function (id, el, x, y) {
-    const { anchor, target } = describe(el, x, y);
-    if (notes.pending && notes.pending.id === id) {
-      Object.assign(notes.pending, { anchor, target });
-      notes.place();
-      notes.render(id);
-      return;
-    }
-    const list = await post('note', { id, action: 'move', anchor, target });
-    notes.set(list);
-    notes.render(id);
-  };
-
-  notes.thread = (id) => document.querySelector(`.bridge-thread[data-id="${CSS.escape(id)}"]`);
-
-  notes.toggle = function (id) {
-    const existing = notes.thread(id);
-    if (existing && existing.matches(':popover-open')) { existing.hidePopover(); return; }
-    notes.open(id);
-  };
-
-  notes.open = function (id) {
-    for (const t of document.querySelectorAll('.bridge-thread:popover-open')) if (t.dataset.id !== id) t.hidePopover();
-    let thread = notes.thread(id);
-    if (!thread) {
-      thread = document.createElement('div');
-      thread.className = 'bridge-thread';
-      thread.setAttribute('popover', 'auto');
-      thread.dataset.id = id;
-      thread.style.positionAnchor = `--bridge-pin-${id}`;
-      thread.addEventListener('toggle', (e) => {
-        notes.pins.get(id)?.toggleAttribute('data-open', e.newState === 'open');
-        if (e.newState === 'closed') {
-          const draft = thread.querySelector('textarea');
-          if (draft) notes.drafts[id] = draft.value;
-          if (id === notes.pending?.id && !notes.drafts[id]) notes.cancelPending();
-        }
-      });
-      root.appendChild(thread);
-    }
-    notes.render(id);
-    thread.showPopover();
-    const box = thread.querySelector('textarea');
-    if (box) { box.focus(); box.setSelectionRange(box.value.length, box.value.length); }
-  };
-
-  notes.render = function (id) {
-    const thread = notes.thread(id);
-    if (!thread) return;
-    const before = thread.querySelector('textarea');
-    const hadFocus = before && document.activeElement === before;
-    if (before) notes.drafts[id] = before.value;
-    const note = notes.list.find((x) => x.id === id);
-    const pending = notes.pending && notes.pending.id === id ? notes.pending : null;
-    const target = note ? note.target : pending ? pending.target : '';
-    const esc = (t) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-    // No location line: the user is looking at the pinned element. The record
-    // keeps the target for the agent, which has no screen. Lost still shows: it
-    // is a state of the thread, not a location.
-    let html = notes.pins.get(id)?.hasAttribute('data-lost') ? '<div class="bridge-lost">Pointing at nothing now</div>' : '';
-    if (note) {
-      html += `<div class="bridge-say"><b>You</b>${esc(note.text)}</div>`;
-      for (const say of note.said) {
-        html += say.kind === 'status' ? `<div class="bridge-say" data-kind="status">${esc(say.text)}</div>`
-          : `<div class="bridge-say"><b>${say.by === 'agent' ? 'Agent' : 'You'}</b>${esc(say.text)}</div>`;
-      }
-    }
-    const draft = notes.drafts[id] || '';
-    html += `<textarea placeholder="${note ? 'Reply' : 'What should change here?'}" rows="2">${esc(draft)}</textarea>`;
-    html += '<div class="bridge-bar"><span>⌘⏎</span>';
-    if (note) {
-      html += `<button data-act="delete">Delete</button>`;
-      html += `<button data-act="${note.state === 'done' ? 'reopen' : 'done'}">${note.state === 'done' ? 'Reopen' : 'Done'}</button>`;
-      html += `<button data-act="reply" class="bridge-primary">Reply</button>`;
-    } else {
-      html += `<button data-act="cancel">Cancel</button><button data-act="save" class="bridge-primary">Save</button>`;
-    }
-    html += '</div>';
-    thread.innerHTML = html;
-    const box = thread.querySelector('textarea');
-    box.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && e.metaKey) { e.preventDefault(); notes.act(id, note ? 'reply' : 'save'); }
-      if (e.key === 'Escape') { e.preventDefault(); thread.hidePopover(); }
-    });
-    thread.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => notes.act(id, b.dataset.act)));
-    if (hadFocus) { box.focus(); box.setSelectionRange(box.value.length, box.value.length); }
-  };
-
-  notes.act = async function (id, action) {
-    const thread = notes.thread(id);
-    const text = (thread?.querySelector('textarea')?.value || '').trim();
-    if (action === 'cancel') { notes.drafts[id] = ''; thread.hidePopover(); notes.cancelPending(); return; }
-    if (action === 'save') {
-      if (!text) return;
-      const pending = notes.pending;
-      const reply = await post('pin', { anchor: pending.anchor, target: pending.target, text });
-      notes.drafts[id] = '';
-      thread.hidePopover();
-      thread.remove();
+    notes.drop = function (id) {
       notes.pins.get(id)?.remove();
       notes.pins.delete(id);
+      notes.boxes.get(id)?.remove();
+      notes.boxes.delete(id);
+      notes.thread(id)?.remove();
+    };
+
+    notes.set = function (list) {
+      notes.list = list;
+      bar.toggleAttribute('data-empty', !list.length);
+      const ids = new Set(list.map((n) => n.id));
+      for (const id of [...notes.pins.keys()]) if (!ids.has(id) && id !== notes.pending?.id) notes.drop(id);
+      list.forEach((note, i) => {
+        const pin = notes.pins.get(note.id) || notes.add(note.id, note.anchor);
+        pin.dataset.n = i + 1;
+        pin.title = note.text;
+      });
+    };
+
+    notes.thread = (id) => document.querySelector(`.bridge-thread[data-id="${CSS.escape(id)}"]`);
+
+    notes.toggle = function (id) {
+      const existing = notes.thread(id);
+      if (existing && existing.matches(':popover-open')) { existing.hidePopover(); return; }
+      notes.open(id);
+    };
+
+    notes.open = function (id) {
+      let thread = notes.thread(id);
+      if (!thread) {
+        thread = document.createElement('div');
+        thread.className = 'bridge-thread';
+        thread.setAttribute('popover', 'auto');
+        thread.dataset.id = id;
+        thread.style.positionAnchor = `--bridge-pin-${id}`;
+        thread.addEventListener('toggle', (e) => {
+          notes.pins.get(id)?.toggleAttribute('data-open', e.newState === 'open');
+          if (e.newState === 'open' || !thread.isConnected) return;
+          notes.drafts[id] = thread.querySelector('textarea').value;
+          if (id === notes.pending?.id && !notes.drafts[id]) notes.cancelPending();
+        });
+        root.appendChild(thread);
+      }
+      const note = notes.list.find((x) => x.id === id);
+      thread.innerHTML = '<textarea placeholder="What about this?" rows="2"></textarea><div class="bridge-bar">'
+        + (note ? '<button data-act="delete">Delete</button>' : '<button data-act="cancel">Cancel</button>')
+        + '<button data-act="save" class="bridge-primary">Save <kbd>⌘⏎</kbd></button></div>';
+      const box = thread.querySelector('textarea');
+      box.value = id in notes.drafts ? notes.drafts[id] : note?.text || '';
+      box.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && e.metaKey) { e.preventDefault(); notes.act(id, 'save'); }
+        if (e.key === 'Escape') { e.preventDefault(); thread.hidePopover(); }
+      });
+      thread.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => notes.act(id, b.dataset.act)));
+      thread.showPopover();
+      notes.fit(thread);
+      box.focus();
+      box.setSelectionRange(box.value.length, box.value.length);
+    };
+
+    notes.fit = function (thread) {
+      thread.style.translate = '';
+      const r = thread.getBoundingClientRect();
+      const dx = Math.max(8 - r.left, 0) + Math.min(innerWidth - 8 - r.right, 0);
+      const dy = Math.max(8 - r.top, 0) + Math.min(innerHeight - 8 - r.bottom, 0);
+      thread.style.translate = `${dx}px ${dy}px`;
+    };
+
+    notes.act = async function (id, action) {
+      const thread = notes.thread(id);
+      const text = thread.querySelector('textarea').value.trim();
+      if (action === 'cancel') { delete notes.drafts[id]; thread.hidePopover(); notes.cancelPending(); return; }
+      if (action === 'save' && !text) return;
+      const pending = notes.pending?.id === id ? notes.pending : null;
+      const list = pending ? (await post('pin', { anchor: pending.anchor, text })).notes
+        : await post('note', { id, action: action === 'save' ? 'edit' : 'delete', text });
+      delete notes.drafts[id];
+      thread.hidePopover();
+      thread.remove();
+      if (pending) { notes.drop(id); notes.pending = null; }
+      notes.set(list);
+    };
+
+    notes.cancelPending = function () {
+      if (!notes.pending) return;
+      notes.drop(notes.pending.id);
       notes.pending = null;
-      notes.set(reply.notes);
-      return;
+    };
+
+    function startNote(anchor) {
+      notes.cancelPending();
+      const id = 'new-' + Date.now();
+      notes.pending = { id, anchor };
+      notes.add(id, anchor).dataset.n = notes.list.length + 1;
+      notes.open(id);
     }
-    if (action === 'reply' && !text) return;
-    const list = await post('note', { id, action, text });
-    // render() keeps the box's contents as the draft, so a filed reply left in
-    // it would look unsent and a second press would file it twice.
-    if (action === 'reply') {
-      const box = thread?.querySelector('textarea');
-      if (box) box.value = '';
-      notes.drafts[id] = '';
-    }
-    if (action === 'delete') { thread.hidePopover(); notes.set(list); return; }
-    notes.set(list);
-    notes.render(id);
-  };
 
-  notes.cancelPending = function () {
-    const p = notes.pending;
-    if (!p) return;
-    notes.pins.get(p.id)?.remove();
-    notes.pins.delete(p.id);
-    notes.thread(p.id)?.remove();
-    notes.pending = null;
-    notes.place();
-  };
+    let pressed = null;
+    let drawing = null;
+    document.addEventListener('click', (e) => {
+      if (furniture(e.target)) { pressed = null; return; }
+      e.preventDefault();
+      e.stopPropagation();
+      if (pressed?.composing || pressed?.drew) { pressed = null; return; }
+      pressed = null;
+      startNote({ x: e.clientX / innerWidth, y: e.clientY / innerHeight });
+    }, true);
+    document.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || furniture(e.target)) return;
+      pressed = { x: e.clientX, y: e.clientY, composing: !!document.querySelector('.bridge-thread:popover-open'), drew: false };
+      if (!pressed.composing) e.preventDefault();
+    }, true);
+    document.addEventListener('pointermove', (e) => {
+      if (!pressed || pressed.composing || !(e.buttons & 1)) return;
+      if (!drawing && Math.hypot(e.clientX - pressed.x, e.clientY - pressed.y) < 8) return;
+      if (!drawing) { drawing = document.createElement('div'); drawing.className = 'bridge-box bridge-drawing'; root.appendChild(drawing); }
+      Object.assign(drawing.style, { left: Math.min(e.clientX, pressed.x) + 'px', top: Math.min(e.clientY, pressed.y) + 'px', width: Math.abs(e.clientX - pressed.x) + 'px', height: Math.abs(e.clientY - pressed.y) + 'px' });
+    }, true);
+    document.addEventListener('pointerup', () => {
+      if (!drawing || !pressed) return;
+      const rect = drawing.getBoundingClientRect();
+      drawing.remove();
+      drawing = null;
+      pressed.drew = true;
+      startNote({ x: rect.left / innerWidth, y: rect.top / innerHeight, w: rect.width / innerWidth, h: rect.height / innerHeight });
+    }, true);
 
-  notes.reveal = function (id) {
-    const note = notes.list.find((x) => x.id === id);
-    const el = note && resolve(note.anchor);
-    if (el) el.scrollIntoView({ block: 'center' });
-    notes.open(id);
-  };
-
-  function pointAt(e) {
-    const target = e.target.closest?.('.bridge-diagram .pele-node') || e.target.closest?.('*');
-    if (!target || ours(target) || target.closest('.bridge-pin, .bridge-thread')) return;
-    e.preventDefault();
-    e.stopPropagation();
-    point(false);
-    post('pointing', { on: false });
-    notes.cancelPending();
-    const id = 'new-' + Date.now();
-    const { anchor, target: label } = describe(target, e.clientX, e.clientY);
-    notes.pending = { id, anchor, target: label };
-    const pin = document.createElement('button');
-    pin.className = 'bridge-pin';
-    pin.setAttribute('popover', 'manual');
-    pin.dataset.id = id;
-    pin.dataset.n = '+';
-    pin.style.anchorName = `--bridge-pin-${id}`;
-    pin.addEventListener('click', () => { if (!pin.dataset.dragged) notes.toggle(id); });
-    notes.draggable(pin, id);
-    root.appendChild(pin);
-    notes.pins.set(id, pin);
-    notes.place();
-    notes.open(id);
+    const still = matchMedia('(prefers-reduced-motion: reduce)');
+    const bar = document.createElement('div');
+    bar.className = 'bridge-agents';
+    bar.setAttribute('popover', 'manual');
+    bar.toggleAttribute('data-empty', true);
+    root.appendChild(bar);
+    bar.showPopover();
+    bar.addEventListener('click', (e) => {
+      const chip = e.target.closest('button');
+      if (chip && !bar.hasAttribute('data-empty')) post('freeze', { send: chip.dataset.session });
+    });
+    freeze.agents = (list) => {
+      const hint = document.createElement('span');
+      hint.className = 'bridge-agents-hint';
+      hint.textContent = 'Click to pin · drag for a box · Esc to cancel';
+      const chips = list.map((agent, i) => {
+        const chip = document.createElement('button');
+        chip.dataset.session = agent.session;
+        chip.toggleAttribute('data-busy', agent.busy);
+        chip.toggleAttribute('data-picked', agent.picked);
+        const key = document.createElement('kbd');
+        key.textContent = i + 1;
+        const label = document.createElement('span');
+        const name = document.createElement('b');
+        name.textContent = agent.name;
+        const project = document.createElement('small');
+        project.textContent = agent.project;
+        label.append(name, ' ', project);
+        chip.append(key, label);
+        return chip;
+      });
+      const scroller = document.createElement('div');
+      scroller.className = 'bridge-agents-list';
+      scroller.append(...chips);
+      scroller.addEventListener('wheel', (e) => {
+        if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+        e.preventDefault();
+        scroller.scrollLeft += e.deltaY;
+      }, { passive: false });
+      const draft = document.createElement('button');
+      draft.dataset.session = '';
+      draft.className = 'bridge-agents-draft';
+      draft.textContent = 'Draft';
+      bar.replaceChildren(hint, scroller, draft);
+      bar.getAnimations().forEach((a) => a.cancel());
+      if (still.matches) return;
+      const hidden = bar.animate([{ translate: '0 100%' }], { fill: 'forwards' });
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        hidden.cancel();
+        bar.animate([{ translate: '0 100%' }, { translate: '0 0' }], { duration: 220, easing: 'cubic-bezier(0.23, 1, 0.32, 1)' });
+      }));
+    };
+    freeze.pinsAt = (x, y) => {
+      if (y >= bar.offsetTop) return false;
+      const el = document.elementFromPoint(x, y);
+      return !el || getComputedStyle(el).cursor.startsWith('url(');
+    };
+    freeze.leave = () => {
+      if (!still.matches) bar.animate([{ translate: '0 0' }, { translate: '0 100%' }], { duration: 160, easing: 'cubic-bezier(0.4, 0, 1, 1)', fill: 'forwards' });
+    };
+    freeze.reset = () => {
+      notes.cancelPending();
+      notes.drafts = {};
+      notes.set([]);
+    };
+    document.addEventListener('keydown', (e) => {
+      if (e.target.closest?.('textarea, input') || document.querySelector('.bridge-thread:popover-open')) return;
+      if (e.key === 'Escape') { e.preventDefault(); post('freeze', { key: 'escape' }); }
+      if (e.key === 'Enter' && !e.target.closest?.('button')) { e.preventDefault(); bar.querySelector('button[data-picked]')?.click(); }
+      if (/^[1-9]$/.test(e.key)) { e.preventDefault(); bar.querySelectorAll('button:not(.bridge-agents-draft)')[e.key - 1]?.click(); }
+    });
+    let frame = 0;
+    document.addEventListener('pointermove', (e) => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        if (pressed || document.querySelector('.bridge-thread:popover-open') || e.target.closest?.('.bridge-agents')) post('hover');
+        else post('hover', { x: e.clientX / innerWidth, y: e.clientY / innerHeight });
+      });
+    });
+    root.addEventListener('pointerleave', () => post('hover'));
+    root.style.setProperty('--bridge-cursor', pinCursor());
   }
-  document.addEventListener('click', (e) => { if (state.pointing) pointAt(e); }, true);
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.pointing) { point(false); post('pointing', { on: false }); } });
 
-  // While pointing, a pin follows the cursor with its tip on the pointer, to
-  // show where it will land before the click.
-  let ghost = null;
-  function ghostMove(e) { if (ghost) { ghost.style.left = e.clientX + 'px'; ghost.style.top = e.clientY + 'px'; } }
-  function point(on) {
-    state.pointing = !!on && !state.readOnly;
-    root.toggleAttribute('data-bridge-pointing', state.pointing);
-    if (state.pointing && !ghost) {
-      ghost = document.createElement('div');
-      ghost.className = 'bridge-pin bridge-ghost';
-      ghost.dataset.n = '+';
-      ghost.style.left = '-100px';
-      ghost.style.top = '-100px';
-      root.appendChild(ghost);
-      document.addEventListener('pointermove', ghostMove, true);
-    } else if (!state.pointing && ghost) {
-      ghost.remove();
-      ghost = null;
-      document.removeEventListener('pointermove', ghostMove, true);
-    }
+  function pinCursor() {
+    const probe = document.createElement('i');
+    probe.style.color = 'AccentColor';
+    root.appendChild(probe);
+    const accent = getComputedStyle(probe).color;
+    probe.remove();
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="32" viewBox="0 0 28 32"><path d="M14 29.6 L6.2 21.8 A11 11 0 1 1 21.8 21.8 Z" fill="${accent}" stroke="white" stroke-width="2" stroke-linejoin="round"/><path d="M14 9.5v8M10 13.5h8" stroke="white" stroke-width="2" stroke-linecap="round"/></svg>`;
+    return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 14 29, crosshair`;
   }
 
   let toastTimer;
@@ -1126,233 +1007,21 @@ function __bridgeInit(options) {
   });
   document.addEventListener('bridge:clear', () => clear(root.dataset.bridgeClear));
   document.addEventListener('bridge:send', send);
+  document.addEventListener('bridge:attach', () => post('attach'));
   document.addEventListener('bridge:error', () => post('error', { text: root.dataset.bridgeError }));
   document.addEventListener('bridge:rendered', async () => {
     if (!started) { ready(); return; }
     const payload = await post('shape', shape());
     apply(payload);
-    notes.place();
   });
-
-  // ---- cursors: the other person's pointer, anchored to the element under it
-
-  const cursorColors = ['#e8590c', '#1c7ed6', '#2f9e44', '#ae3ec9', '#f08c00', '#0c8599', '#d6336c', '#5c7cfa'];
-  const cursors = { tracking: false, list: [], els: new Map(), sentAt: 0, timer: null, last: undefined, following: null, anchor: null, selection: null };
-
-  function colorsFor(list) {
-    const taken = new Set(), out = new Map();
-    for (const c of list) if (c.color) { out.set(c.person, c.color); const i = cursorColors.indexOf(c.color); if (i >= 0) taken.add(i); }
-    for (const person of list.filter((c) => !c.color).map((c) => c.person).sort()) {
-      let h = 2166136261;
-      for (const ch of person) h = Math.imul(h ^ ch.codePointAt(0), 16777619);
-      let i = (h >>> 0) % cursorColors.length;
-      for (let n = 0; n < cursorColors.length && taken.has(i); n++) i = (i + 1) % cursorColors.length;
-      taken.add(i);
-      out.set(person, cursorColors[i]);
-    }
-    return out;
-  }
-
-  function sendCursor(anchor) {
-    cursors.anchor = anchor;
-    const key = JSON.stringify([anchor, cursors.selection]);
-    if (key === cursors.last) return;
-    cursors.last = key;
-    cursors.sentAt = Date.now();
-    post('cursor', { anchor, selection: cursors.selection });
-  }
-
-  // ---- selections: the other person's selected text, painted in their colour
-
-  function texts(el) {
-    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
-      acceptNode: (n) => (n.parentElement.closest('[class*="bridge-"]:not(.bridge-md)') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
-    });
-    const out = [];
-    while (walker.nextNode()) out.push(walker.currentNode);
-    return out;
-  }
-
-  function offsetIn(el, node, offset) {
-    const at = document.createRange();
-    at.setStart(node, offset);
-    let n = 0;
-    for (const t of texts(el)) {
-      if (t === node) return n + offset;
-      if (at.comparePoint(t, 0) >= 0) return n;
-      n += t.length;
-    }
-    return n;
-  }
-
-  function describeSelection() {
-    const sel = getSelection();
-    if (!sel.rangeCount || sel.isCollapsed) return null;
-    const range = sel.getRangeAt(0);
-    let el = range.commonAncestorContainer;
-    if (el.nodeType !== 1) el = el.parentElement;
-    if (!el || !el.parentElement || el.closest('[class*="bridge-"]:not(.bridge-md)')) return null;
-    const start = offsetIn(el, range.startContainer, range.startOffset), end = offsetIn(el, range.endContainer, range.endOffset);
-    return end > start ? { anchor: describe(el, 0, 0).anchor, start, end } : null;
-  }
-
-  function rangeFor(selection) {
-    const el = selection && resolve(selection.anchor);
-    if (!el) return null;
-    const range = document.createRange();
-    let n = 0, started = false;
-    for (const t of texts(el)) {
-      if (!started && selection.start <= n + t.length) { range.setStart(t, selection.start - n); started = true; }
-      if (started && selection.end <= n + t.length) { range.setEnd(t, selection.end - n); return range; }
-      n += t.length;
-    }
-    return null;
-  }
-
-  const selections = { sheet: new CSSStyleSheet(), names: [] };
-  document.adoptedStyleSheets = [...document.adoptedStyleSheets, selections.sheet];
-
-  function drawSelections(colors) {
-    for (const name of selections.names) CSS.highlights.delete(name);
-    selections.names = [];
-    const rules = [];
-    cursors.list.forEach((c, i) => {
-      const range = rangeFor(c.selection);
-      if (!range) return;
-      const name = `bridge-selection-${i}`;
-      CSS.highlights.set(name, new Highlight(range));
-      selections.names.push(name);
-      rules.push(`::highlight(${name}) { background-color: color-mix(in srgb, ${colors.get(c.person)} 32%, transparent); }`);
-    });
-    selections.sheet.replaceSync(rules.join('\n'));
-  }
-
-  document.addEventListener('selectionchange', () => {
-    if (!cursors.tracking) return;
-    cursors.selection = describeSelection();
-    clearTimeout(cursors.timer);
-    cursors.timer = setTimeout(() => sendCursor(cursors.anchor), 60);
-  });
-
-  function trackCursor(e) {
-    if (!cursors.tracking) return;
-    const el = document.elementFromPoint(e.clientX, e.clientY);
-    const anchor = el && !ours(el) && el.parentElement ? describe(el, e.clientX, e.clientY).anchor : null;
-    clearTimeout(cursors.timer);
-    const wait = 33 - (Date.now() - cursors.sentAt);
-    if (wait <= 0) sendCursor(anchor); else cursors.timer = setTimeout(() => sendCursor(anchor), wait);
-  }
-
-  function placeCursors() {
-    const seen = new Set();
-    const colors = colorsFor(cursors.list);
-    for (const c of cursors.list) {
-      seen.add(c.person);
-      let el = cursors.els.get(c.person);
-      if (!el) {
-        el = document.createElement('div');
-        el.className = 'bridge-cursor';
-        el.innerHTML = '<i></i><span></span>';
-        const arrow = typeof __BRIDGE_ARROW === 'object' ? __BRIDGE_ARROW : {};
-        el.style.setProperty('--bridge-arrow', `url("${arrow.url}")`);
-        el.style.setProperty('--bridge-arrow-w', `${arrow.width || 28}px`);
-        el.style.setProperty('--bridge-arrow-h', `${arrow.height || 40}px`);
-        el.style.setProperty('--bridge-arrow-x', `${arrow.x ?? 5}px`);
-        el.style.setProperty('--bridge-arrow-y', `${arrow.y ?? 5}px`);
-        document.body.appendChild(el);
-        cursors.els.set(c.person, el);
-      }
-      el.style.setProperty('--bridge-cursor', c.agent ? '#5f6670' : colors.get(c.person));
-      el.querySelector('span').textContent = c.person;
-      el.dataset.person = c.person;
-      const target = c.anchor && resolve(c.anchor);
-      el.hidden = !target;
-      if (!target) continue;
-      const r = target.getBoundingClientRect();
-      let x = r.left + r.width * (c.anchor.x ?? 0.5), y = r.top + r.height * (c.anchor.y ?? 0.5);
-      const off = y < 0 ? 'up' : y > innerHeight ? 'down' : x < 0 ? 'left' : x > innerWidth ? 'right' : '';
-      el.classList.toggle('bridge-cursor-off', !!off);
-      el.dataset.off = off;
-      el.title = off ? `Follow ${c.person}` : '';
-      if (off) {
-        x = Math.min(Math.max(x, 12), innerWidth - 110);
-        y = Math.min(Math.max(y, 12), innerHeight - 34);
-        if (cursors.following === c.person) target.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
-      }
-      el.style.left = `${x}px`;
-      el.style.top = `${y}px`;
-    }
-    for (const [person, el] of cursors.els) if (!seen.has(person)) { el.remove(); cursors.els.delete(person); }
-    drawSelections(colors);
-  }
-
-  const people = { list: [] };
-  const drafts = { timer: null };
-
-  function draftable(el) {
-    return el && !ours(el) && el.dataset.record && el.dataset.value === undefined &&
-      (el.matches('input:not([type=radio]):not([type=checkbox]), textarea') || el.isContentEditable);
-  }
-
-  document.addEventListener('input', (e) => {
-    const el = e.target.closest?.('[data-record]');
-    if (!cursors.tracking || !draftable(el)) return;
-    const value = el.isContentEditable ? el.textContent : el.value;
-    clearTimeout(drafts.timer);
-    drafts.timer = setTimeout(() => post('draft', { key: el.dataset.record, value }), 60);
-  }, true);
-  document.addEventListener('focusout', (e) => {
-    const el = e.target.closest?.('[data-record]');
-    if (!cursors.tracking || !draftable(el)) return;
-    clearTimeout(drafts.timer);
-    post('draft', { key: el.dataset.record, value: null });
-  }, true);
-
-  function drawPeople() {
-    for (const dot of document.querySelectorAll('.bridge-pick')) dot.remove();
-    const colors = colorsFor(people.list);
-    for (const p of people.list) {
-      const typing = p.drafts || {};
-      for (const [key, value] of Object.entries({ ...(p.answers || {}), ...typing })) {
-        const els = [...document.querySelectorAll(`[data-record="${CSS.escape(key)}"]`)].filter((el) => !ours(el));
-        const radio = els.find((el) => el.matches('input[type=radio]') && el.value === String(value));
-        const card = els.find((el) => el.dataset.value !== undefined && el.dataset.value === String(value)) || radio?.parentElement;
-        const dot = document.createElement('span');
-        dot.className = 'bridge-pick';
-        dot.style.setProperty('--bridge-cursor', colors.get(p.person));
-        dot.title = `${p.person} picked this`;
-        dot.textContent = p.person;
-        if (card) card.appendChild(dot);
-        else if (els.length) {
-          dot.textContent = `${p.person}: ${typeof value === 'string' ? value : JSON.stringify(value)}`;
-          dot.classList.add('bridge-pick-value');
-          if (key in typing) { dot.classList.add('bridge-pick-draft'); dot.title = `${p.person} is typing`; }
-          els[els.length - 1].insertAdjacentElement('afterend', dot);
-        }
-      }
-    }
-  }
-
-  document.addEventListener('pointermove', trackCursor, { capture: true, passive: true });
-  document.documentElement.addEventListener('pointerleave', () => { if (cursors.tracking) sendCursor(null); });
-  addEventListener('scroll', () => { if (cursors.list.length) placeCursors(); }, { capture: true, passive: true });
-  addEventListener('resize', () => { if (cursors.list.length) placeCursors(); });
-  document.addEventListener('click', (e) => {
-    const edge = e.target.closest?.('.bridge-cursor-off');
-    if (!edge) return;
-    e.preventDefault();
-    e.stopPropagation();
-    cursors.following = edge.dataset.person;
-    placeCursors();
-  }, true);
-  for (const type of ['wheel', 'touchmove', 'keydown']) addEventListener(type, () => { cursors.following = null; }, { capture: true, passive: true });
 
   globalThis.__bridge = {
     patch,
     status: setStatus,
-    point,
-    notes: (list) => notes.set(list),
-    reveal: (id) => notes.reveal(id),
+    agents: (list) => freeze.agents(list),
+    reset: () => freeze.reset(),
+    pinsAt: (x, y) => freeze.pinsAt(x, y),
+    leave: () => freeze.leave(),
     state,
     shape,
     setData,
@@ -1360,14 +1029,7 @@ function __bridgeInit(options) {
     applyDrives,
     frameRefused,
     refreshMedia,
-    following: () => cursors.following,
-    trackCursor: (on) => { cursors.tracking = on; if (!on) sendCursor(null); },
-    cursors: (list) => { cursors.list = list || []; placeCursors(); },
-    people: (list) => { people.list = list || []; drawPeople(); },
-    toast,
-    answers: (answers) => { state.answers = answers || {}; applyAnswers(state.answers); },
   };
-  globalThis.__bridgeNotes = notes;
 
   // Reports class tokens no stylesheet defines, which an agent otherwise guesses
   // at without noticing, and classes both the kit and the page define, which

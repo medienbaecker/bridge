@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title></title>
+<style>
+  #text { width: 100%; min-height: 12em; font: inherit; resize: vertical; }
+  #screen { margin: 0; }
+  #screen img { display: block; width: 100%; height: auto; border-radius: 8px; }
+  #files:empty { display: none; }
+  .draft-file { display: flex; align-items: center; gap: 10px; }
+  .draft-file img { width: 120px; height: 80px; object-fit: cover; border-radius: 6px; border: 1px solid var(--bridge-line); }
+  .draft-file span { flex: 1; overflow-wrap: anywhere; }
+</style>
+</head>
+<body>
+<section id="draft">
+<!--capture-->
+<label for="text" class="muted">What do you want? Send asks which agent it goes to.</label>
+<textarea id="text" data-record="text" placeholder="Write it here"></textarea>
+<div id="files" class="stack"></div>
+<div class="actions"><button type="button" id="attach">Attach files…</button><span class="muted">or drop them on this page</span></div>
+</section>
+<script>
+  const list = document.getElementById("files");
+  const images = /\.(png|jpe?g|gif|webp|heic|tiff?|bmp|avif|svg)$/i;
+  function show() {
+    const files = bridge.get("files", { own: true }) || [];
+    list.replaceChildren(...files.map((path) => {
+      const row = document.createElement("div");
+      row.className = "draft-file";
+      if (images.test(path)) { const img = document.createElement("img"); img.src = "bridge-file://" + path.split("/").map(encodeURIComponent).join("/"); img.alt = ""; row.append(img); }
+      const name = document.createElement("span");
+      name.textContent = path.split("/").pop();
+      name.title = path;
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.textContent = "Remove";
+      remove.onclick = () => {
+        const left = files.filter((f) => f !== path);
+        if (left.length) bridge.set("files", left); else bridge.clear("files");
+        show();
+      };
+      row.append(name, remove);
+      return row;
+    }));
+  }
+  bridge.ready(show);
+  document.addEventListener("bridge:attached", (event) => {
+    const files = bridge.get("files", { own: true }) || [];
+    bridge.set("files", [...files, ...event.detail.filter((path) => !files.includes(path))]);
+    show();
+  });
+  document.getElementById("attach").onclick = () => document.dispatchEvent(new Event("bridge:attach"));
+</script>
+</body>
+</html>

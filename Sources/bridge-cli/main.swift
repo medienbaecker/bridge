@@ -8,10 +8,6 @@ bridge-dev <file|url> [more files]      present; a URL opens the live site
 bridge-dev --links <mode> <file|url>    where its links open: window (in Bridge), browser, or external (other hosts in the browser; a URL's default)
 bridge-dev --site <url> <file.html>     run the page as part of that site: its imports and frames are the site's
 bridge-dev --read   <file>              what they have answered so far, JSON, no blocking
-bridge-dev --name [name]                who answers on this Mac, as a shared page shows it; with a name, set it
-bridge-dev --colour [#hex|none]         your cursor's colour on shared pages; none lets Bridge pick
-bridge-dev --share <file>               send a page and the files it shows to the other connected Macs; cursors on it travel both ways
-bridge-dev --peers                      the other Macs with Bridge this one knows, and which are connected now
 bridge-dev --sidecar <file>             where their record for that page lives (in the app's store)
 bridge-dev --seed-from <flavour>        once, into an empty flavour: copy that flavour's list and records here
 bridge-dev --wait   <file> [--timeout 900]   block until they click Send, then print
@@ -25,9 +21,8 @@ bridge-dev --shot <out.png>             a picture of the app's window
 bridge-dev --shot <file> <out.png> [--width N] [--site <url>]   the page rendered off-screen as the window would show it, without presenting it
 bridge-dev --reload <file>              reload the page and its frames from scratch, e.g. after the site's CSS changed
 bridge-dev --waiters                    the agent processes waiting for an answer, with their age and memory, JSON
-bridge-dev --pins   <file>              open notes with their threads
-bridge-dev --reply  <file> <id> <text>
-bridge-dev --done / --reopen / --working <file> <id>
+bridge-dev --pins   <file>              the open notes on a draft made by freezing the screen
+bridge-dev --done / --reopen <file> <id>   mark a note handled, so --pins leaves it out, or bring it back
 bridge-dev --hook post-write             Claude Code PostToolUse hook: tell the agent when its write made a new version or the page threw
 """.replacingOccurrences(of: "bridge-dev", with: me)
 
@@ -131,14 +126,7 @@ func collect(_ loc: String, as session: String = Session.current) {
     } catch {}
 }
 
-func claimIfShared(_ loc: String) {
-    guard loc.hasPrefix(Paths.shared.path + "/"), (try? Sidecar.load(Paths.sidecar(for: loc)))?.presented == nil else { return }
-    if Client.appIsRunning { _ = try? Client.send(.claim(location: loc, session: Session.current, cwd: cwd)); return }
-    modifyOffline(loc) { s in if s.presented == nil { s.presented = Presentation(session: Session.current, cwd: cwd, ground: Ground.current(in: cwd)) } }
-}
-
 func readOut(_ loc: String) -> JSONValue {
-    claimIfShared(loc)
     let s: Sidecar
     do { s = try Sidecar.load(Paths.sidecar(for: loc)) } catch { fail("\(error)") }
     var out: [String: JSONValue] = ["status": .string(s.status), "version": .number(Double(s.version))]
@@ -152,18 +140,14 @@ func readOut(_ loc: String) -> JSONValue {
     }
     if s.answered { collect(loc) }
     out["answers"] = .object(s.answers)
-    if !s.people.isEmpty { out["people"] = .object(s.people.mapValues { .object($0) }) }
     out["defaults"] = .object(s.defaults)
     if !s.withdrawn.isEmpty { out["withdrawn"] = .array(s.withdrawn.map { .string($0) }) }
     if let t = s.sentAt { out["sent"] = .string(ISO8601DateFormatter().string(from: t)) }
     out["comments"] = .array(s.comments.map { c in
-        var o: [String: JSONValue] = [
+        .object([
             "id": .string(c.id), "text": .string(c.text), "target": .string(c.target),
-            "state": .string(c.state), "version": .number(Double(c.version)), "lost": .bool(c.lost ?? false),
-            "said": .array(c.said.map { said($0, at: true) }),
-        ]
-        if let p = c.person { o["person"] = .string(p) }
-        return .object(o)
+            "state": .string(c.state), "version": .number(Double(c.version)),
+        ])
     })
     if let g = s.presented?.ground {
         var ground: [String: JSONValue] = ["repo": .string(g.repo), "branch": .string(g.branch), "commit": .string(g.commit)]
@@ -174,13 +158,6 @@ func readOut(_ loc: String) -> JSONValue {
         out["history"] = .array(s.history.map { .object(["version": .number(Double($0.n)), "answers": .object(Sidecar.own($0))]) })
     }
     return .object(out)
-}
-
-func said(_ s: Say, at: Bool = false) -> JSONValue {
-    var o: [String: JSONValue] = ["by": .string(s.by), "text": .string(s.text), "kind": .string(s.kind)]
-    if at { o["at"] = .string(ISO8601DateFormatter().string(from: s.at)) }
-    if let p = s.person { o["person"] = .string(p) }
-    return .object(o)
 }
 
 func modifyOffline(_ loc: String, _ change: (inout Sidecar) -> Void) {
@@ -201,26 +178,6 @@ case "--help", "-h":
 
 case "--read":
     print(json: readOut(location(args.dropFirst().first)))
-
-case "--name":
-    if let name = args.dropFirst().first {
-        do { print(try Person.set(name)) } catch { fail("\(error)") }
-    } else {
-        print(Person.current)
-    }
-
-case "--colour":
-    if let raw = args.dropFirst().first {
-        do { print(try Person.setColour(raw) ?? "none") } catch { fail("\(error)") }
-    } else {
-        print(Person.colour ?? "none")
-    }
-
-case "--share":
-    print(json: check(send(.share(location: location(args.dropFirst().first)), launching: true)))
-
-case "--peers":
-    print(json: check(send(.peers, launching: true)))
 
 case "--sidecar":
     print(Paths.sidecar(for: location(args.dropFirst().first)).path)
@@ -301,39 +258,22 @@ case "--state":
 
 case "--pins":
     let s: Sidecar
-    claimIfShared(location(args.dropFirst().first))
     do { s = try Sidecar.load(Paths.sidecar(for: location(args.dropFirst().first))) } catch { fail("\(error)") }
     print(json: JSONValue.array(s.openComments.map { c in
-        var o: [String: JSONValue] = [
-            "id": .string(c.id), "text": .string(c.text), "target": .string(c.target), "state": .string(c.state), "lost": .bool(c.lost ?? false),
-            "said": .array(c.said.map { said($0) }),
-        ]
-        if let p = c.person { o["person"] = .string(p) }
-        return .object(o)
+        var out: [String: JSONValue] = ["id": .string(c.id), "text": .string(c.text), "target": .string(c.target)]
+        if let crop = c.crop { out["crop"] = .string(crop) }
+        return .object(out)
     }))
 
-case "--reply":
-    let loc = location(args.dropFirst().first)
-    guard args.count >= 4 else { fail(usage) }
-    let id = args[2], text = args[3...].joined(separator: " ")
-    if Client.appIsRunning { _ = check(send(.reply(location: loc, id: id, text: text))) }
-    else {
-        modifyOffline(loc) { s in
-            guard let i = s.comments.firstIndex(where: { $0.id == id }) else { return }
-            s.comments[i].said.append(Say(by: "agent", text: text, person: Person.current))
-        }
-    }
-
-case "--done", "--reopen", "--working":
+case "--done", "--reopen":
     let loc = location(args.dropFirst().first)
     guard args.count >= 3 else { fail(usage) }
-    let state = String(first.dropFirst(2))
-    if Client.appIsRunning { _ = check(send(.note(location: loc, id: args[2], state: state))) }
+    let done = first == "--done"
+    if Client.appIsRunning { _ = check(send(.note(location: loc, id: args[2], done: done))) }
     else {
         modifyOffline(loc) { s in
             guard let i = s.comments.firstIndex(where: { $0.id == args[2] }) else { return }
-            s.comments[i].state = state == "done" ? "done" : state == "reopen" ? "open" : "working"
-            s.comments[i].said.append(Say(by: "agent", text: state == "done" ? "marked done" : state == "reopen" ? "reopened" : "working on it", kind: "status", person: Person.current))
+            s.comments[i].state = done ? "done" : "open"
         }
     }
 
@@ -361,8 +301,8 @@ case "--lint":
     guard let lint = kitLint() else { fail("\(Flavor.appName).app not found, so the kit's stylesheet is not either; set BRIDGE_DEV_APP") }
     var errors = 0
     for file in files {
-        guard let html = try? String(contentsOfFile: file, encoding: .utf8) else { fail("cannot read \(file)") }
-        let findings = lint.run(html: html)
+        guard let text = try? String(contentsOfFile: file, encoding: .utf8) else { fail("cannot read \(file)") }
+        let findings = Kind.of(file) == .md ? lint.run(markdown: text, name: (file as NSString).lastPathComponent) : lint.run(html: text)
         for f in findings { print("\((file as NSString).lastPathComponent):\(f.description)") }
         errors += findings.filter { $0.level == .error }.count
     }
@@ -420,9 +360,10 @@ default:
     }
     if let lint = kitLint() {
         var errors = 0
-        for loc in locations where Kind.of(loc) == .html {
-            guard let html = try? String(contentsOfFile: loc, encoding: .utf8) else { continue }
-            for f in lint.run(html: html) where f.level == .error {
+        for loc in locations where Kind.of(loc) == .html || Kind.of(loc) == .md {
+            guard let text = try? String(contentsOfFile: loc, encoding: .utf8) else { continue }
+            let findings = Kind.of(loc) == .md ? lint.run(markdown: text, name: (loc as NSString).lastPathComponent) : lint.run(html: text)
+            for f in findings where f.level == .error {
                 FileHandle.standardError.write(Data("\((loc as NSString).lastPathComponent):\(f.description)\n".utf8))
                 errors += 1
             }

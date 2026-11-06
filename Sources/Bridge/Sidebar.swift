@@ -297,6 +297,11 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         return nil
     }
 
+    var titleEdge: CGFloat {
+        guard let scroll = outline.enclosingScrollView else { return 0 }
+        return scroll.convert(scroll.bounds, to: nil).minX + scroll.contentInsets.left + 21
+    }
+
     func geometry() -> [String: JSONValue] {
         guard let scroll = outline.enclosingScrollView else { return [:] }
         // On macOS 26 the projects sidebar floats over this list, so the visible column
@@ -345,8 +350,7 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         out["intercellHeight"] = .number(Double(outline.intercellSpacing.height))
         out["rows"] = .array((0..<outline.numberOfRows).compactMap { r in
             guard let cell = outline.view(atColumn: 0, row: r, makeIfNecessary: false) as? BridgeCell else { return nil }
-            return .object(["title": .string(cell.title.stringValue), "dim": .bool(cell.dim), "struck": .bool(cell.struck), "unread": .bool(cell.unread),
-                            "resolved": .string(cell.notes.stringValue)])
+            return .object(["title": .string(cell.title.stringValue), "dim": .bool(cell.dim), "struck": .bool(cell.struck), "unread": .bool(cell.unread)])
         })
         var chain: [String] = []
         v = view
@@ -360,7 +364,7 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         switch node.kind {
         case .bridge(let entry):
             let cell = outline.makeView(withIdentifier: .init("bridge"), owner: nil) as? BridgeCell ?? BridgeCell()
-            cell.configure(entry, waiting: isWaiting(entry), quiet: model.isQuiet(entry), from: subtitle(for: entry), resolved: model.resolved(entry))
+            cell.configure(entry, waiting: isWaiting(entry), quiet: model.isQuiet(entry), from: subtitle(for: entry))
             return cell
         }
     }
@@ -439,7 +443,6 @@ final class BridgeRowView: NSTableRowView {
             ? (isEmphasized ? NSColor.alternateSelectedControlTextColor.withAlphaComponent(0.85) : .secondaryLabelColor)
             : .tertiaryLabelColor
         cell?.time.textColor = colour
-        cell?.notes.textColor = colour
         needsDisplay = true
     }
 
@@ -449,7 +452,6 @@ final class BridgeCell: NSTableCellView {
     let dot = Dot()
     let title = PlainLabel(labelWithString: "")
     let time = PlainLabel(labelWithString: "")
-    let notes = PlainLabel(labelWithString: "")
     let project = PlainLabel(labelWithString: "")
     private var oneLine: [NSLayoutConstraint] = []
     private var twoLine: [NSLayoutConstraint] = []
@@ -459,7 +461,7 @@ final class BridgeCell: NSTableCellView {
     init() {
         super.init(frame: .zero)
         identifier = .init("bridge")
-        for v in [dot, title, time, project, notes] { v.translatesAutoresizingMaskIntoConstraints = false; addSubview(v) }
+        for v in [dot, title, time, project] { v.translatesAutoresizingMaskIntoConstraints = false; addSubview(v) }
         title.lineBreakMode = .byTruncatingTail
         title.maximumNumberOfLines = 1
         title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -471,9 +473,6 @@ final class BridgeCell: NSTableCellView {
         time.textColor = .tertiaryLabelColor
         time.alignment = .right
         time.setContentCompressionResistancePriority(.required, for: .horizontal)
-        notes.font = time.font
-        notes.textColor = .tertiaryLabelColor
-        notes.setContentCompressionResistancePriority(.required, for: .horizontal)
         // The title is not the cell's textField outlet: AppKit restyles that one on every
         // background-style pass, wiping its colour and strike.
         NSLayoutConstraint.activate([
@@ -482,9 +481,7 @@ final class BridgeCell: NSTableCellView {
             // The unread dot's room at the trailing edge is always kept, so a title's
             // truncation point does not move when the bridge is read.
             title.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            notes.leadingAnchor.constraint(greaterThanOrEqualTo: title.trailingAnchor, constant: 8),
-            notes.trailingAnchor.constraint(equalTo: dot.leadingAnchor, constant: -6),
-            notes.centerYAnchor.constraint(equalTo: centerYAnchor),
+            title.trailingAnchor.constraint(lessThanOrEqualTo: dot.leadingAnchor, constant: -14),
             dot.trailingAnchor.constraint(equalTo: time.leadingAnchor, constant: -6),
             dot.centerYAnchor.constraint(equalTo: centerYAnchor),
             // The pill is inset 10 from the row and the cell reaches the row's edge, so the
@@ -493,7 +490,7 @@ final class BridgeCell: NSTableCellView {
             time.centerYAnchor.constraint(equalTo: centerYAnchor),
             // The subtitle truncates on its own: a long project name must not shorten the title.
             project.leadingAnchor.constraint(equalTo: title.leadingAnchor),
-            project.trailingAnchor.constraint(lessThanOrEqualTo: notes.leadingAnchor, constant: -8),
+            project.trailingAnchor.constraint(lessThanOrEqualTo: dot.leadingAnchor, constant: -14),
         ])
         oneLine = [title.centerYAnchor.constraint(equalTo: centerYAnchor)]
         // Two lines sit centred about the row's middle as one block, so the pill keeps
@@ -517,7 +514,7 @@ final class BridgeCell: NSTableCellView {
         if let presentedAt { time.stringValue = SidebarController.ago(presentedAt) }
     }
 
-    func configure(_ entry: BridgeEntry, waiting: Bool, quiet: Bool = false, from: String? = nil, resolved: String? = nil) {
+    func configure(_ entry: BridgeEntry, waiting: Bool, quiet: Bool = false, from: String? = nil) {
         text = entry.title
         let name = (from?.isEmpty == false) ? from : nil
         project.stringValue = name ?? ""
@@ -530,8 +527,6 @@ final class BridgeCell: NSTableCellView {
         restyle()
         presentedAt = entry.presentedAt
         tick()
-        notes.stringValue = resolved ?? ""
-        notes.toolTip = resolved.map { "\($0) notes resolved" }
         unread = entry.unread
         dot.toolTip = entry.unread ? "Unread" : nil
         paintDot()

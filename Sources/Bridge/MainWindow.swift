@@ -22,18 +22,13 @@ final class SplitController: NSSplitViewController {
     }
 }
 
-final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate, NSToolbarItemValidation, NSMenuItemValidation, NSMenuDelegate {
+final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate, NSToolbarItemValidation, NSMenuItemValidation {
     let model: Model
     let sidebar: SidebarController
     let content = ContentController()
-    let notes = NotesController()
-    let notesPopover = NSPopover()
 
+    static let newBridge = NSToolbarItem.Identifier("new")
     static let point = NSToolbarItem.Identifier("point")
-    static let share = NSToolbarItem.Identifier("share")
-    static let agent = NSToolbarItem.Identifier("agent")
-    let agentMenu = NSMenu()
-    static let notesId = NSToolbarItem.Identifier("notes")
     static let send = NSToolbarItem.Identifier("send")
 
     init(model: Model) {
@@ -101,14 +96,6 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         toolbar.allowsUserCustomization = false
         window.toolbar = toolbar
 
-        notesPopover.contentViewController = notes
-        notesPopover.behavior = .transient
-        notesPopover.contentSize = NSSize(width: 360, height: 240)
-        notes.onSelect = { [weak self] id in
-            self?.notesPopover.performClose(nil)
-            self?.model.selectedPage?.reveal(id)
-        }
-
         projects.onRelaunch = { (NSApp.delegate as? AppDelegate)?.relaunch() }
         projects.onSelect = { [weak self] scope in
             guard let self, model.scope != scope else { return }
@@ -147,7 +134,6 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
 
     required init?(coder: NSCoder) { fatalError() }
 
-    var pointShownOn = false
     var split: NSSplitViewController!
     let projects: ProjectsController
     static let bridgesSeparator = NSToolbarItem.Identifier("bridgesTrackingSeparator")
@@ -156,12 +142,8 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
     let listHeader = TitleLabel()
     let docTitleView = TitleLabel()
 
-    static func pointImage(on: Bool) -> NSImage? {
-        symbol("mappin.and.ellipse", on ? "Pointing" : "Point", tint: on ? .controlAccentColor : nil)
-    }
-
     var toolbarItems: [NSToolbarItem] {
-        (window?.toolbar?.items ?? []).filter { [Self.agent, Self.share, Self.point, Self.notesId, Self.send].contains($0.itemIdentifier) }
+        (window?.toolbar?.items ?? []).filter { [Self.newBridge, Self.point, Self.send].contains($0.itemIdentifier) }
     }
 
     var bannerText: String? { model.selectedPage?.bannerText }
@@ -262,59 +244,46 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
 
     var shownPage: Page? { model.selectedPage.flatMap { windows[$0.location] == nil ? $0 : nil } }
 
-    func updateShare() {
-        guard let item = toolbarItems.first(where: { $0.itemIdentifier == Self.share }) else { return }
-        guard let sharing = (NSApp.delegate as? AppDelegate)?.sharing else { item.isHidden = true; return }
-        guard let peer = sharing.link.peers.first else { item.isHidden = true; return }
-        let shared = shownPage.map { sharing.share(at: $0.location) != nil } ?? false
-        item.isHidden = false
-        item.label = shared ? "Shared with \(peer.name)" : "Share with \(peer.name)"
-        item.toolTip = sharing.link.sessions.isEmpty ? "\(peer.name)'s Mac isn't connected yet"
-            : shownPage?.kind == .url ? "A live site can't be shared: \(peer.name) can open the address" : item.label
-        window?.toolbar?.validateVisibleItems()
-    }
-
-    func agentName(_ agent: ClaudeSessions.Live) -> String {
-        agent.name.isEmpty ? String(agent.session.prefix(8)) : agent.name
-    }
-
-    func updateAgent() {
-        guard let item = toolbarItems.first(where: { $0.itemIdentifier == Self.agent }) else { return }
-        let session = shownPage?.sidecar.presented?.session
-        let title = session.map { s in model.agents[s].map(agentName) ?? "Session ended" } ?? "No agent"
-        item.title = title
-        item.label = title
-    }
-
-    func menuNeedsUpdate(_ menu: NSMenu) {
-        guard menu === agentMenu else { return }
-        menu.removeAllItems()
-        let current = shownPage?.sidecar.presented?.session
-        for agent in model.agents.values.sorted(by: { agentName($0) < agentName($1) }) {
-            let project = agent.cwd.isEmpty ? "" : " · " + (Ground.projectRoot(for: agent.cwd) as NSString).lastPathComponent
-            let item = NSMenuItem(title: agentName(agent) + project + (agent.life == .working ? " · busy" : " · idle"), action: #selector(chooseAgent(_:)), keyEquivalent: "")
+    func send(_ page: Page, from window: NSWindow?) {
+        guard page.isDraft else { page.send(); return }
+        guard let window, let content = window.contentView else { return }
+        let menu = NSMenu()
+        menu.addItem(withTitle: "Send to", action: nil, keyEquivalent: "").isEnabled = false
+        for recipient in model.agentsByWork() {
+            let item = menu.addItem(withTitle: recipient.label, action: #selector(sendTo(_:)), keyEquivalent: "")
             item.target = self
-            item.representedObject = agent.session
-            item.state = agent.session == current ? .on : .off
-            menu.addItem(item)
+            item.representedObject = [recipient.session, page.location]
         }
-        if menu.items.isEmpty { menu.addItem(withTitle: "No Claude sessions running", action: nil, keyEquivalent: "").isEnabled = false }
-        menu.addItem(.separator())
-        let none = NSMenuItem(title: "No agent: Send only records", action: #selector(chooseAgent(_:)), keyEquivalent: "")
-        none.target = self
-        none.representedObject = ""
-        none.state = current == nil ? .on : .off
-        menu.addItem(none)
+        if menu.items.count == 1 { menu.addItem(withTitle: "No Claude sessions running", action: nil, keyEquivalent: "").isEnabled = false }
+        let mouse = content.convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        let clicked = NSApp.currentEvent.map { $0.type == .leftMouseUp || $0.type == .leftMouseDown } ?? false
+        let top = content.convert(NSPoint(x: 0, y: window.contentLayoutRect.maxY), from: nil).y
+        let at = clicked && content.bounds.contains(mouse) ? mouse : NSPoint(x: content.bounds.maxX - menu.size.width - 8, y: top)
+        menu.popUp(positioning: nil, at: at, in: content)
     }
 
-    @objc func chooseAgent(_ sender: NSMenuItem) {
-        guard let page = shownPage else { return }
-        model.hand(page.location, to: sender.representedObject as? String ?? "")
+    @objc func sendTo(_ sender: NSMenuItem) {
+        guard let pair = sender.representedObject as? [String], pair.count == 2 else { return }
+        _ = sendDraft(pair[1], to: pair[0])
+    }
+
+    func sendDraft(_ location: String, to session: String) -> Bool {
+        guard model.agents[session] != nil, model.listing.entry(location) != nil else { return false }
+        let page = model.page(for: location)
+        guard page.isDraft, !page.sidecar.answers.isEmpty else { return false }
+        model.hand(location, to: session)
+        if let cwd = model.agents[session]?.cwd, !cwd.isEmpty {
+            let project = Ground.projectRoot(for: cwd)
+            model.listing.update(location) { $0.project = project }
+            model.scope = .project(project)
+            model.selected = location
+            model.changed()
+        }
+        page.send()
+        return true
     }
 
     func refresh() {
-        updateShare()
-        updateAgent()
         projects.reload()
         sidebar.reload()
         for (location, pageWindow) in windows where model.listing.entry(location) == nil { pageWindow.close() }
@@ -324,8 +293,6 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         content.showAway(away.map { w in { w.showWindow(nil) } })
         for w in windows.values { w.refresh() }
         window?.subtitle = page?.bannerText ?? ""
-        notes.page = page
-        if notesPopover.isShown { notes.reload(); notesPopover.contentSize = notes.fittingSize }
         window?.toolbar?.validateVisibleItems()
         window?.title = page?.title ?? "Bridge"
         listHeader.show(ScopeCell.name(of: model.scope, model: model))
@@ -338,7 +305,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         // AppKit puts the window title after the sidebar separator, over the list, and
         // handing that identifier to the second divider hangs the toolbar. So the
         // window's title is hidden and the toolbar carries its own two titles.
-        [.toggleSidebar, .sidebarTrackingSeparator, Self.listName, Self.bridgesSeparator, Self.docTitle, .flexibleSpace, Self.agent, Self.share, Self.point, Self.notesId, .space, Self.send]
+        [.toggleSidebar, Self.newBridge, .sidebarTrackingSeparator, Self.listName, Self.bridgesSeparator, Self.docTitle, .flexibleSpace, Self.point, .space, Self.send]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -349,24 +316,14 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         if id == Self.bridgesSeparator { return NSTrackingSeparatorToolbarItem(identifier: id, splitView: split.splitView, dividerIndex: 1) }
         if id == Self.listName {
             let item = NSToolbarItem(itemIdentifier: id)
-            listHeader.indent = 8.5
+            listHeader.edge = { [weak self] in self?.sidebar.titleEdge ?? 0 }
             item.view = listHeader
             item.label = "List"
             return item
         }
-        if id == Self.agent {
-            let item = NSMenuToolbarItem(itemIdentifier: id)
-            agentMenu.delegate = self
-            item.menu = agentMenu
-            item.showsIndicator = true
-            item.label = "Agent"
-            item.toolTip = "The Claude session your Send wakes"
-            item.image = Self.symbol("terminal", "Agent")
-            return item
-        }
         if id == Self.docTitle {
             let item = NSToolbarItem(itemIdentifier: id)
-            docTitleView.indent = listHeader.indent
+            docTitleView.edge = { [weak self] in (self?.content.view.convert(NSPoint.zero, to: nil).x ?? 0) + 21 }
             item.view = docTitleView
             item.label = "Document"
             return item
@@ -376,16 +333,12 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         item.target = self
         item.action = #selector(toolbarAction(_:))
         switch id {
-        case Self.share:
-            item.label = "Share"; item.toolTip = "Share this page with the Mac you paired with"
-            item.image = Self.symbol("shareplay", "Share")
-            item.isHidden = true
+        case Self.newBridge:
+            item.label = Model.untitled; item.toolTip = "Write a bridge to an agent (⌘N)"
+            item.image = Self.symbol("square.and.pencil", Model.untitled)
         case Self.point:
-            item.label = "Point"; item.toolTip = "Point at something and leave a note"
-            item.image = Self.pointImage(on: false)
-        case Self.notesId:
-            item.label = "Notes"; item.toolTip = "Notes on this page"
-            item.image = Self.symbol("text.bubble", "Notes")
+            item.label = "Point"; item.toolTip = "Freeze the screen and point at something"
+            item.image = Self.symbol("mappin.and.ellipse", "Point")
         case Self.send:
             item.toolTip = "Send your answer"
             Self.styleSend(item, "Send")
@@ -396,10 +349,9 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
 
     /// A bordered item is as wide as its image, and symbols differ in width, so every
     /// toolbar symbol gets one size to keep the capsule the same in every state.
-    static func symbol(_ name: String, _ description: String, tint: NSColor? = nil) -> NSImage? {
-        guard var glyph = NSImage(systemSymbolName: name, accessibilityDescription: description)?
+    static func symbol(_ name: String, _ description: String) -> NSImage? {
+        guard let glyph = NSImage(systemSymbolName: name, accessibilityDescription: description)?
             .withSymbolConfiguration(.init(pointSize: 15, weight: .regular)) else { return nil }
-        if let tint { glyph = glyph.withSymbolConfiguration(.init(paletteColors: [tint])) ?? glyph }
         // Drawn into a fixed canvas because a symbol image keeps its own width whatever `size` says.
         let canvas = NSSize(width: 24, height: 18)
         let image = NSImage(size: canvas, flipped: false) { rect in
@@ -408,17 +360,13 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
             glyph.draw(in: at, from: .zero, operation: .sourceOver, fraction: 1)
             return true
         }
-        image.isTemplate = tint == nil
+        image.isTemplate = true
         image.accessibilityDescription = description
         return image
     }
 
     static func sendImage(_ state: String) -> NSImage? {
-        switch state {
-        case "Sent": return symbol("clock", "Sent")
-        case "Send again": return symbol("paperplane.fill", "Send again")
-        default: return symbol("paperplane", "Send")
-        }
+        state == "Sent" ? symbol("clock", "Sent") : symbol("paperplane", "Send")
     }
 
     static func styleSend(_ item: NSToolbarItem, _ state: String) {
@@ -431,23 +379,16 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
     func validateToolbarItem(_ item: NSToolbarItem) -> Bool {
         let page = shownPage
         switch item.itemIdentifier {
-        case Self.point:
-            let on = page?.pointing ?? false
-            item.image = Self.pointImage(on: on)
-            pointShownOn = on
-            return page != nil && page?.viewingVersion == nil && page?.kind != .pdf
-        case Self.notesId: return page.map { !$0.sidecar.comments.isEmpty } ?? false
-        case Self.agent: return page.map { $0.kind != .url && $0.viewingVersion == nil } ?? false
-        case Self.share:
-            guard let sharing = (NSApp.delegate as? AppDelegate)?.sharing else { return false }
-            if sharing.link.peers.isEmpty { return false }
-            let shared = page.map { sharing.share(at: $0.location) != nil } ?? false
-            return page.map { $0.kind != .url && !shared && !sharing.link.sessions.isEmpty } ?? false
         case Self.send:
             let state = page?.sendLabel ?? "Send"
             Self.styleSend(item, state)
             item.toolTip = page?.sendToolTip ?? "Send your answer"
-            return page.map { $0.viewingVersion == nil } ?? false
+            guard let page else { return false }
+            if page.isDraft {
+                item.toolTip = "Pick the agent it goes to"
+                return !page.sidecar.answers.isEmpty
+            }
+            return page.viewingVersion == nil
         default: return true
         }
     }
@@ -468,7 +409,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         case "cross": return entry.map { !$0.crossed } ?? false
         case "uncross": return entry?.crossed ?? false
         case "remove": return entry != nil
-        case "point", "send": return toolbarItems.first { $0.itemIdentifier.rawValue == command }.map(validateToolbarItem) ?? false
+        case "send": return toolbarItems.first { $0.itemIdentifier.rawValue == command }.map(validateToolbarItem) ?? false
         case "reveal": return page.map { $0.kind != .url } ?? false
         case "zoom-in", "zoom-out", "zoom-reset": return shownPage != nil
         case "window": return page != nil
@@ -482,28 +423,46 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         if command == "relaunch" { (NSApp.delegate as? AppDelegate)?.relaunch(); return true }
         switch command {
         case "select": return select(argument)
-        case "agent":
-            guard let page = shownPage else { return false }
-            model.hand(page.location, to: argument == "none" ? "" : argument ?? "")
-            return true
         case "cleanup": model.crossEnded(); return true
-        case "dropon":
-            let parts = (argument ?? "").components(separatedBy: "|")
-            guard parts.count == 2, let row = projects.rows.first(where: { projects.key($0) == parts[1] }) else { return false }
-            projects.drop([parts[0]], on: row)
+        case "new": model.newBridge(); return true
+        case "settings": (NSApp.delegate as? AppDelegate)?.showSettings(); return true
+        case "freeze": (NSApp.delegate as? AppDelegate)?.freeze(fromBridge: argument == "front"); return true
+        case "point": (NSApp.delegate as? AppDelegate)?.freeze(); return true
+        case "freeze-mark":
+            let n = (argument ?? "").split(separator: " ").compactMap { Double($0) }
+            guard let freeze = Freeze.current, n.count == 2 || n.count == 4 else { return false }
+            let points = stride(from: 0, to: n.count, by: 2).map { [n[$0], n[$0 + 1]] }
+            freeze.page.call("""
+                const fire = (type, [x, y], buttons) => {
+                  const target = document.elementFromPoint(x, y);
+                  target.dispatchEvent(new (type === 'click' ? MouseEvent : PointerEvent)(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, buttons }));
+                };
+                fire('pointerdown', points[0], 1);
+                if (points[1]) fire('pointermove', points[1], 1);
+                fire('pointerup', points[points.length - 1], 0);
+                fire('click', points[points.length - 1], 0);
+                """, ["points": points])
             return true
-        case "share":
-            guard let sharing = (NSApp.delegate as? AppDelegate)?.sharing else { return false }
-            guard let page = shownPage else { return false }
-            do { _ = try sharing.share(page.location) } catch {
-                if Env.test { return false }
-                let alert = NSAlert()
-                alert.messageText = "Couldn't share this page"
-                alert.informativeText = "\(error)"
-                if let window { alert.beginSheetModal(for: window) }
-                return false
-            }
-            updateShare()
+        case "freeze-hover":
+            let n = (argument ?? "").split(separator: " ").compactMap { Double($0) }
+            guard let freeze = Freeze.current, n.count == 2 else { return false }
+            freeze.hover(CGPoint(x: n[0], y: n[1]))
+            return true
+        case "freeze-note":
+            guard let freeze = Freeze.current else { return false }
+            freeze.page.call("""
+                const box = document.querySelector('.bridge-thread:popover-open textarea');
+                box.value = text;
+                box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true }));
+                """, ["text": argument ?? ""])
+            return true
+        case "freeze-send":
+            guard let freeze = Freeze.current, let n = argument.flatMap(Int.init) else { return false }
+            freeze.page.call("document.querySelectorAll('.bridge-agents button')[n].click()", ["n": n])
+            return true
+        case "freeze-cancel":
+            guard let freeze = Freeze.current else { return false }
+            freeze.page.call("document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))")
             return true
         case "resize":
             let parts = (argument ?? "").split(separator: " ").compactMap { Double($0) }
@@ -529,9 +488,13 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         guard let page = model.selectedPage else { return false }
         switch command {
         case "window": openWindow(page.location); return true
-        case "point": guard windows[page.location] == nil else { return false }; page.setPointing(!page.pointing)
-        case "send": guard windows[page.location] == nil else { return false }; page.send()
-        case "notes": if !toggleNotes() { return false }
+        case "send":
+            guard windows[page.location] == nil else { return false }
+            send(page, from: window)
+        case "attach":
+            guard let argument else { return false }
+            page.attach([URL(fileURLWithPath: argument)])
+        case "sendto": if !sendDraft(page.location, to: argument ?? "") { return false }
         case "cross": for t in targets(page) { model.cross(t, true) }
         case "uncross": for t in targets(page) { model.cross(t, false) }
         case "remove": for t in targets(page) { model.remove(t) }
@@ -607,19 +570,6 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         refresh()
         windows[location]?.showWindow(nil)
         return true
-    }
-
-    /// A transient popover does not open on a window that is not key, so the window
-    /// is made key first. Returns whether the popover is showing afterwards.
-    @discardableResult
-    func toggleNotes() -> Bool {
-        if notesPopover.isShown { notesPopover.performClose(nil); return true }
-        guard let item = toolbarItems.first(where: { $0.itemIdentifier == Self.notesId }) else { return false }
-        if window?.isKeyWindow == false { window?.makeKeyAndOrderFront(nil) }
-        notes.reload()
-        notesPopover.contentSize = notes.fittingSize
-        notesPopover.show(relativeTo: item)
-        return notesPopover.isShown
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
@@ -706,168 +656,6 @@ final class ContentController: NSViewController {
     }
 }
 
-final class NotesController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
-    weak var page: Page?
-    var onSelect: (String) -> Void = { _ in }
-    let table = NSTableView()
-    let empty = NSTextField(labelWithString: "No notes on this page")
-    var rows: [Comment] = []
-    static let width: CGFloat = 360
-    static let rowHeight: CGFloat = 24
-
-    var fittingSize: NSSize {
-        NSSize(width: Self.width, height: rows.isEmpty ? 56 : min(CGFloat(rows.count) * Self.rowHeight + 12, 420))
-    }
-
-    static func preview(_ text: String, font: NSFont, width: CGFloat) -> String {
-        let flat = text.replacingOccurrences(of: "\n", with: " ")
-        let attributes: [NSAttributedString.Key: Any] = [.font: font]
-        func fits(_ s: String) -> Bool { (s as NSString).size(withAttributes: attributes).width <= width }
-        if fits(flat) { return flat }
-        var out = ""
-        for word in flat.split(separator: " ") {
-            let next = out.isEmpty ? String(word) : out + " " + word
-            if !fits(next + "…") { break }
-            out = next
-        }
-        return (out.isEmpty ? String(flat.prefix(12)) : out) + "…"
-    }
-
-    override func loadView() {
-        let scroll = NSScrollView()
-        scroll.hasVerticalScroller = true
-        scroll.drawsBackground = false
-        // Without this the first row sat on the panel's top edge and the fitting size's
-        // 12 pt all lay under the last one.
-        scroll.automaticallyAdjustsContentInsets = false
-        scroll.contentInsets = NSEdgeInsets(top: 6, left: 0, bottom: 6, right: 0)
-        table.headerView = nil
-        table.rowHeight = Self.rowHeight
-        table.style = .plain
-        table.selectionHighlightStyle = .regular
-        table.backgroundColor = .clear
-        table.addTableColumn(NSTableColumn(identifier: .init("note")))
-        table.dataSource = self
-        table.delegate = self
-        table.target = self
-        table.action = #selector(clicked)
-        scroll.documentView = table
-        // Opaque and a shade off white so the panel has an edge over a white page: a
-        // box border cannot follow the popover's corners, and the popover's own frame
-        // draws no edge over white.
-        let box = NSBox()
-        box.boxType = .custom
-        box.borderWidth = 0
-        box.contentViewMargins = .zero
-        box.fillColor = NSColor(name: nil) { appearance in
-            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? NSColor(white: 0.16, alpha: 1) : NSColor(white: 0.965, alpha: 1)
-        }
-        box.contentView = scroll
-        empty.translatesAutoresizingMaskIntoConstraints = false
-        empty.textColor = .secondaryLabelColor
-        scroll.addSubview(empty)
-        NSLayoutConstraint.activate([
-            empty.centerXAnchor.constraint(equalTo: scroll.centerXAnchor),
-            empty.centerYAnchor.constraint(equalTo: scroll.centerYAnchor),
-        ])
-        view = box
-    }
-
-
-
-    func reload() {
-        rows = page?.sidecar.comments.sorted { ($0.state == "done" ? 1 : 0, $1.at) < ($1.state == "done" ? 1 : 0, $0.at) } ?? []
-        empty.isHidden = !rows.isEmpty
-        preferredContentSize = fittingSize
-        table.reloadData()
-    }
-
-    @objc func clicked() {
-        guard table.clickedRow >= 0 else { return }
-        onSelect(rows[table.clickedRow].id)
-    }
-
-    func numberOfRows(in tableView: NSTableView) -> Int { rows.count }
-
-    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        let cell = tableView.makeView(withIdentifier: NoteRow.id, owner: nil) as? NoteRow ?? NoteRow()
-        cell.show(rows[row])
-        return cell
-    }
-
-    /// For the harness: what the rows actually show, not the computed preview.
-    var shown: [(text: String, fits: Bool)] {
-        (0..<table.numberOfRows).compactMap { table.view(atColumn: 0, row: $0, makeIfNecessary: false) as? NoteRow }.map { ($0.label.stringValue, $0.fits) }
-    }
-
-}
-
-/// The text is cut at a word to the label's real width in `layout()`, so the
-/// label never truncates mid-word itself.
-final class NoteRow: NSTableCellView {
-    static let id = NSUserInterfaceItemIdentifier("note")
-    let dot = NSView()
-    let label = NSTextField(labelWithString: "")
-    let count = NSTextField(labelWithString: "")
-    let glyph = NSImageView()
-    var full = ""
-
-    var fits: Bool { (label.stringValue as NSString).size(withAttributes: [.font: label.font!]).width <= label.frame.width + 0.5 }
-
-    init() {
-        super.init(frame: .zero)
-        identifier = Self.id
-        dot.wantsLayer = true
-        dot.layer?.cornerRadius = 4
-        label.lineBreakMode = .byTruncatingTail
-        label.maximumNumberOfLines = 1
-        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        count.font = .monospacedDigitSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
-        count.textColor = .tertiaryLabelColor
-        count.alignment = .right
-        glyph.image = NSImage(systemSymbolName: "arrowshape.turn.up.left", accessibilityDescription: "replies")?
-            .withSymbolConfiguration(.init(pointSize: 9, weight: .regular))
-        glyph.contentTintColor = .tertiaryLabelColor
-        for v in [dot, label, glyph, count] { v.translatesAutoresizingMaskIntoConstraints = false; addSubview(v) }
-        textField = label
-        NSLayoutConstraint.activate([
-            dot.widthAnchor.constraint(equalToConstant: 8), dot.heightAnchor.constraint(equalToConstant: 8),
-            dot.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-            dot.centerYAnchor.constraint(equalTo: centerYAnchor),
-            label.leadingAnchor.constraint(equalTo: dot.trailingAnchor, constant: 8),
-            label.centerYAnchor.constraint(equalTo: centerYAnchor),
-            label.trailingAnchor.constraint(equalTo: glyph.leadingAnchor, constant: -8),
-            glyph.widthAnchor.constraint(equalToConstant: 12),
-            glyph.trailingAnchor.constraint(equalTo: count.leadingAnchor, constant: -3),
-            glyph.centerYAnchor.constraint(equalTo: centerYAnchor),
-            count.widthAnchor.constraint(equalToConstant: 14),
-            count.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
-            count.centerYAnchor.constraint(equalTo: centerYAnchor),
-        ])
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-
-    func show(_ c: Comment) {
-        full = c.text.replacingOccurrences(of: "\n", with: " ")
-        label.stringValue = full
-        label.textColor = c.state == "done" ? .secondaryLabelColor : .labelColor
-        dot.layer?.backgroundColor = (c.state == "done" ? NSColor.tertiaryLabelColor : c.state == "working" ? NSColor.systemOrange : NSColor.controlAccentColor).cgColor
-        let replies = c.said.filter { $0.kind == "reply" }.count
-        count.stringValue = replies > 0 ? "\(replies)" : ""
-        glyph.isHidden = replies == 0
-        needsLayout = true
-    }
-
-    override func layout() {
-        super.layout()
-        let width = label.frame.width
-        guard width > 0 else { return }
-        let preview = NotesController.preview(full, font: label.font!, width: width)
-        if label.stringValue != preview { label.stringValue = preview }
-    }
-}
-
 class TitleLabel: NSTextField {
     init() {
         super.init(frame: .zero)
@@ -875,7 +663,7 @@ class TitleLabel: NSTextField {
         font = .titleBarFont(ofSize: NSFont.systemFontSize)
         lineBreakMode = .byTruncatingTail
         cell?.truncatesLastVisibleLine = true
-        setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        setContentCompressionResistancePriority(.init(1), for: .horizontal)
     }
     required init?(coder: NSCoder) { fatalError() }
 
@@ -886,13 +674,26 @@ class TitleLabel: NSTextField {
         for name in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification] {
             NotificationCenter.default.addObserver(self, selector: #selector(keyChanged), name: name, object: window)
         }
+        var view: NSView? = self
+        while let ancestor = view {
+            ancestor.postsFrameChangedNotifications = true
+            NotificationCenter.default.addObserver(self, selector: #selector(align), name: NSView.frameDidChangeNotification, object: ancestor)
+            view = ancestor.superview
+        }
+        NotificationCenter.default.addObserver(self, selector: #selector(align), name: NSWindow.didResizeNotification, object: window)
         keyChanged()
+        align()
     }
     @objc private func keyChanged() { textColor = window?.isKeyWindow == true ? .labelColor : .secondaryLabelColor }
 
-    /// Aligns the text with the list rows' titles (25 pt in) while the toolbar places
-    /// the item at about 18. The indent is part of the width, or the toolbar cuts the last letter.
-    var indent: CGFloat = 0
+    var edge: (() -> CGFloat)?
+    @objc private func align() {
+        guard let edge, window != nil else { return }
+        let indent = (edge() - convert(NSPoint.zero, to: nil).x).rounded()
+        if indent >= 0, indent != self.indent { self.indent = indent }
+    }
+
+    var indent: CGFloat = 0 { didSet { show(stringValue) } }
     override var intrinsicContentSize: NSSize {
         var size = super.intrinsicContentSize
         size.width += indent

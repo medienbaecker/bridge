@@ -1,4 +1,5 @@
 import AppKit
+import CryptoKit
 import BridgeCore
 
 /// What the middle column shows: the bridges waiting on the user, all of them, or one project's.
@@ -41,11 +42,6 @@ final class Model {
     var showCrossed: Bool = Model.remembered("showCrossed") as? Bool ?? true { didSet { Self.remember(showCrossed, "showCrossed") } }
     var pages: [String: Page] = [:]
     var onChange: () -> Void = {}
-    var onCursor: (String, JSONValue, JSONValue) -> Void = { _, _, _ in }
-    var onReady: (Page) -> Void = { _ in }
-    var onSaved: (Page) -> Void = { _ in }
-    var onRewrite: (Page) -> Void = { _ in }
-    var onDraft: (String, String, JSONValue) -> Void = { _, _, _ in }
     var waiters: [Waiter] = []
     var agents: [String: ClaudeSessions.Live] = [:]
 
@@ -86,33 +82,26 @@ final class Model {
     }
 
     func unheard(_ entry: BridgeEntry) -> String? {
-        guard !entry.crossed, status(of: entry) == "open", !listening(entry) else { return nil }
+        guard !isDraft(entry), !entry.crossed, status(of: entry) == "open", !listening(entry) else { return nil }
         return life(of: entry.session) == .gone ? "session ended" : "no agent waiting"
-    }
-
-    func resolved(_ entry: BridgeEntry) -> String? {
-        let comments = (pages[entry.location]?.sidecar ?? Sidecar.peek(Paths.sidecar(for: entry.location))).comments
-        guard !comments.isEmpty else { return nil }
-        return "\(comments.filter { $0.state == "done" }.count)/\(comments.count)"
     }
 
     func waitingCount(in project: String? = nil) -> Int {
         listing.bridges.filter { (project == nil || $0.project == project) && !$0.crossed && status(of: $0) == "open" && attended($0) }.count
     }
 
-    func received(_ entry: BridgeEntry) -> Bool { entry.location.hasPrefix(Paths.shared.path + "/") }
 
     func attended(_ entry: BridgeEntry) -> Bool {
-        received(entry) || life(of: entry.session) != .gone
+        life(of: entry.session) != .gone
     }
-
-    static let endedAfter = ProcessInfo.processInfo.environment["BRIDGE_ENDED_AFTER"].flatMap(Double.init) ?? 24 * 3600
 
     @discardableResult
     func crossEnded() -> Int {
+        let endedAfter = Settings.endedAfter
+        guard endedAfter > 0 else { return 0 }
         let now = Date()
         let ended = listing.bridges.filter { entry in
-            !entry.crossed && !received(entry) && now.timeIntervalSince(entry.presentedAt) > Self.endedAfter
+            !entry.crossed && !isDraft(entry) && now.timeIntervalSince(entry.presentedAt) > endedAfter
                 && life(of: entry.session) == .gone
         }
         for entry in ended { cross(entry.location, true) }
@@ -127,7 +116,37 @@ final class Model {
 
     func changed() {
         try? listing.save()
+        watchForUpdates()
         onChange()
+    }
+
+    var updateWatchers: [String: Watcher] = [:]
+    var fingerprints: [String: SHA256.Digest] = [:]
+
+    func watchForUpdates() {
+        let open = Set(listing.bridges.filter { !$0.crossed && Kind.of($0.location) != .url }.map(\.location))
+        for location in Set(updateWatchers.keys).subtracting(open) {
+            updateWatchers[location] = nil
+            fingerprints[location] = nil
+        }
+        for location in open.subtracting(updateWatchers.keys) {
+            fingerprints[location] = Self.fingerprint(location)
+            let directory = URL(fileURLWithPath: location).deletingLastPathComponent()
+            updateWatchers[location] = Watcher(directory: directory, files: [location, Paths.dataFile(for: location).path]) { [weak self] in
+                self?.fileUpdated(location)
+            }
+        }
+    }
+
+    static func fingerprint(_ location: String) -> SHA256.Digest? {
+        guard let file = try? Data(contentsOf: URL(fileURLWithPath: location)) else { return nil }
+        return SHA256.hash(data: file + ((try? Data(contentsOf: Paths.dataFile(for: location))) ?? Data()))
+    }
+
+    func fileUpdated(_ location: String) {
+        guard let fingerprint = Self.fingerprint(location), fingerprint != fingerprints[location] else { return }
+        fingerprints[location] = fingerprint
+        if !Env.test, !NSApp.isActive { Notify.updated(listing.entry(location)) }
     }
 
     var showAllProjects: Bool = Model.remembered("showAllProjects") as? Bool ?? false { didSet { Self.remember(showAllProjects, "showAllProjects") } }
@@ -230,6 +249,79 @@ final class Model {
     func markUnread(_ location: String) {
         listing.update(location) { $0.unread = true; $0.presentedAt = Date() }
         changed()
+    }
+
+    static let untitled = "New bridge"
+
+    func isDraft(_ entry: BridgeEntry) -> Bool { Paths.inDrafts(entry.location) && entry.session.isEmpty }
+
+    @discardableResult func newBridge(capture: Freeze? = nil) -> String? {
+        let folder = Paths.drafts
+        if capture == nil, let empty = listing.bridges.first(where: { isDraft($0) && !$0.crossed && (pages[$0.location]?.sidecar ?? Sidecar.peek(Paths.sidecar(for: $0.location))).answers.isEmpty }) {
+            scope = .project(folder.path)
+            selected = empty.location
+            changed()
+            return empty.location
+        }
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let format = DateFormatter()
+        format.dateFormat = "yyyy-MM-dd-HHmmss"
+        let stamp = format.string(from: Date())
+        var file = folder.appendingPathComponent("\(stamp).html")
+        var number = 2
+        while FileManager.default.fileExists(atPath: file.path) { file = folder.appendingPathComponent("\(stamp)-\(number).html"); number += 1 }
+        let template = Bundle.module.url(forResource: "web", withExtension: nil)!.appendingPathComponent("draft.html")
+        guard var html = try? String(contentsOf: template, encoding: .utf8) else { return nil }
+        var title = Self.untitled
+        if let capture, let marked = capture.annotated() {
+            let base = file.deletingPathExtension()
+            let shown = base.appendingPathExtension("marked.png")
+            guard (try? marked.write(to: shown)) != nil else { return nil }
+            func escape(_ text: String) -> String { text.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: "\"", with: "&quot;") }
+            let list = capture.notes.map { "<li>\(escape($0.text))</li>" }.joined()
+            html = html.replacingOccurrences(of: "<!--capture-->", with: "<figure id=\"screen\"><img src=\"\(escape(shown.path))\" alt=\"\"></figure><ol id=\"notes\">\(list)</ol>")
+            var notes = capture.notes
+            for index in notes.indices {
+                let cut = base.appendingPathExtension("\(index + 1).png")
+                if let data = capture.crop(notes[index]), (try? data.write(to: cut)) != nil { notes[index].crop = cut.path }
+            }
+            try? Sidecar.modify(Paths.sidecar(for: file.path)) { $0.answers["screenshot"] = .string(shown.path); $0.comments = notes }
+            if let first = notes.first { title = first.text }
+        }
+        guard (try? html.write(to: file, atomically: true, encoding: .utf8)) != nil else { return nil }
+        var entry = BridgeEntry(location: file.path, project: folder.path, session: "")
+        entry.title = title
+        entry.unread = false
+        listing.bridges.append(entry)
+        scope = .project(folder.path)
+        selected = file.path
+        changed()
+        return file.path
+    }
+
+    func lastPage(of session: String) -> BridgeEntry? {
+        listing.bridges.filter { $0.session == session && !Paths.inDrafts($0.location) }.max { $0.presentedAt < $1.presentedAt }
+    }
+
+    struct Recipient {
+        let session: String
+        let name: String
+        let page: String
+        let project: String
+        let busy: Bool
+        var label: String { [page, project, busy ? "busy" : "idle"].filter { !$0.isEmpty }.joined(separator: " · ") }
+    }
+
+    func agentsByWork() -> [Recipient] {
+        let pages = Dictionary(uniqueKeysWithValues: agents.keys.map { ($0, lastPage(of: $0)) })
+        let sorted = agents.values.sorted { a, b in
+            if (a.life == .working) != (b.life == .working) { return a.life != .working }
+            return (pages[a.session]??.presentedAt ?? .distantPast) > (pages[b.session]??.presentedAt ?? .distantPast)
+        }
+        return sorted.map { agent in
+            Recipient(session: agent.session, name: ClaudeSessions.title(of: agent), page: pages[agent.session]??.title ?? "No page yet",
+                      project: agent.cwd.isEmpty ? "" : (Ground.projectRoot(for: agent.cwd) as NSString).lastPathComponent, busy: agent.life == .working)
+        }
     }
 
     func setTitle(_ title: String, for location: String) {

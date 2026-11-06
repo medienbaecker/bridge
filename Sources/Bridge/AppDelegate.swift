@@ -1,5 +1,6 @@
 import AppKit
 import BridgeCore
+import KeyboardShortcuts
 import UserNotifications
 import WebKit
 
@@ -7,10 +8,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     let model = Model()
     var server: Server?
     var window: MainWindow!
-    let link = Link()
-    lazy var sharing = Sharing(link: link, model: model)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        KeyboardShortcuts.onKeyDown(for: .freezeScreen) { [weak self] in self?.freeze() }
+        _ = freezePage
         let server = Server { [self] request, reply in
             DispatchQueue.main.async {
                 MainActor.assumeIsolated { self.handle(request, reply: reply) }
@@ -29,9 +30,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             exit(1)
         }
         self.server = server
-        link.onChange = { [weak self] in self?.window.updateShare(); self?.window.projects.reload() }
-        _ = sharing
-        link.start()
         if model.scope == .waiting, model.bridges(in: .waiting).isEmpty { model.scope = .all }
         let remembered = Model.remembered("selected") as? String
         model.selected = model.listing.bridges.contains { $0.location == remembered } ? remembered : nil
@@ -64,7 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         let text = found.count >= Self.pileupCount || total >= Self.pileupBytes
             ? "\(found.count) agent\(found.count == 1 ? "" : "s") waiting · \(size)" : nil
         if text != pileupText { pileupText = text; window?.projects.showPileup(text) }
-        if Set(found.map { "\($0.pid) \($0.session)" }) != listeningBefore || model.agents != agentsBefore { window?.sidebar.reload(); window?.updateAgent() }
+        if Set(found.map { "\($0.pid) \($0.session)" }) != listeningBefore || model.agents != agentsBefore { window?.sidebar.reload() }
     }
 
     func applicationDidBecomeActive(_ notification: Notification) { checkUpdate() }
@@ -96,23 +94,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     func relaunch() {
         guard updateReady, let exe = Bundle.main.executableURL else { return }
-        let page = model.selectedPage
-        Task { @MainActor in
-            // A half-written note would not survive the relaunch.
-            if let page, page.ready,
-               let typed = try? await page.evaluate("return document.querySelector('.bridge-thread:popover-open textarea')?.value || ''"),
-               case .string(let text) = typed, !text.isEmpty {
-                updateText = "Finish your note first"
-                window?.projects.showUpdate(updateText)
-                return
-            }
-            // The new process inherits this one's environment (state dir, test mode).
-            let sh = Process()
-            sh.executableURL = URL(fileURLWithPath: "/bin/sh")
-            sh.arguments = ["-c", "sleep 1; exec \"$0\"", exe.path]
-            try? sh.run()
-            NSApp.terminate(nil)
-        }
+        // The new process inherits this one's environment (state dir, test mode).
+        let sh = Process()
+        sh.executableURL = URL(fileURLWithPath: "/bin/sh")
+        sh.arguments = ["-c", "sleep 1; exec \"$0\"", exe.path]
+        try? sh.run()
+        NSApp.terminate(nil)
     }
 
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
@@ -125,6 +112,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if window.window?.isVisible != true { window.showWindow(nil) }
+        return true
+    }
 
     func applicationWillTerminate(_ notification: Notification) {
         window.rememberWindows()
@@ -160,38 +152,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             model.remove(loc); reply(.ok(.null))
         case .reset(let loc):
             model.reset(loc); reply(.ok(.null))
-        case .reply(let loc, let id, let text):
+        case .note(let loc, let id, let done):
             let page = model.page(for: loc)
             if let why = page.unreadable { reply(.error(why)); return }
-            page.reply(to: id, text: text); reply(.ok(.null))
-        case .note(let loc, let id, let state):
-            let page = model.page(for: loc)
-            if let why = page.unreadable { reply(.error(why)); return }
-            page.setNote(id, state: state); reply(.ok(.null))
+            page.setNote(id, done: done); reply(.ok(.null))
         case .collect(let loc, let session):
             let page = model.page(for: loc)
             if let why = page.unreadable { reply(.error(why)); return }
             page.collected(by: session); reply(.ok(.null))
         case .js(let loc, let code):
-            guard Env.test, let page = loc.map({ model.page(for: $0) }) ?? model.selectedPage else {
+            guard Env.test, let page = loc.map({ $0 == Paths.freezePage.path ? freezePage : model.page(for: $0) }) ?? model.selectedPage else {
                 reply(.error("no page")); return
             }
             Task { @MainActor in
                 do { reply(.ok(try await page.evaluate(code))) } catch { reply(.error("\(error)")) }
             }
-        case .peers:
-            reply(.ok(link.state))
-        case .claim(let loc, let session, let cwd):
-            guard model.listing.entry(loc) != nil else { reply(.ok(.null)); return }
-            let page = model.page(for: loc)
-            if page.sidecar.presented == nil {
-                page.presented(Presentation(session: session, cwd: cwd, ground: Ground.current(in: cwd)))
-                model.listing.update(loc) { $0.session = session }
-                model.changed()
-            }
-            reply(.ok(.null))
-        case .share(let loc):
-            do { reply(.ok(try sharing.share(loc))) } catch { reply(.error("\(error)")) }
         case .command(let name, let argument):
             guard Env.test else { reply(.error("test mode only")); return }
             reply(window.perform(command: name, argument: argument) ? .ok(state()) : .error("unknown command \(name)"))
@@ -212,9 +187,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         case .reload(let loc):
             guard let page = model.pages[loc] else { reply(.ok(.null)); return }
             Task { @MainActor in
-                if page.ready, case .string(let typed)? = try? await page.evaluate("return document.querySelector('.bridge-thread:popover-open textarea')?.value || ''"), !typed.isEmpty {
-                    reply(.error("they are writing a note on it; reload later")); return
-                }
                 await WKWebsiteDataStore.default().removeData(ofTypes: [WKWebsiteDataTypeDiskCache, WKWebsiteDataTypeMemoryCache], modifiedSince: .distantPast)
                 page.load()
                 reply(.ok(.null))
@@ -245,7 +217,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     func state() -> JSONValue {
-        var out: [String: JSONValue] = ["running": .bool(true), "test": .bool(Env.test), "link": link.state]
+        var out: [String: JSONValue] = ["running": .bool(true), "test": .bool(Env.test)]
         if let page = model.selectedPage {
             out["selected"] = .string(page.location)
             out["title"] = .string(page.title)
@@ -254,19 +226,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             out["version"] = .number(Double(page.sidecar.version))
             out["viewingVersion"] = page.viewingVersion.map { .number(Double($0)) } ?? .null
             out["answers"] = .number(Double(page.sidecar.answers.count))
-            out["notes"] = .number(Double(page.sidecar.openComments.count))
-            out["pointing"] = .bool(page.pointing)
             out["ready"] = .bool(page.ready)
             out["buildMs"] = page.buildMs.map { .number(Double($0)) } ?? .null
             out["zoom"] = .number(Double((page.zoom * 100).rounded() / 100))
             out["links"] = .string(page.links.rawValue)
-            out["cursor"] = page.cursor
-            out["selection"] = page.selection
+        }
+        out["agents"] = .array(model.agentsByWork().map { .string($0.label) })
+        out["settings"] = settingsWindow.state()
+        out["freezePanels"] = .number(Double(NSApp.windows.filter { $0 is FreezePanel && $0.isVisible }.count))
+        if let freeze = Freeze.current {
+            out["freeze"] = .object(["notes": .array(freeze.notes.map { .object(["text": .string($0.text), "target": .string($0.target), "anchor": $0.anchor]) }),
+                                     "highlight": freeze.highlight.map { .array([$0.minX, $0.minY, $0.width, $0.height].map { .number(Double($0)) }) } ?? .null,
+                                     "screen": .string(freeze.screen.localizedName), "screenFrame": .array([freeze.screen.frame.minX, freeze.screen.frame.minY, freeze.screen.frame.width, freeze.screen.frame.height].map { .number(Double($0)) }),
+                                     "outlineUnderPage": .bool(freeze.overlay.superview?.subviews.firstIndex(of: freeze.overlay) ?? 0 < freeze.overlay.superview?.subviews.firstIndex(of: freeze.page.webView) ?? 0), "pinCursor": .bool(NSCursor.current.hotSpot == CGPoint(x: 14, y: 29)), "recipients": .array(freeze.recipients.map { .string($0.label) }),
+                                     "picked": freeze.picked.map { .string($0) } ?? .null])
         }
         out["webViews"] = .number(Double(window.content.container.subviews.count))
         if let w = window.window {
             out["windowNumber"] = .number(Double(w.windowNumber))
             out["windowKey"] = .bool(w.isKeyWindow)
+            out["windowVisible"] = .bool(w.isVisible)
             out["backingScale"] = .number(Double(w.backingScaleFactor))
             out["titlebarHeight"] = .number(Double(w.frame.height - w.contentLayoutRect.height))
             let f = w.frame
@@ -285,10 +264,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         out["selectedRows"] = .array(window.sidebar.selectedLocations.map { .string($0) })
         out["rowMenu"] = .array(window.rowMenuTitles.map { .string($0) })
         out["rowMenuTargets"] = .array(window.rowMenuTargets.map { .string($0) })
-        out["notesPopoverShown"] = .bool(window.notesPopover.isShown)
-        out["notesPopoverSize"] = .object(["width": .number(Double(window.notesPopover.contentSize.width)), "height": .number(Double(window.notesPopover.contentSize.height))])
-        out["notesRows"] = .array(window.notes.shown.map { .string($0.text) })
-        out["notesRowsFit"] = .array(window.notes.shown.map { .bool($0.fits) })
         out["sidebarGeometry"] = .object(window.sidebar.geometry())
         out["updateRow"] = .object(window.projects.updateGeometry())
         pollWaiters()
@@ -315,8 +290,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         out["quietRows"] = .array(model.shown().filter { model.isQuiet($0) }.map { .string($0.location) })
         out["toolbar"] = .array(window.toolbarItems.map {
             .object(["id": .string($0.itemIdentifier.rawValue), "label": .string($0.label), "enabled": .bool($0.isEnabled), "hidden": .bool($0.isHidden),
-                     "symbol": .string($0.image?.accessibilityDescription ?? ""),
-                     "on": .bool($0.itemIdentifier == MainWindow.point && window.pointShownOn)])
+                     "symbol": .string($0.image?.accessibilityDescription ?? "")])
         })
         out["toolbarLabelsShown"] = .bool(window.window?.toolbar?.displayMode == .iconAndLabel)
         out["subtitle"] = .string(window.window?.subtitle ?? "")
@@ -330,7 +304,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                         "row": .string(window.sidebar.rowText(for: b)),
                         "subtitle": window.sidebar.subtitle(for: b).map { JSONValue.string($0) } ?? .null,
                         "listening": .bool(model.listening(b)),
-                        "resolved": model.resolved(b).map { JSONValue.string($0) } ?? .null,
                     ])
                 }),
             ])
@@ -338,9 +311,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         return .object(out)
     }
 
+    lazy var settingsWindow = SettingsWindow()
+    lazy var freezePage: Page = {
+        let file = Paths.freezePage
+        try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? Data("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>Screen</title></head><body><figure id=\"screen\"></figure></body></html>".utf8).write(to: file)
+        let page = Page(location: file.path, model: model, preview: true, freezing: true)
+        page.load()
+        return page
+    }()
+
+    @objc func showSettings() { settingsWindow.showWindow(nil) }
+
+    func freeze(fromBridge: Bool = NSWorkspace.shared.frontmostApplication == .current) {
+        if let open = Freeze.current { return open.cancel() }
+        let page = (NSApp.keyWindow?.windowController as? PageWindow)?.page ?? model.selectedPage
+        let picked = fromBridge ? page.flatMap { model.listing.entry($0.location)?.session } : nil
+        Task {
+            do {
+                try await Freeze.start(recipients: model.agentsByWork(), picked: picked, page: freezePage) { [weak self] freeze, outcome in
+                    guard let self, outcome != .cancel, let location = model.newBridge(capture: freeze) else { return }
+                    if case .send(let session) = outcome, window.sendDraft(location, to: session) { return }
+                    if window.window?.isVisible != true { window.showWindow(nil) }
+                    NSApp.activate()
+                }
+            } catch {
+                let alert = NSAlert()
+                alert.messageText = "Bridge can't see the screen"
+                alert.informativeText = "Allow Bridge in System Settings, Privacy & Security, Screen & System Audio Recording, then try again. (\(error.localizedDescription))"
+                if !Env.test { alert.runModal() }
+            }
+        }
+    }
+
     func buildMenu() {
         let main = NSMenu()
         let appMenu = NSMenu()
+        appMenu.addItem(withTitle: "Settings…", action: #selector(showSettings), keyEquivalent: ",").target = self
+        appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Hide Bridge", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(withTitle: "Quit Bridge", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         main.addItem(withTitle: "Bridge", action: nil, keyEquivalent: "").submenu = appMenu
@@ -361,6 +369,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             i.keyEquivalentModifierMask = mods
             i.representedObject = command
         }
+        item(Model.untitled, "new", "n")
         item("Open in New Window", "window", "o", [.command, .option])
         bridge.addItem(.separator())
         item("Point", "point", "p", [.command, .shift])

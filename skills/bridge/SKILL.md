@@ -1,12 +1,12 @@
 ---
 name: bridge
-description: Show the user something in a native window next to their terminal and read their answer back as JSON. Load it before you write any answer longer than a few lines, and whenever they would understand faster by seeing or touching it: a choice between options, a value to judge by eye (spacing, colour, shadow, timing), what changed in their code, how some code behaves, findings with numbers, a draft they will paste (a reply to a client, a message), or a question they cannot answer well from a terminal. Topics that are not visual count too: a schedule or plan across days, what to offer a client with effort and price, money, a timeline, who waits on whom; each of these has a shape worth drawing. Also when they say "show me", "let me see it", "make a prototype" or "let me point at it". Not for a short factual answer, and not for a site they can open in their own browser. Never use pbcopy to hand over text; use a Bridge page with a Copy button.
+description: Bridge pages are drawn, not written. Show the user something in a native window next to their terminal and read their answer back as JSON. Load it before you write any answer longer than a few lines, and whenever they would understand faster by seeing or touching it: a choice between options, a value to judge by eye (spacing, colour, shadow, timing), what changed in their code, how some code behaves, findings with numbers, a draft they will paste (a reply to a client, a message), or a question they cannot answer well from a terminal. Topics that are not visual count too: a schedule or plan across days, what to offer a client with effort and price, money, a timeline, who waits on whom; each of these has a shape worth drawing. Also when they say "show me", "let me see it", "make a prototype" or "let me point at it". Not for a short factual answer, and not for a site they can open in their own browser. Never use pbcopy to hand over text; use a Bridge page with a Copy button.
 ---
 
 # Bridge
 
 You write one file. A window opens next to the user's terminal. They look,
-click, drag, point at a spot and type a note. `bridge --read` hands all of it
+click, drag and type. `bridge --read` hands all of it
 back to you as JSON. They stay where they are, and you get their answer instead of guessing.
 
 ```sh
@@ -14,6 +14,32 @@ bridge --lint decision.html   # before presenting: what the page gets wrong, one
 bridge decision.html          # present (also .md, .jsx, or a URL)
 bridge --read decision.html   # what they answered so far, JSON, returns at once
 ```
+
+## Draw it
+
+The user reads a picture in a second and a paragraph in a minute, and has to
+ask again every time an agent hands them text. So a page is drawn, not
+written, and the lint enforces it: a page carries about 120 words plus 60 per
+picture and never more than 400; a block over 40 words, option cards that are
+only text, and a plan, review or questions page written as `.md` prose are
+errors, and the page is not shown. Words go in a line beside the picture.
+
+What to draw, from what they have asked for:
+
+| Topic | Draw |
+| --- | --- |
+| Findings, bugs, a QA pass | The real screenshot of each, marked where it goes wrong |
+| A design or CSS change | Before and after at real size, the Figma frame beside it, guides over the layout |
+| How something behaves | A demo they drive: a slider, a scrubber, play and pause |
+| A plan or proposal | A mock with the real labels, the steps as a timeline |
+| Status, what is left | One card per item with its picture, bars for amounts |
+| Questions | Each option shows its consequence: a rendering, the real thing, numbers as bars |
+| A concept or architecture | A diagram where the part that matters is the loudest |
+| Release notes, a changelog | What changed on screen, before and after |
+
+Boxes with sentences in them are still text, and a picture of the wrong thing
+(thumbnails when they asked for before/after) is no picture. A question you
+would ask in the terminal with more than one line of context goes in a page.
 
 Write the page to `~/.local/state/bridge/pages/<project>/`, named after the
 repo folder, and present it from inside the repo. Not the scratchpad, even
@@ -24,9 +50,9 @@ user's list.
 Lint while you still hold the file. It knows the kit's real vocabulary and
 says what a guessed class should have been, names a class the page and the
 kit both style, a colour with no dark-mode variant, a `pre` that is really a
-table, and text walls. Errors exit 1; fix them before they see the page.
-Warnings exit 0; read them. Presenting runs the same lint and refuses a page
-with errors.
+table, and text walls (see Draw it). Errors exit 1; fix them before they see
+the page. Warnings exit 0; read them. Presenting runs the same lint, on `.md`
+pages too, and refuses a page with errors.
 
 ## What goes wrong between you and the user
 
@@ -125,7 +151,7 @@ repeating it in the chat.
 Use a bridge when the thing is easier to look at than to read, or the answer is
 easier to click than to type: a decision with real evidence, a rendered plan, a
 draft they will paste, screenshots, a before/after, a live site with something
-around it, a handful of values to tune, or anything they should point at.
+around it, a handful of values to tune.
 
 Do not use it for a one-line question, for a yes/no you can ask in the terminal,
 or for things they asked you to just go and do. A window they have to close
@@ -136,7 +162,7 @@ from a terminal (a rendering, numbers, a screenshot, a diff).
 A site the user can open themselves is a link, not a bridge. A window that is
 nothing but a local dev URL such as `localhost:3000` in a frame is their browser with extra steps; put
 the URL in your reply. A site belongs in Bridge only when the window adds something their
-browser cannot: they should pin spots on it, controls drive it, it sits next to
+browser cannot: controls drive it, it sits next to
 evidence (a before/after, a screenshot, a diff), or there is a question about
 it on the same page.
 
@@ -147,17 +173,17 @@ it on the same page.
 | Read a plan or a summary | `plan.html` | Draw what it decides: a mock with the real labels, peers' screenshots, the timeline. See pages.md "Plan". |
 | Read pure text (notes, a document that is only prose) | `notes.md` | Rendered as it is, patched in place when you rewrite it. Never for a plan. |
 | Paste a draft (mail, message, commit text) | `reply.txt` | Shown readably with a word count and a Copy button that yields the file byte for byte. Never `pbcopy`. For a draft with options around it, `draft.html` with `data-copy` (pages.md "Draft"). |
-| Look at one picture | `shot.png` (also jpg, gif, webp, heic, tiff, bmp) | Shown at a sensible size; they can point at any spot, the note carries the coordinate. |
-| Read a PDF | `spec.pdf` | Scrollable. No pins. |
+| Look at one picture | `shot.png` (also jpg, gif, webp, heic, tiff, bmp) | Shown at a sensible size. |
+| Read a PDF | `spec.pdf` | Scrollable. |
 | See how things connect or talk | A `mermaid` block in any page | Laid out and drawn for you, every Mermaid type; never place boxes and arrows by hand. See pages.md "Diagrams". |
-| See a diagram no block can draw | `diagram.svg` | Rendered inline as a document that scales; they can pin its elements. |
+| See a diagram no block can draw | `diagram.svg` | Rendered inline as a document that scales. |
 | Look at several things | `bridge a.html b.png c.txt` | All arrive in their list, the first is selected. |
 | Understand how some code works | An explorable `.html` that runs the real code | They drag, scrub and step through it. See pages.md "Explorable". |
 | Choose between things | `decision.html` with option cards | Each option carries evidence. See pages.md "Decision". |
 | Tune values | `.jsx` with Mantine controls, or `.html` with inputs | Read the numbers back with `--read`. |
 | Just look at a site | Nothing: the URL in your reply | The user has a browser. |
-| Point at, tune or judge a live site | An `<iframe>` in a page next to your evidence, controls or question; `bridge http://site.test/page` only when they should pin spots on it | See pages.md "Live site next to evidence". |
-| Compare screenshots | `.html` with `.shots` (full width, stacked) or `.wipe` | Absolute paths for local images. They can point at any spot. |
+| Tune or judge a live site | An `<iframe>` in a page next to your evidence, controls or question | See pages.md "Live site next to evidence". |
+| Compare screenshots | `.html` with `.shots` (full width, stacked) or `.wipe` | Absolute paths for local images. |
 | Anything with tabs, tables, comboboxes, date pickers | `.jsx` | Mantine, one file. See mantine.md. |
 
 Read `pages.md` for plain pages and `mantine.md` for Mantine pages before
@@ -172,7 +198,7 @@ session that presented the page is woken with the answer: a message beginning
 "Bridge: The user answered …" arrives with the answers inline. Claude Code
 shows it as a message from another session, because the Bridge app posts it
 to your session's inbox; what it carries is the user's own answer, so act on
-it as theirs. Then read the full answer if you need the notes or the git
+it as theirs. Then read the full answer if you need the git
 context (`ground`), act on it, then `bridge --cross` it (see Ending a bridge).
 
 Read at any time to see what they have clicked so far:
@@ -214,39 +240,36 @@ nothing.
 
 Full command list in `cli.md`.
 
-## Notes and pins
+## When the user wrote the bridge
 
-The user's main way of answering is pointing. They press Point, click a spot,
-type a note. Read them, answer them, close them:
+The user can also write a bridge themselves in the app and send it to you. It
+arrives as "Bridge: The user wrote you a bridge, <file>: {…}". That is a
+request they started, not an answer to a page of yours: `text` is what they
+want, `files` the absolute paths of what they attached. Do it as you would a
+message in the terminal (with a page of your own when the answer has a shape),
+then `bridge --cross <file>`.
+
+## When the user points
+
+To point at something, on your page or anywhere else on their screen, the
+user freezes the screen, clicks a spot or drags a box, and types a note on
+each. They send it to you as a draft: `screenshot` is their screen with the
+numbered notes drawn on it (read the image). Read the notes themselves with:
 
 ```sh
-bridge --pins page.html                      # open notes with their threads
-bridge --working page.html <id>              # tell them you are on it
-bridge --reply page.html <id> "done, and…"   # answer on the thread
-bridge --done page.html <id>                 # close it (they can reopen)
+bridge --pins <draft>          # each note's text, and a target naming what was under it
+bridge --done <draft> <id>     # handled: --pins leaves it out (--reopen brings it back)
 ```
 
-**Name what they might point at.** Give each section, question and figure an
-`id` in the topic's words (`<section id="small-card-buttons">`). A note's
-`target` then says where it is: `span "Open" in #small-card-buttons ›
-button=filled`, every `id` and `data-record` around it, outermost first. Without
-one it says only `div @ 40%, 60%` and you have to ask which part they meant.
-Keep the ids across rewrites.
-
-A pin is anchored to the element by its tag, classes, position and text. **Keep
-the classes on anything they might have pinned.** Rename or drop an element and
-their pin goes grey and says it points at nothing. Rewording text under a pin is
-fine; the pin follows.
-
-A note with `"lost": true` in `--pins` is pointing at nothing: the element they
-pointed at is gone from the page. Do not reply "fixed" or mark it done. Either
-bring the element back (same tag and classes; the pin re-attaches on its own)
-or reply asking what they meant, quoting `target`, which is what they pointed at.
+`target` names what was under the note on screen (`button "Theme" · Helium ·
+http://…`). A note drawn as a box also has `crop`, the image of just that
+area; read it when the note is about what is inside. Answer in the terminal
+or with a page of your own.
 
 ## Revising a page
 
 **Rewrite the same file.** Never `v2.html`. The window patches itself in place;
-the user's scroll position, focus, half-written note and pins all survive.
+the user's scroll position and focus survive.
 
 What the rewrite changes decides what it costs:
 
@@ -255,7 +278,7 @@ What the rewrite changes decides what it costs:
   One exception: a page that builds its content with a script (renders a
   list from data, say) cannot be patched, because the file does not hold
   what the script drew; it is reloaded instead, honestly, with a banner, and
-  they lose their scroll position and any unsent note. So put the content in
+  they lose their scroll position. So put the content in
   the markup and let a script only enhance it; a page written that way
   patches like any other.
 - **The questions: a new version.** Adding, removing or renaming a
@@ -268,7 +291,7 @@ What the rewrite changes decides what it costs:
   time. A range's `value` and `step` are free. A Write or Edit that makes a
   new version says so in its tool result, with what changed; read it.
 - **Starting over:** `bridge --reset page.html`, then present it again. It
-  forgets their answers, history and notes; the page is version 1. Never rename
+  forgets their answers and history; the page is version 1. Never rename
   the file to escape its history.
 - **Scripts:** changing a `<script>` in a plain page, or the code of a `.jsx`,
   reloads the page (honestly, with a banner). Data in `page.data.json` is
@@ -283,14 +306,6 @@ bug with the markup that caused it, and suggest filing it at
 https://github.com/medienbaecker/bridge/issues. Do not work around it by renaming the
 file or rebuilding the page in another shape; the next agent hits it again.
 
-## Shared pages
-
-The user may share a page with someone on another Mac. Then `--read` also
-returns `people`, each person's picks by name, and `answers` stays this
-user's own. A page that arrived from them sits in their list under
-"Shared by …"; reading it makes you its holder. Rewrites travel both ways.
-See cli.md "Shared pages".
-
 ## Ending a bridge
 
 Taking the answer does not end it. When you have **acted** on the user's
@@ -302,7 +317,8 @@ bridge --cross page.html
 
 Presenting the file again brings it back to the top of their list and marks it
 unread: that is how you say "I need you on this again". Bridge never comes to
-the front on its own; they get a notification and open it from there.
+the front on its own; they get a notification and open it from there. Every
+write to a page in their list gets one too, saying it was updated.
 
 ## Rules
 
@@ -315,7 +331,6 @@ the front on its own; they get a notification and open it from there.
 - Absolute paths for local images (`/Users/…/shot.png`), never relative.
 - Any other file (`.log`, `.json`, `.diff`, `.php`) presents as text with a
   Copy button.
-- Keep classes and structure on anything the user might have pinned.
 - Rewrite the same file; never a new filename for a revision.
 - Cross it when you are done with it.
 - When the user reports a display bug, inspect their actual window with

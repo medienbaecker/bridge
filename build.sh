@@ -23,6 +23,7 @@ APP="$PWD/build.noindex/$NAME.app"; RES="$APP/Contents/Resources"
 rm -rf "$APP"; mkdir -p "$APP/Contents/MacOS" "$RES"
 cp "$BIN/Bridge" "$APP/Contents/MacOS/$EXE"
 cp -R "$BIN/bridge_Bridge.bundle" "$RES/"
+cp -R "$BIN/KeyboardShortcuts_KeyboardShortcuts.bundle" "$RES/"
 cp "$BIN/bridge-cli" "build.noindex/$CLI"
 
 # Warnings go to stderr because run.sh discards this script's stdout.
@@ -51,8 +52,6 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSMinimumSystemVersion</key><string>27.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
-  <key>NSLocalNetworkUsageDescription</key><string>$NAME finds the Macs you paired with, to share pages with them.</string>
-  <key>NSBonjourServices</key><array><string>_bridge._tcp</string></array>
   <key>NSAppTransportSecurity</key>
   <dict>
     <key>NSAllowsLocalNetworking</key><true/>

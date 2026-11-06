@@ -205,6 +205,16 @@ import Foundation
     #expect(!Lint(kitCSS: "").run(html: file).contains { $0.text.hasPrefix("an AudioWorklet module from a blob URL") })
 }
 
+@Test func lintNamesRadiosThatRecordNothing() {
+    let bare = "<label><input type=\"radio\" name=\"pair\" value=\"a\"> A</label><label><input type=\"radio\" name=\"pair\" value=\"b\"> B</label>"
+    let unrecorded = { (html: String) in Lint(kitCSS: "").run(html: html).filter { $0.text.hasPrefix("radios without `data-record`") } }
+    #expect(unrecorded(bare).map(\.line) == [1])
+    #expect(unrecorded("<input name=\"pair\" type=\"radio\" value=\"a\">").count == 1)
+    #expect(unrecorded("<form data-record=\"pair\">\(bare)</form>").isEmpty)
+    #expect(unrecorded("<input type=\"radio\" name=\"pair\" data-record=\"pair\">").isEmpty)
+    #expect(unrecorded(bare + "<script>bridge.set('pair', 'a')</script>").isEmpty)
+}
+
 private let kitOfShapes = ".options { } .draft { } .bars { } .bar { }"
 
 @Test func lintNamesAParagraphWall() {
@@ -213,27 +223,53 @@ private let kitOfShapes = ".options { } .draft { } .bars { } .bar { }"
     #expect(texts.filter { $0.hasPrefix("45 words in one block") }.count == 2)
 }
 
-@Test func lintLeavesDraftsCodeAndDetailsAlone() {
+@Test func lintLeavesDraftsAndCodeAlone() {
     let long = Array(repeating: "lorem", count: 300).joined(separator: " ")
     let page = """
     <body>
     <pre class="draft" id="draft">\(long)</pre>
     <div id="mail"><p>\(long)</p></div><button data-copy="#mail">Copy</button>
     <pre><code class="language-js">\(long)</code></pre>
-    <details><summary>Analysis</summary><p>\(long)</p></details>
     <textarea data-record="note">\(long)</textarea>
     </body>
     """
     #expect(Lint(kitCSS: kitOfShapes).run(html: page).isEmpty)
 }
 
-@Test func lintNamesALongPageWithNothingToLookAt() {
+@Test func lintCountsWordsFoldedIntoDetails() {
+    let long = Array(repeating: "lorem", count: 30).joined(separator: " ")
+    let page = "<body>\n<details><summary>Analysis</summary>" + String(repeating: "<p>\(long)</p>", count: 10) + "</details>"
+    #expect(Lint(kitCSS: kitOfShapes).run(html: page).contains { $0.level == .error && $0.text.hasPrefix("301 words and nothing drawn") })
+}
+
+@Test func lintWeighsWordsAgainstPictures() {
     let para = "<p>" + Array(repeating: "lorem", count: 30).joined(separator: " ") + "</p>\n"
     let prose = "<body>\n" + String(repeating: para, count: 10)
-    #expect(Lint(kitCSS: kitOfShapes).run(html: prose).contains { $0.text.hasPrefix("300 words and nothing to look at") })
-    #expect(!Lint(kitCSS: kitOfShapes).run(html: prose + "<img src=\"/a.png\" alt=\"\">").contains { $0.text.contains("nothing to look at") })
-    #expect(!Lint(kitCSS: kitOfShapes).run(html: prose + "<div class=\"bars\"><div class=\"bar\" style=\"--v: 40\"></div></div>").contains { $0.text.contains("nothing to look at") })
+    let image = "<img src=\"/a.png\" alt=\"\">"
+    #expect(Lint(kitCSS: kitOfShapes).run(html: prose).contains { $0.level == .error && $0.text.hasPrefix("300 words and nothing drawn") })
+    #expect(Lint(kitCSS: kitOfShapes).run(html: prose + image).contains { $0.text.hasPrefix("300 words for 1 picture") })
+    #expect(!Lint(kitCSS: kitOfShapes).run(html: prose + String(repeating: image, count: 3)).contains { $0.text.contains("300 words") })
+    #expect(Lint(kitCSS: kitOfShapes).run(html: "<body>\n" + String(repeating: para, count: 15) + String(repeating: image, count: 20)).contains { $0.text.hasPrefix("450 words, more than anyone reads") })
     #expect(Lint(kitCSS: kitOfShapes).run(html: Array(repeating: "lorem", count: 300).joined(separator: " ")).isEmpty)
+}
+
+@Test func lintCountsCalloutsWithAPillAsText() {
+    let kit = kitOfShapes + " .card { background: Canvas; } .pill { border: 1px solid; }"
+    let card = "<div class=\"card\"><span class=\"pill\">new</span><p>" + Array(repeating: "lorem", count: 30).joined(separator: " ") + "</p></div>\n"
+    #expect(Lint(kitCSS: "").run(html: "<style>\(kit)</style><body>\n" + String(repeating: card, count: 6)).contains { $0.text.hasPrefix("186 words and nothing drawn") })
+}
+
+@Test func lintNamesADrawingMadeOfWords() {
+    let label = "<rect/><text>Lorem ipsum dolor sit amet consectetur</text>"
+    #expect(Lint(kitCSS: "").run(html: "<body>\n<svg>" + String(repeating: label, count: 6) + "</svg>").contains { $0.text.hasPrefix("this drawing is mostly words") })
+    #expect(!Lint(kitCSS: "").run(html: "<body>\n<svg>" + String(repeating: "<rect/><text>Lorem</text>", count: 6) + "</svg>").contains { $0.text.hasPrefix("this drawing is mostly words") })
+}
+
+@Test func lintRefusesAPlanInMarkdownProse() {
+    let prose = Array(repeating: "Lorem ipsum dolor sit amet.", count: 30).joined(separator: " ")
+    #expect(Lint(kitCSS: "").run(markdown: "# Plan\n\n\(prose)", name: "stories-plan.md").contains { $0.level == .error })
+    #expect(Lint(kitCSS: "").run(markdown: "# Plan\n\n![shot](/a.png)\n\n\(prose)", name: "stories-plan.md").isEmpty)
+    #expect(Lint(kitCSS: "").run(markdown: "# Notes\n\n\(prose)", name: "notes.md").isEmpty)
 }
 
 @Test func lintNamesTextOnlyOptionCards() {
@@ -302,7 +338,7 @@ private let kitOfShapes = ".options { } .draft { } .bars { } .bar { }"
     #expect(texts.count == 1 && texts.first?.hasPrefix("`.faint` styles nothing") == true)
 }
 
-@Test func sessionLifeFollowsClaudeCodesRegistry() throws {
+@Test func sessionLifeAndTitleFollowClaudeCode() throws {
     let dir = FileManager.default.temporaryDirectory.appendingPathComponent("bridge-sessions-\(UUID().uuidString)")
     let own = ClaudeSessions.dir
     ClaudeSessions.dir = dir
@@ -321,6 +357,13 @@ private let kitOfShapes = ".options { } .draft { } .bars { } .bar { }"
     #expect(ClaudeSessions.live()["s"]?.socket == "/tmp/x.sock")
     try register(999_999, "dead", "idle")
     #expect(ClaudeSessions.life(of: "dead") == .gone)
+    let folder = dir.deletingLastPathComponent().appendingPathComponent("projects/-Users-me-Work-site-test")
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    try "{\"type\":\"ai-title\",\"aiTitle\":\"First\"}\n{\"type\":\"ai-title\",\"aiTitle\":\"Latest\"}\n".write(to: folder.appendingPathComponent("s1.jsonl"), atomically: true, encoding: .utf8)
+    let live = { (named: Bool) in ClaudeSessions.Live(pid: 1, session: "s1", cwd: "/Users/me/Work/site.test", name: "kirby-select", named: named, life: .idle, socket: "") }
+    #expect(ClaudeSessions.title(of: live(true)) == "kirby-select")
+    #expect(ClaudeSessions.title(of: live(false)) == "Latest")
 }
 
 @Test func theHandOverCarriesTheAnswerAndWhatToRun() {
@@ -336,29 +379,3 @@ private let kitOfShapes = ".options { } .draft { } .bars { } .bar { }"
     #expect(s.handOver("/p/page.html", cli: "bridge").contains("closed /p/page.html without answering"))
 }
 
-@Test func personNamesFoldToPlainLowercase() {
-    #expect(Person.clean("Thomas") == "thomas")
-    #expect(Person.clean("Günther") == "gunther")
-    #expect(Person.clean("Mary-Jane O'Neil") == "mary-janeoneil")
-    #expect(Person.clean("  ") == nil)
-}
-
-@Test func peopleSurviveASidecarRoundTrip() throws {
-    var s = Sidecar()
-    s.people = ["yoshie": ["layout": .string("list")]]
-    let back = try JSON.decoder.decode(Sidecar.self, from: s.data())
-    #expect(back.people == s.people)
-    #expect(String(decoding: Sidecar().data(), as: UTF8.self).contains("people") == false)
-}
-
-@Test func lintNamesSectionsWithoutAnId() {
-    let unnamed = "<body>\n<h2>Buttons</h2>\n<p>a</p>\n<h2>Tints</h2>\n<p>b</p>"
-    #expect(Lint(kitCSS: "").run(html: unnamed).map(\.text).contains { $0.hasPrefix("2 of 2 sections have no id") })
-    let headingIdOnly = "<body>\n<h2 id=\"buttons\">Buttons</h2>\n<p>a</p>\n<h2 id=\"tints\">Tints</h2>\n<p>b</p>"
-    #expect(Lint(kitCSS: "").run(html: headingIdOnly).contains { $0.text.hasPrefix("2 of 2 sections have no id") })
-    let named = "<body>\n<section id=\"buttons\"><h2>Buttons</h2><p>a</p></section>\n<div data-record=\"tint\"><h3>Tints</h3></div>"
-    #expect(!Lint(kitCSS: "").run(html: named).contains { $0.text.contains("sections have no id") })
-    #expect(!Lint(kitCSS: "").run(html: "<body>\n<h2>Only one</h2>\n<p>a</p>").contains { $0.text.contains("sections have no id") })
-    let scripted = "<body>\n<section id=\"a\"><h2>A</h2></section>\n<script>el.innerHTML = '<h2>x</h2><h2>y</h2>'</script>"
-    #expect(!Lint(kitCSS: "").run(html: scripted).contains { $0.text.contains("sections have no id") })
-}

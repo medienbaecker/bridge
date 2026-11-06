@@ -207,7 +207,7 @@ Never also print the draft in the chat.
 </div>
 ```
 
-The user drags across the wipe. They can point at any pixel of either.
+The user drags across the wipe.
 
 Screenshots always take the full width, one under another: never side by
 side in `.compare` or a grid of your own, where each shrinks until nothing
@@ -245,14 +245,14 @@ percent of the widest.
 Never compute boxes, coordinates or arrows yourself. Write a `mermaid` block
 and Bridge draws it (with [Pele](https://pele.run), every Mermaid diagram
 type) in the window's colours, light and dark. In Markdown it is a fenced
-block; in HTML, `<pre><code class="language-mermaid">`. They can pin any box.
+block; in HTML, `<pre><code class="language-mermaid">`.
 
 ```mermaid
 flowchart LR
-  A([Agent writes page]) --> B[Bridge] --> C{Shared?}
-  C -->|yes| L[Link]:::hot
-  C -.->|no| S[Stays here]
-  B --> D[(shares.json)]
+  A([Agent writes page]) --> B[Bridge] --> C{Answered?}
+  C -->|yes| L[Agent's inbox]:::hot
+  C -.->|no| S[Waits]
+  B --> D[(list.json)]
 ```
 
 - `:::hot` makes a node the loud part. Mark the one or two that are the
@@ -363,7 +363,6 @@ to the page's folder, or absolute. Leave the block empty.
 
 In Markdown: a fence with `quote=site/templates/article.php:12-30` after the
 language. A path that cannot be read is printed when you present the page.
-Shared with someone else, the page carries only the quoted lines, not the file.
 
 A `pre` is already a panel. Never wrap it in `.evidence`: the kit paints
 nothing for a surface inside a surface, so the doubled box cannot appear,
@@ -430,8 +429,7 @@ After changing the site's CSS or templates, `bridge --reload learn.html`: the
 window does not reload a frame on its own.
 
 The frame earns its place by what is around it. For a site the user should
-only look at, give them the URL in your reply; present it directly
-(`bridge http://site.test/archive`) only when they should pin spots on it.
+only look at, give them the URL in your reply.
 
 A link clicked in the frame stays in the frame when it goes to the same host
 and opens in the user's browser when it goes elsewhere. Set
@@ -443,7 +441,7 @@ Any site loads in a frame unless it refuses to be framed with
 `X-Frame-Options` or CSP `frame-ancestors`, which every browser obeys.
 Presenting the page names a frame that refuses on stderr, and the page says
 so above the blank frame. Then present the URL on its own (it loads as the
-page, and the user can pin it), or put a local proxy in front of it that drops
+page), or put a local proxy in front of it that drops
 those two headers. A proxy that passes them through is still refused.
 
 ### Plan
@@ -454,7 +452,7 @@ screenshots of the peers your research looked at, the steps as a timeline,
 the choice as a Decision. Research findings become those pictures, not bullets
 under bullets. Keep prose to what no picture carries. Before presenting,
 `--shot` it and look at it as the user will. Nothing to answer: the user
-crosses it when they have read it, or leaves notes.
+crosses it when they have read it.
 
 ### Sound
 

@@ -8,8 +8,7 @@ public enum Request: Codable, Sendable {
     case uncross(location: String)
     case remove(location: String)
     case reset(location: String)
-    case reply(location: String, id: String, text: String)
-    case note(location: String, id: String, state: String)
+    case note(location: String, id: String, done: Bool)
     case collect(location: String, session: String)
     case js(location: String?, code: String)
     case command(name: String, argument: String?)
@@ -17,9 +16,6 @@ public enum Request: Codable, Sendable {
     case shot(path: String, screen: Bool)
     case render(location: String, path: String, width: Double?, site: String?, crop: [Double]?, scale: Double?, zoom: Double?)
     case reload(location: String)
-    case share(location: String)
-    case claim(location: String, session: String, cwd: String)
-    case peers
     case quit
 }
 

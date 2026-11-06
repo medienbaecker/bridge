@@ -97,26 +97,25 @@ public struct Lint {
             let value = String(html[m.inner])
             out.append(Finding(line: lineOf(html.distance(from: html.startIndex, to: m.whole.lowerBound)), level: .error, text: "`data-value` without `data-record` on the same element records nothing when clicked: put both on each option (`data-record=\"\(group.key)\" data-value=\"\(value)\"`) (pages.md, How recording works)"))
         }
+        let scripted = Self.ranges(#"(?is)<script[^>]*>(.*?)</script>"#, in: html).contains { html[$0.inner].contains("bridge.set") }
+        var unrecorded: Set<String> = []
+        for m in Self.ranges(#"(?i)<input\b(?=[^>]*\stype\s*=\s*["']?radio\b)[^>]*\sname\s*=\s*["']([^"']+)["'][^>]*>"#, in: html) where !scripted
+            && !Self.escaped(html, at: m.whole.lowerBound) && !code.contains(where: { $0.contains(m.whole.lowerBound) })
+            && html[m.whole].range(of: #"(?i)\sdata-record\b"#, options: .regularExpression) == nil
+            && !groups.contains(where: { $0.whole.contains(m.whole.lowerBound) }) {
+            let name = String(html[m.inner])
+            guard unrecorded.insert(name).inserted else { continue }
+            out.append(Finding(line: lineOf(html.distance(from: html.startIndex, to: m.whole.lowerBound)), level: .error, text: "radios without `data-record` on them or around them record nothing, so their pick never reaches you: wrap the group in `data-record=\"\(name)\"` (pages.md, How recording works)"))
+        }
         out += textWalls(html: html, lineOf: lineOf)
-        out += unnamedSections(html: html, lineOf: lineOf)
         return out.sorted { $0.line < $1.line }
     }
 
     static let blockWords = 40
-    static let pageWords = 250
+    static let pageWords = 120
+    static let wordsPerPicture = 60
+    static let mostWords = 400
     static let cardWords = 15
-
-    func unnamedSections(html: String, lineOf: (Int) -> Int) -> [Finding] {
-        let masked = Self.masked(html)
-        let headings = Self.ranges(#"(?i)<h[23]\b[^>]*>"#, in: masked).map(\.whole.lowerBound)
-        guard headings.count >= 2 else { return [] }
-        let named = Self.ranges(#"(?i)<(\w+)\b[^>]*\s(?:id|data-record)\s*=[^>]*>"#, in: masked).compactMap {
-            Self.element(in: masked, at: $0.whole, tag: String(masked[$0.inner]))
-        }
-        let bare = headings.filter { h in !named.contains { $0.lowerBound < h && $0.contains(h) } }
-        guard let first = bare.first else { return [] }
-        return [Finding(line: lineOf(masked.distance(from: masked.startIndex, to: first)), level: .warning, text: "\(bare.count) of \(headings.count) sections \(bare.count == 1 ? "has" : "have") no id, so a note on them says only `div @ x%, y%`: wrap each in <section id=\"…\"> named in the topic's words (SKILL.md, Notes and pins)")]
-    }
 
     func textWalls(html: String, lineOf: (Int) -> Int) -> [Finding] {
         guard html.range(of: #"(?i)<!doctype html|<html\b|<body\b|<p\b|<div\b"#, options: .regularExpression) != nil else { return [] }
@@ -146,7 +145,7 @@ public struct Lint {
             if Self.words(String(text[m.whole])) > Self.blockWords { walls.append(m.whole) }
         }
         for wall in walls {
-            out.append(Finding(line: lineOf(offset(wall.lowerBound)), level: .warning, text: "\(Self.words(String(text[wall]))) words in one block: show it instead (pages.md, Screenshots, Swatches, Evidence: code, diffs, bars) or cut it to one line"))
+            out.append(Finding(line: lineOf(offset(wall.lowerBound)), level: .error, text: "\(Self.words(String(text[wall]))) words in one block: show it instead (pages.md, Screenshots, Swatches, Evidence: code, diffs, bars) or cut it to one line"))
         }
 
         let code = Self.ranges(#"(?i)<pre\b"#, in: html).map { html.distance(from: html.startIndex, to: $0.whole.lowerBound) }
@@ -155,24 +154,48 @@ public struct Lint {
             return card.recorded && !(drawn.marks + code).contains { inside.contains($0) }
         }
         if let first = plain.first, let most = plain.map(\.words).max(), most > Self.cardWords {
-            out.append(Finding(line: lineOf(offset(first.whole.lowerBound)), level: .warning, text: "option cards that are only text (up to \(most) words): put the evidence in the card, a rendered preview, the real screenshot, a swatch or the diff, and keep the words to one line (pages.md, Decision)"))
+            out.append(Finding(line: lineOf(offset(first.whole.lowerBound)), level: .error, text: "option cards that are only text (up to \(most) words): put the evidence in the card, a rendered preview, the real screenshot, a swatch or the diff, and keep the words to one line (pages.md, Decision)"))
         }
 
-        let total = Self.words(text)
-        let visual = html.range(of: #"(?i)<(img|svg|canvas|video|iframe|table)\b|class\s*=\s*["'][^"']*\b(swatches|bars|bar|shots|wipe|color|dials)\b"#, options: .regularExpression) != nil
-        if total > Self.pageWords, !visual, drawn.pictures.isEmpty {
+        let folded = Self.ranges(#"(?is)<details\b[^>]*>(.*?)</details>"#, in: html).map { String(html[$0.inner]).replacingOccurrences(of: #"(?is)<(pre|script|style|svg)\b.*?</\1>"#, with: " ", options: .regularExpression) }
+        let total = Self.words(text) + folded.map(Self.words).reduce(0, +)
+        let pictures = drawn.count + Self.ranges(#"(?i)<table\b|\blanguage-mermaid\b"#, in: html).count
+        let allowed = min(Self.pageWords + Self.wordsPerPicture * pictures, Self.mostWords)
+        if total > allowed {
             let body = html.range(of: #"(?i)<body\b"#, options: .regularExpression).map { html.distance(from: html.startIndex, to: $0.lowerBound) } ?? 0
-            out.append(Finding(line: lineOf(body), level: .warning, text: "\(total) words and nothing to look at: show the thing (pages.md, Screenshots, Swatches, Evidence: code, diffs, bars), or put prose in your reply or a .md, not a page"))
+            let what = pictures == 0 ? "\(total) words and nothing drawn" : allowed == Self.mostWords ? "\(total) words, more than anyone reads on one page (\(Self.mostWords) at most)" : "\(total) words for \(pictures) picture\(pictures == 1 ? "" : "s") (a page carries about \(allowed))"
+            out.append(Finding(line: lineOf(body), level: .error, text: "\(what): draw it instead (a screenshot of the real thing, before/after, a diagram, bars, a demo they can drive) and cut the words to a line per picture (SKILL.md, Draw it)"))
         }
+        out += wordyDrawings(html: html, lineOf: lineOf)
         return out
+    }
+
+    func wordyDrawings(html: String, lineOf: (Int) -> Int) -> [Finding] {
+        Self.ranges(#"(?is)<svg\b[^>]*>(.*?)</svg>"#, in: html).compactMap { svg in
+            let inner = String(html[svg.inner])
+            let labels = Self.ranges(#"(?is)<text\b[^>]*>(.*?)</text>"#, in: inner).map { Self.words(String(inner[$0.inner])) }
+            let words = labels.reduce(0, +)
+            guard words > 30, words > labels.count * 3 else { return nil }
+            return Finding(line: lineOf(html.distance(from: html.startIndex, to: svg.whole.lowerBound)), level: .warning, text: "this drawing is mostly words (\(words) in \(labels.count) labels): draw what they mean (sizes, positions, colours, the real screenshot) and keep each label to a word or two")
+        }
+    }
+
+    public func run(markdown: String, name: String) -> [Finding] {
+        let prose = markdown.replacingOccurrences(of: #"(?s)```.*?```"#, with: " ", options: .regularExpression)
+        let pictures = Self.ranges(#"!\[|```mermaid|(?m)^\s*\|?\s*:?-{3,}"#, in: markdown).count
+        let topic = (name + " " + (Self.matches(#"(?m)^#{1,2}\s+(.+)$"#, in: markdown).first ?? "")).lowercased()
+        let words = Self.words(prose)
+        guard pictures == 0, words > Self.pageWords,
+              topic.range(of: #"plan|review|finding|question|audit|status|report|overview|summary|decision|option|proposal"#, options: .regularExpression) != nil else { return [] }
+        return [Finding(line: 1, level: .error, text: "a plan, review or set of questions in \(words) words of prose: write it as an .html page that draws it (the real screenshots, a mock with the real labels, the steps as a timeline) (pages.md, Plan)")]
     }
 
     /// Where the page draws something: media, the kit's visual shapes, and elements its own CSS
     /// or a style attribute paints (background, border, shadow) or gives a shape (aspect-ratio,
     /// width and height, a background image). `marks` are their offsets; `pictures` are the ones whose
-    /// text belongs to the picture: a shape, or a painted box with more drawing inside (a mockup).
+    /// text belongs to the picture: a shape, or a painted box with a real picture inside (a mockup).
     /// A painted box holding only prose is a callout, and its words still count.
-    static func drawn(in text: String, css: String) -> (marks: [Int], pictures: [Range<Int>]) {
+    static func drawn(in text: String, css: String) -> (marks: [Int], pictures: [Range<Int>], count: Int) {
         var painted: Set<String> = [], shaped: Set<String> = []
         let bare = css.replacingOccurrences(of: #"(?s)/\*.*?\*/"#, with: "", options: .regularExpression)
         for rule in ranges(#"([^{}]+)\{([^{}]*)\}"#, in: bare) {
@@ -203,9 +226,9 @@ public struct Lint {
         }
         let pictures = found.compactMap { d -> Range<Int>? in
             guard let r = d.range, !d.card else { return nil }
-            return d.picture || found.contains { $0.at > r.lowerBound && r.contains($0.at) } ? r : nil
+            return d.picture || found.contains { $0.picture && $0.at > r.lowerBound && r.contains($0.at) } ? r : nil
         }
-        return (found.map(\.at), pictures)
+        return (found.map(\.at), pictures, found.filter(\.picture).count)
     }
 
     static func paints(_ decls: String) -> Bool {
@@ -265,7 +288,7 @@ public struct Lint {
     static func words(_ html: String) -> Int {
         html.replacingOccurrences(of: #"<[^>]+>|&#?\w+;"#, with: " ", options: .regularExpression)
             .split(whereSeparator: \.isWhitespace)
-            .filter { $0.contains { $0.isLetter || $0.isNumber } }.count
+            .filter { $0.contains { $0.isLetter } }.count
     }
 
     static func suggest(_ c: String, _ vocab: Set<String>) -> String {

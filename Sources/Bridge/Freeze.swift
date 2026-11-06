@@ -1,0 +1,427 @@
+import AppKit
+import ApplicationServices
+import BridgeCore
+import ScreenCaptureKit
+import Vision
+import WebKit
+
+final class FreezePanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+}
+
+final class Freeze: NSObject {
+    enum Outcome: Equatable { case cancel, draft, send(String) }
+
+    nonisolated(unsafe) static var current: Freeze?
+    nonisolated(unsafe) static var starting = false
+    static var colour: NSColor { .controlAccentColor }
+    static var cursor: NSCursor {
+        let accent = colour.usingColorSpace(.sRGB) ?? colour
+        let fill = String(format: "#%02X%02X%02X", Int(accent.redComponent * 255), Int(accent.greenComponent * 255), Int(accent.blueComponent * 255))
+        let svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"28\" height=\"32\" viewBox=\"0 0 28 32\"><path d=\"M14 29.6 L6.2 21.8 A11 11 0 1 1 21.8 21.8 Z\" fill=\"\(fill)\" stroke=\"white\" stroke-width=\"2\" stroke-linejoin=\"round\"/><path d=\"M14 9.5v8M10 13.5h8\" stroke=\"white\" stroke-width=\"2\" stroke-linecap=\"round\"/></svg>"
+        guard let image = NSImage(data: Data(svg.utf8)) else { return .crosshair }
+        return NSCursor(image: image, hotSpot: CGPoint(x: 14, y: 29))
+    }
+
+    let screen: NSScreen
+    let image: CGImage
+    let windows: [[String: Any]]
+    let page: Page
+    let panel: FreezePanel
+    let overlay = FreezeView()
+    let recipients: [Model.Recipient]
+    var previous: NSRunningApplication?
+    var highlight: CGRect?
+    var pointer: CGPoint?
+    var looking = false
+    var awake: Set<pid_t> = []
+    var onFinish: (Freeze, Outcome) -> Void = { _, _ in }
+
+    let picked: String?
+
+    init(screen: NSScreen, image: CGImage, windows: [[String: Any]], recipients: [Model.Recipient], picked: String?, page: Page) {
+        self.screen = screen
+        self.image = image
+        self.windows = windows
+        self.page = page
+        let held = recipients.filter { $0.session == picked }
+        self.recipients = Array((held + recipients.filter { $0.session != picked }).prefix(9))
+        self.picked = held.first?.session
+        panel = FreezePanel(contentRect: screen.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        super.init()
+        panel.level = .screenSaver
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.isReleasedWhenClosed = false
+        panel.hidesOnDeactivate = false
+        panel.animationBehavior = .none
+        panel.acceptsMouseMovedEvents = true
+        panel.setFrame(screen.frame, display: false)
+        panel.backgroundColor = .clear
+        panel.isOpaque = false
+        let backdrop = NSView(frame: CGRect(origin: .zero, size: screen.frame.size))
+        backdrop.wantsLayer = true
+        backdrop.layer?.contents = image
+        backdrop.layer?.contentsGravity = .resize
+        overlay.freeze = self
+        overlay.frame = backdrop.bounds
+        backdrop.addSubview(overlay)
+        page.webView.removeFromSuperview()
+        page.webView.frame = backdrop.bounds
+        backdrop.addSubview(page.webView)
+        panel.contentView = backdrop
+    }
+
+    static func screenUnderPointer() -> NSScreen? {
+        if Env.test, let named = NSScreen.screens.first(where: { $0.localizedName == ProcessInfo.processInfo.environment["BRIDGE_SCREEN"] }) { return named }
+        let mouse = NSEvent.mouseLocation
+        return NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
+    }
+
+    static func start(recipients: [Model.Recipient], picked: String?, page: Page, onFinish: @escaping (Freeze, Outcome) -> Void) async throws {
+        guard current == nil, !starting, let screen = screenUnderPointer() else { return }
+        starting = true
+        defer { starting = false }
+        _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": !Env.test] as CFDictionary)
+        AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 0.25)
+        let previous = NSWorkspace.shared.frontmostApplication.flatMap { $0 == .current ? nil : $0 }
+        let top = NSScreen.screens.first?.frame.maxY ?? 0
+        let image = try await SCScreenshotManager.captureImage(in: CGRect(x: screen.frame.minX, y: top - screen.frame.maxY, width: screen.frame.width, height: screen.frame.height))
+        let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
+        page.startFreeze()
+        let freeze = Freeze(screen: screen, image: image, windows: windows, recipients: recipients, picked: picked, page: page)
+        freeze.onFinish = onFinish
+        for pid in Set(windows.compactMap { $0[kCGWindowOwnerPID as String] as? Int32 }) where pid != getpid() && freeze.awake.insert(pid).inserted {
+            Task { await wake(pid) }
+        }
+        current = freeze
+        freeze.previous = previous
+        freeze.panel.orderFrontRegardless()
+        NSApp.activate()
+        freeze.panel.makeKeyAndOrderFront(nil)
+        freeze.panel.makeFirstResponder(page.webView)
+        let list = freeze.recipients.map { ["session": $0.session, "name": $0.name.isEmpty ? $0.page : $0.name, "project": $0.project.isEmpty ? "No project" : $0.project, "busy": $0.busy, "picked": $0.session == freeze.picked] as [String: Any] }
+        _ = try? await page.run("__bridge.agents(list)", ["list": list], in: Page.world)
+        await freeze.setCursor()
+    }
+
+    func setCursor() async {
+        let mouse = NSEvent.mouseLocation
+        let at = ["x": mouse.x - screen.frame.minX, "y": screen.frame.maxY - mouse.y]
+        let pin = try? await page.run("return __bridge.pinsAt(x, y)", at, in: Page.world)
+        (pin == .bool(false) ? NSCursor.arrow : Self.cursor).set()
+    }
+
+    // MARK: Elements
+
+    func global(_ point: CGPoint) -> CGPoint {
+        let top = NSScreen.screens.first?.frame.maxY ?? 0
+        return CGPoint(x: screen.frame.minX + point.x, y: top - screen.frame.maxY + point.y)
+    }
+
+    func local(_ rect: CGRect) -> CGRect {
+        let top = NSScreen.screens.first?.frame.maxY ?? 0
+        return rect.offsetBy(dx: -screen.frame.minX, dy: -(top - screen.frame.maxY))
+    }
+
+    func window(at point: CGPoint) -> [String: Any]? {
+        windows.first { info in (info[kCGWindowLayer as String] as? Int ?? 0) < 1000 && Self.frame(of: info).contains(point) }
+    }
+
+    static func frame(of window: [String: Any]) -> CGRect {
+        let bounds = window[kCGWindowBounds as String] as? [String: CGFloat] ?? [:]
+        return CGRect(x: bounds["X"] ?? 0, y: bounds["Y"] ?? 0, width: bounds["Width"] ?? 0, height: bounds["Height"] ?? 0)
+    }
+
+    nonisolated static func attribute(_ element: AXUIElement, _ name: String) -> AnyObject? {
+        var value: AnyObject?
+        return AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success ? value : nil
+    }
+
+    func element(at point: CGPoint, reading: Bool = false) -> (frame: CGRect?, description: [String: JSONValue]) {
+        let spot = global(point)
+        guard let info = window(at: spot), let pid = info[kCGWindowOwnerPID as String] as? Int32 else { return (nil, [:]) }
+        var out: [String: JSONValue] = ["app": .string(info[kCGWindowOwnerName as String] as? String ?? "")]
+        if let title = info[kCGWindowName as String] as? String, !title.isEmpty { out["window"] = .string(title) }
+        let frame = pid == getpid() ? nil : accessible(at: spot, in: pid, into: &out)
+        if reading, out["label"] == nil {
+            let small = frame.map { $0.width < 800 && $0.height < 240 } ?? false
+            let area = small ? frame! : CGRect(x: point.x - 160, y: point.y - 16, width: 320, height: 32)
+            if let text = read(area) { out["label"] = .string(text); out["labelFrom"] = .string("pixels") }
+        }
+        return (frame, out)
+    }
+
+    func accessible(at spot: CGPoint, in pid: pid_t, into out: inout [String: JSONValue]) -> CGRect? {
+        var hit: AXUIElement?
+        guard AXIsProcessTrusted(), AXUIElementCopyElementAtPosition(AXUIElementCreateApplication(pid), Float(spot.x), Float(spot.y), &hit) == .success, let hit else { return nil }
+        if let role = Self.attribute(hit, "AXRole") as? String { out["role"] = .string(role.replacingOccurrences(of: "AX", with: "").lowercased()) }
+        if let label = Self.name(of: hit) { out["label"] = .string(label) }
+        var node = Self.attribute(hit, "AXParent") as! AXUIElement?
+        var web: AXUIElement?
+        for _ in 0..<40 {
+            guard let current = node else { break }
+            if Self.attribute(current, "AXRole") as? String == "AXWebArea" { web = current; break }
+            node = Self.attribute(current, "AXParent") as! AXUIElement?
+        }
+        if let web {
+            if let id = Self.attribute(hit, "AXDOMIdentifier") as? String, !id.isEmpty { out["id"] = .string(id) }
+            if let classes = Self.attribute(hit, "AXDOMClassList") as? [String], !classes.isEmpty { out["classes"] = .array(classes.map { .string($0) }) }
+            if let url = Self.attribute(web, "AXURL") as? URL { out["url"] = .string(url.absoluteString) }
+        }
+        return Self.bounds(of: hit).map(local)
+    }
+
+    nonisolated static func bounds(of element: AXUIElement) -> CGRect? {
+        guard let position = attribute(element, "AXPosition"), let size = attribute(element, "AXSize") else { return nil }
+        var origin = CGPoint.zero, extent = CGSize.zero
+        AXValueGetValue(position as! AXValue, .cgPoint, &origin)
+        AXValueGetValue(size as! AXValue, .cgSize, &extent)
+        return CGRect(origin: origin, size: extent)
+    }
+
+    @concurrent nonisolated static func wake(_ pid: pid_t) async {
+        AXUIElementSetAttributeValue(AXUIElementCreateApplication(pid), "AXManualAccessibility" as CFString, kCFBooleanTrue)
+    }
+
+    @concurrent nonisolated static func bounds(at spot: CGPoint, in pid: pid_t) async -> CGRect? {
+        var hit: AXUIElement?
+        guard AXUIElementCopyElementAtPosition(AXUIElementCreateApplication(pid), Float(spot.x), Float(spot.y), &hit) == .success, let hit else { return nil }
+        return bounds(of: hit)
+    }
+
+    static func text(_ element: AXUIElement) -> String? {
+        for name in ["AXTitle", "AXDescription", "AXValue", "AXPlaceholderValue", "AXHelp"] {
+            if let text = attribute(element, name) as? String {
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { return String(trimmed.prefix(80)) }
+            }
+        }
+        return nil
+    }
+
+    static func name(of element: AXUIElement) -> String? {
+        if let own = text(element) { return own }
+        if let label = attribute(element, "AXTitleUIElement"), CFGetTypeID(label) == AXUIElementGetTypeID(), let text = text(label as! AXUIElement) { return text }
+        guard let size = attribute(element, "AXSize") else { return nil }
+        var extent = CGSize.zero
+        AXValueGetValue(size as! AXValue, .cgSize, &extent)
+        guard extent.width <= 400, extent.height <= 80 else { return nil }
+        var queue = (attribute(element, "AXChildren") as? [AXUIElement]) ?? []
+        var looked = 0
+        while !queue.isEmpty, looked < 30 {
+            let child = queue.removeFirst()
+            looked += 1
+            if let text = text(child) { return text }
+            queue += (attribute(child, "AXChildren") as? [AXUIElement]) ?? []
+        }
+        return nil
+    }
+
+    func read(_ frame: CGRect) -> String? {
+        guard frame.width > 4, frame.height > 4 else { return nil }
+        let scale = CGFloat(image.width) / screen.frame.width
+        let pixels = CGRect(x: frame.minX * scale, y: frame.minY * scale, width: frame.width * scale, height: frame.height * scale).integral
+        guard let crop = image.cropping(to: pixels) else { return nil }
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        try? VNImageRequestHandler(cgImage: crop).perform([request])
+        let lines = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
+        let text = lines.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? nil : String(text.prefix(80))
+    }
+
+    // MARK: Notes
+
+    var notes: [Comment] { page.sidecar.comments }
+
+    func hover(_ point: CGPoint) {
+        pointer = point
+        if !looking { lookUp() }
+    }
+
+    func lookUp() {
+        guard let point = pointer else { return }
+        let spot = global(point)
+        guard let info = window(at: spot), let pid = info[kCGWindowOwnerPID as String] as? Int32, pid == getpid() || AXIsProcessTrusted() else { return show(nil, for: point) }
+        let whole = Self.frame(of: info)
+        let number = info[kCGWindowNumber as String] as? Int ?? 0
+        looking = true
+        let asleep = awake.insert(pid).inserted
+        Task {
+            if asleep, pid != getpid() { await Self.wake(pid) }
+            let found = pid == getpid() ? await own(at: spot, in: number) : await Self.bounds(at: spot, in: pid)
+            let frame = found.flatMap { $0.width * $0.height < whole.width * whole.height * 0.8 ? $0 : nil }
+            looking = false
+            show(frame.map(local), for: point)
+            if pointer != point { lookUp() }
+        }
+    }
+
+    static func view(at spot: CGPoint, in number: Int) -> (window: NSWindow, view: NSView, inWindow: CGPoint)? {
+        let top = NSScreen.screens.first?.frame.maxY ?? 0
+        guard let window = NSApp.windows.first(where: { $0.windowNumber == number }), let frame = window.contentView?.superview else { return nil }
+        let inWindow = window.convertPoint(fromScreen: CGPoint(x: spot.x, y: top - spot.y))
+        guard let view = frame.hitTest(frame.superview?.convert(inWindow, from: nil) ?? inWindow) else { return nil }
+        return (window, view, inWindow)
+    }
+
+    static func css(_ inWindow: CGPoint, in web: WKWebView) -> CGPoint {
+        let at = web.convert(inWindow, from: nil)
+        let inset = web.obscuredContentInsets
+        return CGPoint(x: (at.x - inset.left) / web.pageZoom, y: (at.y - inset.top) / web.pageZoom)
+    }
+
+    func own(at spot: CGPoint, in number: Int) async -> CGRect? {
+        let top = NSScreen.screens.first?.frame.maxY ?? 0
+        guard let (window, view, inWindow) = Self.view(at: spot, in: number) else { return nil }
+        var rect = view.convert(view.bounds, to: nil)
+        if let web = sequence(first: view, next: \.superview).first(where: { $0 is WKWebView }) as? WKWebView {
+            let zoom = web.pageZoom
+            let at = Self.css(inWindow, in: web)
+            let found = try? await web.evaluateJavaScript("(() => { const e = document.elementFromPoint(\(at.x), \(at.y)); if (!e || e === document.body || e === document.documentElement) return null; const r = e.getBoundingClientRect(); return [r.left, r.top, r.width, r.height] })()") as? [Double]
+            guard let found, found.count == 4 else { return nil }
+            let inset = web.obscuredContentInsets
+            rect = web.convert(CGRect(x: found[0] * zoom + inset.left, y: found[1] * zoom + inset.top, width: found[2] * zoom, height: found[3] * zoom), to: nil)
+        }
+        let screen = window.convertToScreen(rect)
+        return CGRect(x: screen.minX, y: top - screen.maxY, width: screen.width, height: screen.height)
+    }
+
+    func show(_ frame: CGRect?, for point: CGPoint) {
+        guard pointer == point, frame != highlight else { return }
+        highlight = frame
+        overlay.needsDisplay = true
+    }
+
+    func unhover() {
+        pointer = nil
+        guard highlight != nil else { return }
+        highlight = nil
+        overlay.needsDisplay = true
+    }
+
+    static func number(_ anchor: JSONValue, _ key: String, _ fallback: Double) -> Double {
+        if case .object(let o) = anchor, case .number(let n)? = o[key] { return n }
+        return fallback
+    }
+
+    func area(of note: Comment) -> (spot: CGPoint, box: CGRect?) {
+        let size = screen.frame.size
+        let spot = CGPoint(x: Self.number(note.anchor, "x", 0.5) * size.width, y: Self.number(note.anchor, "y", 0.5) * size.height)
+        let w = Self.number(note.anchor, "w", 0), h = Self.number(note.anchor, "h", 0)
+        return (spot, w > 0 && h > 0 ? CGRect(x: spot.x, y: spot.y, width: w * size.width, height: h * size.height) : nil)
+    }
+
+    func describe(_ anchor: JSONValue) -> String {
+        let probe = Comment(id: "", text: "", target: "", anchor: anchor, version: 1)
+        let (spot, box) = area(of: probe)
+        let found = element(at: box.map { CGPoint(x: $0.midX, y: $0.midY) } ?? spot, reading: true).description
+        func string(_ key: String) -> String? { if case .string(let s)? = found[key] { s } else { nil } }
+        let what = [string("role"), string("label").map { "\"\($0)\"" }].compactMap { $0 }.joined(separator: " ")
+        let place = string("url") ?? string("window")
+        return [what.isEmpty ? nil : what, string("app"), place].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    // MARK: Sending
+
+    func send(to session: String?) {
+        guard !notes.isEmpty else { return }
+        end(session.map { .send($0) } ?? .draft)
+    }
+
+    func cancel() { end(.cancel) }
+
+    func end(_ outcome: Outcome) {
+        Self.current = nil
+        let panel = panel
+        page.call("__bridge.leave()")
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.16
+            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            panel.animator().alphaValue = 0
+        }, completionHandler: {
+            panel.orderOut(nil)
+            self.onFinish(self, outcome)
+        })
+        if outcome != .draft { previous?.activate() }
+    }
+
+    // MARK: Output
+
+    func crop(_ note: Comment) -> Data? {
+        guard let box = area(of: note).box else { return nil }
+        let scale = CGFloat(image.width) / screen.frame.width
+        guard let cut = image.cropping(to: CGRect(x: box.minX * scale, y: box.minY * scale, width: box.width * scale, height: box.height * scale).integral) else { return nil }
+        return NSBitmapImageRep(cgImage: cut).representation(using: .png, properties: [:])
+    }
+
+    func annotated() -> Data? {
+        guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: image.width, pixelsHigh: image.height, bitsPerSample: 8, samplesPerPixel: 4,
+                                         hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { return nil }
+        guard let context = NSGraphicsContext(bitmapImageRep: rep)?.cgContext else { return nil }
+        context.translateBy(x: 0, y: CGFloat(image.height))
+        context.scaleBy(x: CGFloat(image.width) / screen.frame.width, y: -CGFloat(image.height) / screen.frame.height)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
+        NSImage(cgImage: image, size: screen.frame.size).draw(in: CGRect(origin: .zero, size: screen.frame.size), from: .zero, operation: .copy, fraction: 1, respectFlipped: true, hints: nil)
+        for (index, note) in notes.enumerated() {
+            let (spot, box) = area(of: note)
+            FreezeView.draw(number: index + 1, at: spot, box: box)
+        }
+        NSGraphicsContext.restoreGraphicsState()
+        return rep.representation(using: .png, properties: [:])
+    }
+}
+
+final class FreezeView: NSView {
+    weak var freeze: Freeze?
+
+    override var isFlipped: Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let frame = freeze?.highlight else { return }
+        let path = NSBezierPath(roundedRect: frame.insetBy(dx: -2, dy: -2), xRadius: 4, yRadius: 4)
+        Freeze.colour.withAlphaComponent(0.08).setFill()
+        path.fill()
+        Freeze.colour.withAlphaComponent(0.6).setStroke()
+        path.lineWidth = 1.5
+        path.stroke()
+    }
+
+    static func draw(number: Int, at spot: CGPoint, box: CGRect?) {
+        if let box {
+            let area = NSBezierPath(roundedRect: box, xRadius: 4, yRadius: 4)
+            Freeze.colour.setStroke()
+            area.lineWidth = 2
+            area.stroke()
+        }
+        let drop = NSBezierPath()
+        drop.move(to: CGPoint(x: -11, y: 11))
+        drop.line(to: CGPoint(x: -11, y: 0))
+        drop.appendArc(withCenter: .zero, radius: 11, startAngle: 180, endAngle: 450)
+        drop.close()
+        let place = NSAffineTransform()
+        place.translateX(by: spot.x, yBy: spot.y - 11 * 2.squareRoot())
+        place.rotate(byDegrees: -45)
+        drop.transform(using: place as AffineTransform)
+        NSGraphicsContext.saveGraphicsState()
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.35)
+        shadow.shadowBlurRadius = 3
+        shadow.shadowOffset = NSSize(width: 0, height: -1)
+        shadow.set()
+        let ring = drop.copy() as! NSBezierPath
+        ring.lineWidth = 4
+        ring.lineJoinStyle = .round
+        NSColor.white.setStroke()
+        ring.stroke()
+        NSGraphicsContext.restoreGraphicsState()
+        Freeze.colour.setFill()
+        drop.fill()
+        let centre = CGPoint(x: spot.x, y: spot.y - 11 * 2.squareRoot())
+        let text = NSAttributedString(string: "\(number)", attributes: [.font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: NSColor.white])
+        let size = text.size()
+        text.draw(at: CGPoint(x: centre.x - size.width / 2, y: centre.y - size.height / 2))
+    }
+}

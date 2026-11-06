@@ -35,9 +35,9 @@ final class Watcher {
 
     func fire() {
         pending?.cancel()
-        let item = DispatchWorkItem { [self] in
-            open()
-            onChange()
+        let item = DispatchWorkItem { [weak self] in
+            self?.open()
+            self?.onChange()
         }
         pending = item
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.04, execute: item)

@@ -4,8 +4,6 @@ import BridgeCore
 final class PageWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate, NSToolbarItemValidation, NSMenuItemValidation {
     let page: Page
     let content = ContentController()
-    let notes = NotesController()
-    let notesPopover = NSPopover()
     var onClose: () -> Void = {}
 
     init(page: Page, near main: NSWindow?) {
@@ -30,14 +28,6 @@ final class PageWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         toolbar.displayMode = .iconOnly
         toolbar.allowsUserCustomization = false
         window.toolbar = toolbar
-
-        notes.page = page
-        notesPopover.contentViewController = notes
-        notesPopover.behavior = .transient
-        notes.onSelect = { [weak self] id in
-            self?.notesPopover.performClose(nil)
-            self?.page.reveal(id)
-        }
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -46,12 +36,11 @@ final class PageWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         content.show(page: page)
         window?.title = page.title
         window?.subtitle = page.bannerText ?? ""
-        if notesPopover.isShown { notes.reload(); notesPopover.contentSize = notes.fittingSize }
         window?.toolbar?.validateVisibleItems()
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.flexibleSpace, MainWindow.point, MainWindow.notesId, .space, MainWindow.send]
+        [.flexibleSpace, MainWindow.point, .space, MainWindow.send]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -64,8 +53,7 @@ final class PageWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         item.target = self
         item.action = #selector(toolbarAction(_:))
         switch id {
-        case MainWindow.point: item.label = "Point"; item.image = MainWindow.pointImage(on: false)
-        case MainWindow.notesId: item.label = "Notes"; item.image = MainWindow.symbol("text.bubble", "Notes")
+        case MainWindow.point: item.label = "Point"; item.image = MainWindow.symbol("mappin.and.ellipse", "Point")
         case MainWindow.send: MainWindow.styleSend(item, "Send")
         default: return nil
         }
@@ -74,10 +62,6 @@ final class PageWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
 
     func validateToolbarItem(_ item: NSToolbarItem) -> Bool {
         switch item.itemIdentifier {
-        case MainWindow.point:
-            item.image = MainWindow.pointImage(on: page.pointing)
-            return page.viewingVersion == nil && page.kind != .pdf
-        case MainWindow.notesId: return !page.sidecar.comments.isEmpty
         case MainWindow.send:
             MainWindow.styleSend(item, page.sendLabel)
             item.toolTip = page.sendToolTip
@@ -92,10 +76,9 @@ final class PageWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         switch item.representedObject as? String {
-        case "point": return page.viewingVersion == nil && page.kind != .pdf
-        case "send": return page.viewingVersion == nil
+        case "send": return page.viewingVersion == nil && !(page.isDraft && page.sidecar.answers.isEmpty)
         case "reveal": return page.kind != .url
-        case "zoom-in", "zoom-out", "zoom-reset": return true
+        case "point", "zoom-in", "zoom-out", "zoom-reset": return true
         case "previous": return (page.viewingVersion ?? page.sidecar.version) > 1
         case "next": return page.viewingVersion != nil
         default: return item.representedObject == nil
@@ -104,14 +87,8 @@ final class PageWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
 
     func perform(_ command: String) {
         switch command {
-        case "point": page.setPointing(!page.pointing)
-        case "send": page.send()
-        case "notes":
-            if notesPopover.isShown { notesPopover.performClose(nil); break }
-            guard let item = window?.toolbar?.items.first(where: { $0.itemIdentifier == MainWindow.notesId }) else { break }
-            notes.reload()
-            notesPopover.contentSize = notes.fittingSize
-            notesPopover.show(relativeTo: item)
+        case "point": (NSApp.delegate as? AppDelegate)?.freeze()
+        case "send": (NSApp.delegate as? AppDelegate)?.window.send(page, from: window)
         case "zoom-in": page.zoom = min(3, page.zoom + 0.1)
         case "zoom-out": page.zoom = max(0.5, page.zoom - 0.1)
         case "zoom-reset": page.zoom = 1

@@ -7,7 +7,17 @@ enum Notify {
     nonisolated(unsafe) static var asked = false
 
     static func arrived(_ entry: BridgeEntry?) {
-        guard let entry, Bundle.main.bundleIdentifier != nil else { return }
+        guard let entry else { return }
+        post(entry, body: "Bridge from \(entry.projectName)", sound: Settings.arrivalSound)
+    }
+
+    static func updated(_ entry: BridgeEntry?) {
+        guard let entry, Settings.updateNotices else { return }
+        post(entry, body: "Updated · \(entry.projectName)", sound: false)
+    }
+
+    static func post(_ entry: BridgeEntry, body: String, sound: Bool) {
+        guard Bundle.main.bundleIdentifier != nil else { return }
         let center = UNUserNotificationCenter.current()
         if !asked {
             asked = true
@@ -15,8 +25,8 @@ enum Notify {
         }
         let content = UNMutableNotificationContent()
         content.title = entry.title
-        content.body = "Bridge from \(entry.projectName)"
-        content.sound = .default
+        content.body = body
+        if sound { content.sound = .default }
         content.userInfo = ["location": entry.location]
         center.add(UNNotificationRequest(identifier: entry.id, content: content, trigger: nil)) { _ in }
     }

@@ -4,9 +4,8 @@ import BridgeCore
 /// The left column: the two smart scopes, then the projects with their waiting
 /// counts, and the update row at its foot.
 final class ProjectsController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
-    enum Row: Equatable { case scope(Scope), heading(String), person(String), more(Int) }
+    enum Row: Equatable { case scope(Scope), gap, more(Int) }
 
-    var sharing: Sharing? { (NSApp.delegate as? AppDelegate)?.sharing }
 
     let model: Model
     let table = NSTableView()
@@ -39,7 +38,6 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
         table.backgroundColor = .clear
         table.dataSource = self
         table.delegate = self
-        table.registerForDraggedTypes([SidebarController.rowType])
         table.translatesAutoresizingMaskIntoConstraints = false
         scroll.documentView = table
         table.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor).isActive = true
@@ -64,19 +62,15 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
     func reload() {
         reloading = true
         defer { reloading = false }
-        rows = [.scope(.waiting), .scope(.all), .person("")]
-        let mine = model.listing.projects.filter { !$0.hasPrefix("Shared by ") }
+        let drafts = Paths.drafts.path
+        rows = [.scope(.waiting), .scope(.all), .gap]
+        if model.listing.projects.contains(drafts) { rows += [.scope(.project(drafts)), .gap] }
+        let mine = model.listing.projects.filter { $0 != drafts }
         let active = mine.filter { p in model.listing.bridges.contains { $0.project == p && !$0.crossed } }
         rows += active.map { .scope(.project($0)) }
         let rest = mine.filter { !active.contains($0) }
         if !rest.isEmpty {
             if model.showAllProjects { rows += rest.map { .scope(.project($0)) }; rows.append(.more(0)) } else { rows.append(.more(rest.count)) }
-        }
-        if let sharing {
-            for peer in sharing.link.peers where !sharing.link.refused.contains(peer.id) {
-                rows.append(.person(peer.id))
-                if model.listing.projects.contains("Shared by \(peer.name)") { rows.append(.scope(.project("Shared by \(peer.name)"))) }
-            }
         }
         table.reloadData()
         if let i = rows.firstIndex(of: .scope(model.scope)) { table.selectRowIndexes([i], byExtendingSelection: false) }
@@ -139,7 +133,7 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
     func numberOfRows(in tableView: NSTableView) -> Int { rows.count }
 
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
-        if case .heading = rows[row] { return 24 }
+        if rows[row] == .gap { return 14 }
         return 28
     }
 
@@ -154,51 +148,10 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
         }
     }
 
-    func tableView(_ tableView: NSTableView, validateDrop info: NSDraggingInfo, proposedRow row: Int, proposedDropOperation op: NSTableView.DropOperation) -> NSDragOperation {
-        guard op == .on, row < rows.count else { return [] }
-        switch rows[row] {
-        case .person(let id): return id.isEmpty || sharing?.link.sessions[id] == nil ? [] : .move
-        default: return []
-        }
-    }
-
-    func tableView(_ tableView: NSTableView, acceptDrop info: NSDraggingInfo, row: Int, dropOperation: NSTableView.DropOperation) -> Bool {
-        let locations = (info.draggingPasteboard.pasteboardItems ?? []).compactMap { $0.string(forType: SidebarController.rowType) }
-        drop(locations, on: rows[row])
-        return !locations.isEmpty
-    }
-
-    func drop(_ locations: [String], on row: Row) {
-        for location in locations {
-            switch row {
-            case .person: _ = try? sharing?.share(location)
-            default: break
-            }
-        }
-    }
-
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         switch rows[row] {
-        case .heading(let title):
-            let cell = tableView.makeView(withIdentifier: .init("heading"), owner: nil) as? NSTableCellView ?? SidebarController.headerCell()
-            cell.identifier = .init("heading")
-            cell.textField?.stringValue = title
-            return cell
-        case .person(let id):
-            let cell = tableView.makeView(withIdentifier: .init("heading"), owner: nil) as? NSTableCellView ?? SidebarController.headerCell()
-            cell.identifier = .init("heading")
-            if id.isEmpty {
-                cell.textField?.stringValue = Person.current.capitalized
-                cell.toolTip = nil
-            } else {
-                let connected = sharing?.link.sessions[id] != nil
-                let label = NSMutableAttributedString(string: (sharing?.link.peers.first { $0.id == id }?.name.capitalized ?? "Mac") + "  ",
-                                                      attributes: [.font: cell.textField?.font ?? .systemFont(ofSize: 11, weight: .semibold), .foregroundColor: NSColor.secondaryLabelColor])
-                label.append(NSAttributedString(string: connected ? "●" : "○", attributes: [.font: NSFont.systemFont(ofSize: 9), .foregroundColor: connected ? NSColor.systemGreen : NSColor.tertiaryLabelColor]))
-                cell.textField?.attributedStringValue = label
-                cell.toolTip = connected ? "Connected. Drop a page here to share it" : "Not connected right now"
-            }
-            return cell
+        case .gap:
+            return NSView()
         case .more(let n):
             let cell = tableView.makeView(withIdentifier: ScopeCell.id, owner: nil) as? ScopeCell ?? ScopeCell()
             cell.more(n == 0 ? "Fewer projects" : "\(n) more project\(n == 1 ? "" : "s")…")
@@ -229,22 +182,13 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
     func key(_ row: Row) -> String? {
         switch row {
         case .scope(let s): return s.key
-        case .person(let id): return id.isEmpty ? "me" : "person:" + (sharing?.link.peers.first { $0.id == id }?.name ?? id)
         case .more: return "more"
-        case .heading: return nil
+        case .gap: return nil
         }
     }
 
     func dump() -> [String: JSONValue] {
-        var people: [JSONValue] = []
-        for row in rows {
-            switch row {
-            case .person(let id) where id.isEmpty: people.append(.object(["key": .string("me"), "name": .string(Person.current)]))
-            case .person(let id): people.append(.object(["key": .string(key(row) ?? ""), "connected": .bool(sharing?.link.sessions[id] != nil)]))
-            default: break
-            }
-        }
-        return ["scope": .string(model.scope.key), "vibrant": .bool(vibrant), "people": .array(people), "rows": .array(rows.compactMap { row in
+        return ["scope": .string(model.scope.key), "vibrant": .bool(vibrant), "rows": .array(rows.compactMap { row in
             guard case .scope(let s) = row else { return nil }
             let i = rows.firstIndex(of: row)!
             let f = table.convert(table.rect(ofRow: i), to: nil)
@@ -293,7 +237,7 @@ final class ScopeCell: NSTableCellView {
         switch scope {
         case .waiting: return "Waiting"
         case .all: return "All"
-        case .project(let p): return p.hasPrefix("Shared by ") ? "Shared with you" : (p as NSString).lastPathComponent
+        case .project(let p): return p == Paths.drafts.path ? "Drafts" : (p as NSString).lastPathComponent
         }
     }
 
@@ -312,13 +256,6 @@ final class ScopeCell: NSTableCellView {
         count.stringValue = ""
     }
 
-    func person(_ text: String, tint: NSColor) {
-        icon.image = NSImage(systemSymbolName: "person.crop.circle.fill", accessibilityDescription: text)?.withSymbolConfiguration(.init(pointSize: 13, weight: .regular))
-        icon.contentTintColor = tint
-        name.stringValue = text
-        count.stringValue = ""
-    }
-
     func show(_ scope: Scope, model: Model) {
         toolTip = nil
         name.textColor = .labelColor
@@ -327,7 +264,7 @@ final class ScopeCell: NSTableCellView {
         switch scope {
         case .waiting: symbol = "tray.full"
         case .all: symbol = "tray.2"
-        case .project: symbol = "folder"
+        case .project(let p): symbol = p == Paths.drafts.path ? "doc" : "folder"
         }
         icon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: Self.name(of: scope, model: model))?.withSymbolConfiguration(.init(pointSize: 13, weight: .regular))
         name.stringValue = Self.name(of: scope, model: model)
