@@ -257,7 +257,7 @@ final class Model {
 
     @discardableResult func newBridge(capture: Freeze? = nil) -> String? {
         let folder = Paths.drafts
-        if capture == nil, let empty = listing.bridges.first(where: { isDraft($0) && !$0.crossed && (pages[$0.location]?.sidecar ?? Sidecar.peek(Paths.sidecar(for: $0.location))).answers.isEmpty }) {
+        if capture == nil, let empty = listing.bridges.first(where: { isDraft($0) && !$0.crossed && (pages[$0.location]?.sidecar ?? Sidecar.peek(Paths.sidecar(for: $0.location))).blank }) {
             scope = .project(folder.path)
             selected = empty.location
             changed()
@@ -273,20 +273,22 @@ final class Model {
         let template = Bundle.module.url(forResource: "web", withExtension: nil)!.appendingPathComponent("draft.html")
         guard var html = try? String(contentsOf: template, encoding: .utf8) else { return nil }
         var title = Self.untitled
-        if let capture, let marked = capture.annotated() {
-            let base = file.deletingPathExtension()
-            let shown = base.appendingPathExtension("marked.png")
-            guard (try? marked.write(to: shown)) != nil else { return nil }
+        if let capture, !capture.notes.isEmpty {
             func escape(_ text: String) -> String { text.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: "\"", with: "&quot;") }
-            let list = capture.notes.map { "<li>\(escape($0.text))</li>" }.joined()
-            html = html.replacingOccurrences(of: "<!--capture-->", with: "<figure id=\"screen\"><img src=\"\(escape(shown.path))\" alt=\"\"></figure><ol id=\"notes\">\(list)</ol>")
             var notes = capture.notes
+            var list = ""
             for index in notes.indices {
-                let cut = base.appendingPathExtension("\(index + 1).png")
-                if let data = capture.crop(notes[index]), (try? data.write(to: cut)) != nil { notes[index].crop = cut.path }
+                let path = file.deletingPathExtension().appendingPathExtension("\(index + 1).png")
+                var image = ""
+                if let (data, width) = capture.picture(of: index), (try? data.write(to: path)) != nil {
+                    notes[index].picture = path.path
+                    image = "<img src=\"\(escape(path.path))\" width=\"\(Int(width))\" alt=\"\">"
+                }
+                list += "<li>\(image)<p>\(escape(notes[index].text))</p></li>"
             }
-            try? Sidecar.modify(Paths.sidecar(for: file.path)) { $0.answers["screenshot"] = .string(shown.path); $0.comments = notes }
-            if let first = notes.first { title = first.text }
+            html = html.replacingOccurrences(of: "<!--capture-->", with: "<ol id=\"notes\">\(list)</ol>")
+            try? Sidecar.modify(Paths.sidecar(for: file.path)) { $0.comments = notes }
+            title = notes[0].text
         }
         guard (try? html.write(to: file, atomically: true, encoding: .utf8)) != nil else { return nil }
         var entry = BridgeEntry(location: file.path, project: folder.path, session: "")

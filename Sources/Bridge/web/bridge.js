@@ -720,7 +720,7 @@ function __bridgeInit(options) {
     return { reload: false };
   }
 
-  // ---- the freeze: pins and boxes on a frozen screen, and the agents bar
+  // ---- the freeze: pins and boxes over the screen, and the agents bar
 
   let freeze = { agents() {}, reset() {}, leave() {}, pinsAt() { return false; } };
   if (options.freeze) {
@@ -833,7 +833,7 @@ function __bridgeInit(options) {
       if (action === 'cancel') { delete notes.drafts[id]; composer.hidePopover(); notes.cancelPending(); return; }
       if (action === 'save' && !text) return;
       const pending = notes.pending?.id === id ? notes.pending : null;
-      const list = pending ? (await post('pin', { anchor: pending.anchor, text })).notes
+      const list = pending ? (await post('pin', { anchor: pending.anchor, mark: id, text })).notes
         : await post('note', { id, action: action === 'save' ? 'edit' : 'delete', text });
       delete notes.drafts[id];
       composer.hidePopover();
@@ -854,6 +854,7 @@ function __bridgeInit(options) {
       notes.pending = { id, anchor };
       notes.add(id, anchor).dataset.n = notes.list.length + 1;
       notes.open(id);
+      post('mark', { id, anchor });
     }
 
     let pressed = null;

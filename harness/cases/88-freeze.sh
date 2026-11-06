@@ -26,6 +26,7 @@ check_json "pressing the shortcut fast never leaves a second frozen screen behin
 [ "$(bridge --state | jq '.freeze != null')" = true ] || { bridge --do freeze >/dev/null; settle 0.5; }
 state=$(bridge --state)
 check_json "the freeze covers the test screen, never the user's" "$state" '.freeze.screen' "Test Screen"
+check_json "the glass is up at once, nothing captured before the first note" "$state" '[.freezePanels, .freeze.captures] | map(tostring) | join(",")' "1,0"
 check_json "the screen is in point mode, a pin under the pointer" "$(on_screen "return [document.documentElement.hasAttribute('data-bridge-freeze'), getComputedStyle(document.body).cursor.startsWith('url(')]")" 'map(tostring) | join(",")' "true,true"
 check_json "the cursor Bridge sets is the pin above the bar, the arrow on it" "$(on_screen "return [__bridge.pinsAt(innerWidth / 2, innerHeight / 2), __bridge.pinsAt(innerWidth / 2, innerHeight - 10)]")" 'map(tostring) | join(",")' "true,false"
 check_json "the hover outline is drawn under the page, so pins and note boxes cover it" "$(bridge --state)" '.freeze.outlineUnderPage' "true"
@@ -47,10 +48,12 @@ cards=$(bridge --js "$CASE_DIR/pages/cards.html" "@bridge const r = document.que
 check_json "hovering over Bridge's own window outlines the element under the pointer, not the window, exactly on it" "$(bridge --state)" '.windowFrame.width as $w | ("'"$centre"'" | split(" ") | map(tonumber)) as [$x, $y] | .freeze.screenFrame as $s | ('"$cards"') as [$top, $height] | (($s[1] + $s[3]) - (.windowFrame.y + .windowFrame.height) + .windowFrame.height - $height + $top) as $want | .freeze.highlight | [length, (.[2] < $w * 0.9), ($x >= .[0] and $x <= .[0] + .[2] and $y >= .[1] and $y <= .[1] + .[3]), ((.[1] - $want) | fabs < 2)] | map(tostring) | join(",")' "4,true,true,true"
 bridge --do freeze-mark "$centre" >/dev/null; settle 0.3
 check_json "a click opens the composer" "$(on_screen "return !!document.querySelector('.bridge-composer:popover-open textarea')")" '.' "true"
+composer=$(on_screen "const r = document.querySelector('.bridge-composer:popover-open').getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom]")
 first=$(on_screen "return [...document.querySelectorAll('.bridge-pin')].map((p) => p.dataset.n).join()")
 check_json "while a note is open the cursor is the normal one everywhere, a text cursor in the box" "$(on_screen "const t = document.querySelector('.bridge-composer:popover-open'); return [getComputedStyle(t.querySelector('textarea')).cursor, getComputedStyle(t.querySelector('button')).cursor, getComputedStyle(document.body).cursor.startsWith('url(')]")" 'map(tostring) | join(",")' "auto,auto,false"
 bridge --do freeze-note "Lorem ipsum dolor sit amet" >/dev/null; settle 0.5
-check "over a Bridge window it is a screenshot note like any other, not a pin on the page" "$(bridge --state | jq -r '.freeze.notes | [length, .[0].text] | map(tostring) | join(",")') $(bridge --pins "$CASE_DIR/pages/cards.html" | jq length)" "1,Lorem ipsum dolor sit amet 0"
+check "over a Bridge window it is a screen note like any other, not a pin on the page" "$(bridge --state | jq -r '.freeze.notes | [length, .[0].text] | map(tostring) | join(",")') $(bridge --pins "$CASE_DIR/pages/cards.html" | jq length)" "1,Lorem ipsum dolor sit amet 0"
+pictured=$(bridge --state | jq -c '.freeze.pictures[0]')
 check_json "and the screen stays in point mode for the next one" "$(on_screen "return getComputedStyle(document.body).cursor.startsWith('url(')")" '.' "true"
 bridge --do freeze-mark "40 40 $corner" >/dev/null; settle 0.3
 check_json "a drag draws a box with its composer" "$(on_screen "return [document.querySelectorAll('.bridge-box').length, !!document.querySelector('.bridge-composer:popover-open')]")" 'map(tostring) | join(",")' "1,true"
@@ -68,14 +71,20 @@ check "started from another app, nothing is picked and Return does nothing" "$(b
 bridge --do freeze-send 1 >/dev/null; settle 0.5
 draft=$(jq -r '[.bridges[] | select(.location | contains("/drafts/"))][0].location' "$XDG_STATE_HOME/bridge-dev/list.json")
 for i in $(seq 1 30); do read=$(cat "$(sidecar "$draft")" 2>/dev/null); [ "$(printf '%s' "$read" | jq -r .status)" = sent ] && break; settle 0.1; done
-check "clicking the agent sends it straight away" "$(inbox "$agent" | grep -c '`screenshot` is their screen with their numbered notes') $(printf '%s' "$read" | jq -r .status)" "1 sent"
+check "clicking the agent sends it straight away" "$(inbox "$agent" | grep -c 'numbered notes; read them') $(printf '%s' "$read" | jq -r .status)" "1 sent"
 check_json "and you follow it into the agent's project, the draft still open" "$(bridge --state)" '.projects.scope as $s | [($s | startswith("project:") and (contains("/drafts") | not)), (.projects.rows | map(.key) | index($s) != null), (.selected == "'"$draft"'")] | map(tostring) | join(",")' "true,true,true"
-crop=$(printf '%s' "$read" | jq -r '.comments[1].crop')
-want=$(printf '%s' "$state" | jq -r --arg c "$corner" '(($c | split(" ")[0] | tonumber) - 40) * .backingScale | round')
-check "--pins hands the agent the box's crop, as wide as the box" "$(bridge --pins "$draft" | jq -r '.[1].crop == "'"$crop"'"') $(sips -g pixelWidth "$crop" 2>/dev/null | awk -v w="$want" '/pixelWidth/ { d = $2 - w; print (d * d <= 4) ? "yes" : $2 }')" "true yes"
-picture=$(printf '%s' "$read" | jq -r .answers.screenshot)
-check "the marked screenshot is saved at the screen's pixel size" "$(sips -g pixelWidth "$picture" 2>/dev/null | awk '/pixelWidth/ {print $2}')" "$(printf '%s' "$state" | jq -r '(.freeze.screenFrame[2] * .backingScale) | floor')"
-check_json "opened, the draft shows the marked screen and lists the notes, with no pins of its own" "$(bridge --js "$draft" "@bridge return [document.querySelector('#screen img').getAttribute('src').endsWith('.marked.png'), document.querySelector('#screen img').naturalWidth > 0, [...document.querySelectorAll('#notes li')].map((li) => li.textContent).join('|'), document.querySelectorAll('.bridge-pin').length]")" 'map(tostring) | join(",")' "true,true,Lorem ipsum dolor sit amet|Consectetur adipiscing elit,0"
+pixels() { sips -g pixelWidth -g pixelHeight "$1" 2>/dev/null | awk '/pixel/ { printf "%s ", $2 }'; }
+first=$(printf '%s' "$read" | jq -r '.comments[0].picture')
+room=$(printf '%s' "$state" | jq -c --arg c "$centre" '.freeze.screenFrame as $s | ($c | split(" ") | map(tonumber)) as [$x, $y] | .windowFrame as $w | ([$w.x - $s[0], 0] | max) as $left | ([$s[1] + $s[3] - $w.y - $w.height, 0] | max) as $top | ([$w.x - $s[0] + $w.width, $s[2]] | min) as $right | ([$s[1] + $s[3] - $w.y, $s[3]] | min) as $bottom | ([$right - $left, 1000] | min) as $width | ([$bottom - $top, 600] | min) as $height | [([([$x - $width / 2, $left] | max), $right - $width] | min), ([([$y - $height / 2, $top] | max), $bottom - $height] | min), $width, $height] | map(round)')
+check "a pin's picture is the window under it, at most 1000 by 600, not the screen" "$(printf '%s' "$pictured" | jq -c 'map(round)') $(pixels "$first")" "$room $(printf '%s' "$state" | jq -r --argjson r "$room" '"\($r[2] * .backingScale | round) \($r[3] * .backingScale | round) "')"
+under=$(printf '%s' "$state" | jq -r --argjson c "$composer" --argjson p "$pictured" '.backingScale as $k | [($c[0] - $p[0] + 4), ($c[1] - $p[1] + 4), ($c[2] - $p[0] - 4), ($c[3] - $p[1] - 4)] | map(. * $k | round) | join(" ")')
+pin=$(printf '%s' "$state" | jq -r --arg c "$centre" --argjson p "$pictured" '.backingScale as $k | ($c | split(" ") | map(tonumber)) as [$x, $y] | [($x - $p[0] - 12), ($y - $p[1] - 30), ($x - $p[0] + 12), ($y - $p[1])] | map(. * $k | round) | join(" ")')
+check "Bridge's own glass is not in it: where the composer stood is the plain page, beside the drawn pin" "$(python3 "$ROOT/harness/measure.py" "$first" region $under | awk '{print $2}') $(python3 "$ROOT/harness/measure.py" "$first" region $pin | awk '{print ($2 > 3) ? "inked" : $2}')" "1 inked"
+box=$(printf '%s' "$read" | jq -r '.comments[1].picture')
+want=$(printf '%s' "$state" | jq -r --arg c "$corner" '(($c | split(" ")[0] | tonumber) - 40 + 80) * .backingScale | round')
+check "a box's picture is the box with 40 points around it" "$(sips -g pixelWidth "$box" 2>/dev/null | awk -v w="$want" '/pixelWidth/ { d = $2 - w; print (d * d <= 4) ? "yes" : $2 }')" "yes"
+check "--pins gives each note its picture" "$(bridge --pins "$draft" | jq -c 'map(.picture | test("\\.[12]\\.png$"))') $(ls "$first" "$box" | wc -l | tr -d ' ')" "[true,true] 2"
+check_json "opened, the draft shows one picture per note, each with its text, and no pins of its own" "$(bridge --js "$draft" "@bridge return [[...document.querySelectorAll('#notes li')].map((li) => li.querySelector('img').naturalWidth > 0).join(), [...document.querySelectorAll('#notes li')].map((li) => li.textContent).join('|'), document.querySelectorAll('.bridge-pin').length]")" 'map(tostring) | join(",")' "true,true,Lorem ipsum dolor sit amet|Consectetur adipiscing elit,0"
 
 before=$(listed)
 bar=$(printf '%s' "$state" | jq -r '.freeze.screenFrame as $s | "\(.windowFrame.x - $s[0] + .windowFrame.width - 140) \(($s[1] + $s[3]) - (.windowFrame.y + .windowFrame.height) + 26)"')
@@ -108,12 +117,12 @@ bridge --do select "$CASE_DIR/pages/cards.html" >/dev/null; settle 0.3
 bridge --do freeze front >/dev/null; settle 1
 check "started from Bridge, the agent of the selected page is chip 1, picked" "$(bridge --state | jq -r '.freeze.picked') $(on_screen "return [...document.querySelectorAll('.bridge-agents button')].map((b) => (b.hasAttribute('data-picked') ? '*' : '') + (b.querySelector('b') || b).textContent).join(' | ')")" "$agent \"*Freeze review | Lorem draft | Draft\""
 check_json "and drawn in blue, unlike the others" "$(on_screen "const [picked, other] = document.querySelectorAll('.bridge-agents-list button'); return getComputedStyle(picked).backgroundColor !== getComputedStyle(other).backgroundColor")" '.' "true"
-sent=$(inbox "$agent" | grep -c 'their numbered notes')
+sent=$(inbox "$agent" | grep -c 'numbered note')
 on_screen "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))" >/dev/null; settle 0.5
-check "with no notes, Return does nothing" "$(bridge --state | jq '.freeze != null') $(inbox "$agent" | grep -c 'their numbered notes')" "true $sent"
+check "with no notes, Return does nothing" "$(bridge --state | jq '.freeze != null') $(inbox "$agent" | grep -c 'numbered note')" "true $sent"
 bridge --do freeze-mark "300 300" >/dev/null; settle 0.3; bridge --do freeze-note "Ut enim ad minim" >/dev/null; settle 0.5
 on_screen "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))" >/dev/null; settle 1
-check "Return sends it to the picked agent" "$(bridge --state | jq '.freeze == null') $(inbox "$agent" | grep -c 'their numbered notes') $(inbox "$other" 3 | grep -c 'their numbered notes')" "true $((sent + 1)) 0"
+check "Return sends it to the picked agent" "$(bridge --state | jq '.freeze == null') $(inbox "$agent" | grep -c 'numbered note') $(inbox "$other" 3 | grep -c 'numbered note')" "true $((sent + 1)) 0"
 
 end_session "$agent"
 end_session "$other"
@@ -126,5 +135,10 @@ bridge --do freeze-send 0 >/dev/null; wait_ready; settle 0.5
 check_json "which opens the draft" "$(bridge --state)" '.title' "Sed do eiusmod"
 bridge --do point >/dev/null; settle 1
 check_json "the Point button starts the freeze" "$(bridge --state)" '.freeze != null' "true"
+bridge --do resize "800 500" >/dev/null; settle 0.5
+small=$(bridge --state)
+bridge --do freeze-mark "$(printf '%s' "$small" | jq -r '.freeze.screenFrame as $s | "\(.windowFrame.x - $s[0] + 400) \(($s[1] + $s[3]) - (.windowFrame.y + .windowFrame.height) + 250)"')" >/dev/null; settle 0.3
+bridge --do freeze-note "Lorem" >/dev/null; settle 0.5
+check "a pin on a smaller window pictures that whole window" "$(bridge --state | jq -c '.freeze.pictures[0] | map(round)')" "$(printf '%s' "$small" | jq -c '.freeze.screenFrame as $s | [.windowFrame.x - $s[0], ($s[1] + $s[3]) - (.windowFrame.y + .windowFrame.height), .windowFrame.width, .windowFrame.height] | map(round)')"
 bridge --do freeze-cancel >/dev/null; settle 0.3
 finish

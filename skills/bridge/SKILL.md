@@ -252,19 +252,19 @@ then `bridge --cross <file>`.
 ## When the user points
 
 To point at something, on your page or anywhere else on their screen, the
-user freezes the screen, clicks a spot or drags a box, and types a note on
-each. They send it to you as a draft: `screenshot` is their screen with the
-numbered notes drawn on it (read the image). Read the notes themselves with:
+user clicks a spot or drags a box over their screen and types a note on
+each. They send it to you as a draft. Read the notes with:
 
 ```sh
-bridge --pins <draft>          # each note's text, and a target naming what was under it
+bridge --pins <draft>          # each note's text, target and picture
 bridge --done <draft> <id>     # handled: --pins leaves it out (--reopen brings it back)
 ```
 
 `target` names what was under the note on screen (`button "Theme" · Helium ·
-http://…`). A note drawn as a box also has `crop`, the image of just that
-area; read it when the note is about what is inside. Answer in the terminal
-or with a page of your own.
+http://…`). `picture` is an image of the window under the note (or the
+1000×600 points around it in a large window; for a box, the box with a little
+around it), with the note's number drawn on it. Read it. Answer in the
+terminal or with a page of your own.
 
 ## Revising a page
 

@@ -1,4 +1,4 @@
-html[data-bridge-freeze]:where(:not(:has(.bridge-composer:popover-open))) * { cursor: var(--bridge-cursor, crosshair) !important; }
+html[data-bridge-freeze]:where(:not(:has(.bridge-composer:popover-open))), html[data-bridge-freeze]:where(:not(:has(.bridge-composer:popover-open))) * { cursor: var(--bridge-cursor, crosshair) !important; }
 html[data-bridge-freeze] :is(.bridge-composer, .bridge-composer *, .bridge-pin, .bridge-pin *, .bridge-agents, .bridge-agents *) { cursor: auto !important; }
 
 .bridge-pin {
@@ -123,8 +123,6 @@ code:is([data-quote], [data-quoted])::before { content: attr(data-quote) attr(da
 }
 .bridge-box:popover-open { display: block; }
 [data-bridge-freeze], [data-bridge-freeze] body { background: transparent !important; margin: 0; overflow: hidden; }
-[data-bridge-freeze] #screen { position: fixed; inset: 0; margin: 0; }
-[data-bridge-freeze] #screen img { visibility: hidden; }
 .bridge-agents {
   position: fixed;
   inset: auto 0 0 0;

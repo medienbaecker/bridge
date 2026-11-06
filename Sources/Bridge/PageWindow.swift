@@ -76,7 +76,7 @@ final class PageWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         switch item.representedObject as? String {
-        case "send": return page.viewingVersion == nil && !(page.isDraft && page.sidecar.answers.isEmpty)
+        case "send": return page.viewingVersion == nil && !(page.isDraft && page.sidecar.blank)
         case "reveal": return page.kind != .url
         case "point", "zoom-in", "zoom-out", "zoom-reset": return true
         case "previous": return (page.viewingVersion ?? page.sidecar.version) > 1

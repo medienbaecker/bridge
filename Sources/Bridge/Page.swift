@@ -389,11 +389,17 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
                 if let x = body["x"] as? Double, let y = body["y"] as? Double { freeze.hover(CGPoint(x: x * freeze.screen.frame.width, y: y * freeze.screen.frame.height)) } else { freeze.unhover() }
             }
             replyHandler(nil, nil)
+        case "mark":
+            if freezing, let freeze = Freeze.current, let id = body["id"] as? String { freeze.take(id, anchor: JSONValue(any: body["anchor"] ?? NSNull())) }
+            replyHandler(nil, nil)
         case "pin":
             guard freezing, let freeze = Freeze.current else { replyHandler(nil, "not freezing"); return }
             let anchor = JSONValue(any: body["anchor"] ?? NSNull())
+            let taking = freeze.taking.removeValue(forKey: body["mark"] as? String ?? "")
             freeze.describing.append(Task {
-                addComment(anchor: anchor, target: await freeze.describe(anchor), text: body["text"] as? String ?? "")
+                let picture = await taking?.value
+                let id = addComment(anchor: anchor, target: await freeze.describe(anchor, picture: picture), text: body["text"] as? String ?? "")
+                freeze.pictures[id] = picture
                 replyHandler(["notes": notesJSON()], nil)
             })
         case "note":
@@ -642,11 +648,12 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
 
     // MARK: Notes
 
-    func addComment(anchor: JSONValue, target: String, text: String) {
+    func addComment(anchor: JSONValue, target: String, text: String) -> String {
         let id = String(UUID().uuidString.prefix(8)).lowercased()
         sidecar.comments.append(Comment(id: id, text: text, target: target, anchor: anchor, version: sidecar.version))
         save()
         model.onChange()
+        return id
     }
 
     func editComment(_ id: String, text: String) {

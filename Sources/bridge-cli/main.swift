@@ -261,7 +261,7 @@ case "--pins":
     do { s = try Sidecar.load(Paths.sidecar(for: location(args.dropFirst().first))) } catch { fail("\(error)") }
     print(json: JSONValue.array(s.openComments.map { c in
         var out: [String: JSONValue] = ["id": .string(c.id), "text": .string(c.text), "target": .string(c.target)]
-        if let crop = c.crop { out["crop"] = .string(crop) }
+        if let picture = c.picture { out["picture"] = .string(picture) }
         return .object(out)
     }))
 

@@ -239,7 +239,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                                      "highlight": freeze.highlight.map { .array([$0.minX, $0.minY, $0.width, $0.height].map { .number(Double($0)) }) } ?? .null,
                                      "screen": .string(freeze.screen.localizedName), "screenFrame": .array([freeze.screen.frame.minX, freeze.screen.frame.minY, freeze.screen.frame.width, freeze.screen.frame.height].map { .number(Double($0)) }),
                                      "outlineUnderPage": .bool(freeze.overlay.superview?.subviews.firstIndex(of: freeze.overlay) ?? 0 < freeze.overlay.superview?.subviews.firstIndex(of: freeze.page.webView) ?? 0), "pinCursor": .bool(NSCursor.current.hotSpot == CGPoint(x: 14, y: 29)), "recipients": .array(freeze.recipients.map { .string($0.label) }),
-                                     "picked": freeze.picked.map { .string($0) } ?? .null])
+                                     "picked": freeze.picked.map { .string($0) } ?? .null, "captures": .number(Double(freeze.captures)),
+                                     "pictures": .array(freeze.notes.map { note in freeze.pictures[note.id].map { p in .array([p.frame.minX, p.frame.minY, p.frame.width, p.frame.height].map { .number(Double($0)) }) } ?? .null })])
         }
         out["webViews"] = .number(Double(window.content.container.subviews.count))
         if let w = window.window {
@@ -315,7 +316,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     lazy var freezePage: Page = {
         let file = Paths.freezePage
         try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try? Data("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>Screen</title></head><body><figure id=\"screen\"></figure></body></html>".utf8).write(to: file)
+        try? Data("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>Screen</title></head><body></body></html>".utf8).write(to: file)
         let page = Page(location: file.path, model: model, preview: true, freezing: true)
         page.load()
         return page
@@ -327,19 +328,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         if let open = Freeze.current { return open.cancel() }
         let page = (NSApp.keyWindow?.windowController as? PageWindow)?.page ?? model.selectedPage
         let picked = fromBridge ? page.flatMap { model.listing.entry($0.location)?.session } : nil
+        guard CGPreflightScreenCaptureAccess() else {
+            CGRequestScreenCaptureAccess()
+            let alert = NSAlert()
+            alert.messageText = "Bridge can't see the screen"
+            alert.informativeText = "Allow Bridge in System Settings, Privacy & Security, Screen & System Audio Recording, then try again."
+            if !Env.test { alert.runModal() }
+            return
+        }
         Task {
-            do {
-                try await Freeze.start(recipients: model.agentsByWork(), picked: picked, page: freezePage) { [weak self] freeze, outcome in
-                    guard let self, outcome != .cancel, let location = model.newBridge(capture: freeze) else { return }
-                    if case .send(let session) = outcome, window.sendDraft(location, to: session) { return }
-                    if window.window?.isVisible != true { window.showWindow(nil) }
-                    NSApp.activate()
-                }
-            } catch {
-                let alert = NSAlert()
-                alert.messageText = "Bridge can't see the screen"
-                alert.informativeText = "Allow Bridge in System Settings, Privacy & Security, Screen & System Audio Recording, then try again. (\(error.localizedDescription))"
-                if !Env.test { alert.runModal() }
+            await Freeze.start(recipients: model.agentsByWork(), picked: picked, page: freezePage) { [weak self] freeze, outcome in
+                guard let self, outcome != .cancel, let location = model.newBridge(capture: freeze) else { return }
+                if case .send(let session) = outcome, window.sendDraft(location, to: session) { return }
+                if window.window?.isVisible != true { window.showWindow(nil) }
+                NSApp.activate()
             }
         }
     }

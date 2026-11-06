@@ -12,6 +12,11 @@ final class FreezePanel: NSPanel {
 final class Freeze: NSObject {
     enum Outcome: Equatable { case cancel, draft, send(String) }
 
+    struct Picture: Sendable {
+        let image: CGImage
+        let frame: CGRect
+    }
+
     nonisolated(unsafe) static var current: Freeze?
     nonisolated(unsafe) static var starting = false
     static var colour: NSColor { .controlAccentColor }
@@ -24,8 +29,7 @@ final class Freeze: NSObject {
     }
 
     let screen: NSScreen
-    let image: CGImage
-    let windows: [[String: Any]]
+    var windows: [[String: Any]]
     let page: Page
     let panel: FreezePanel
     let overlay = FreezeView()
@@ -36,13 +40,15 @@ final class Freeze: NSObject {
     var looking = false
     var awake: Set<pid_t> = []
     var describing: [Task<Void, Never>] = []
+    var taking: [String: Task<Picture?, Never>] = [:]
+    var pictures: [String: Picture] = [:]
+    var captures = 0
     var onFinish: (Freeze, Outcome) -> Void = { _, _ in }
 
     let picked: String?
 
-    init(screen: NSScreen, image: CGImage, windows: [[String: Any]], recipients: [Model.Recipient], picked: String?, page: Page) {
+    init(screen: NSScreen, windows: [[String: Any]], recipients: [Model.Recipient], picked: String?, page: Page) {
         self.screen = screen
-        self.image = image
         self.windows = windows
         self.page = page
         let held = recipients.filter { $0.session == picked }
@@ -56,13 +62,11 @@ final class Freeze: NSObject {
         panel.hidesOnDeactivate = false
         panel.animationBehavior = .none
         panel.acceptsMouseMovedEvents = true
+        panel.ignoresMouseEvents = false
         panel.setFrame(screen.frame, display: false)
         panel.backgroundColor = .clear
         panel.isOpaque = false
         let backdrop = NSView(frame: CGRect(origin: .zero, size: screen.frame.size))
-        backdrop.wantsLayer = true
-        backdrop.layer?.contents = image
-        backdrop.layer?.contentsGravity = .resize
         overlay.freeze = self
         overlay.frame = backdrop.bounds
         backdrop.addSubview(overlay)
@@ -78,18 +82,16 @@ final class Freeze: NSObject {
         return NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
     }
 
-    static func start(recipients: [Model.Recipient], picked: String?, page: Page, onFinish: @escaping (Freeze, Outcome) -> Void) async throws {
+    static func start(recipients: [Model.Recipient], picked: String?, page: Page, onFinish: @escaping (Freeze, Outcome) -> Void) async {
         guard current == nil, !starting, let screen = screenUnderPointer() else { return }
         starting = true
         defer { starting = false }
         _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": !Env.test] as CFDictionary)
         AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 0.25)
         let previous = NSWorkspace.shared.frontmostApplication.flatMap { $0 == .current ? nil : $0 }
-        let top = NSScreen.screens.first?.frame.maxY ?? 0
-        let image = try await SCScreenshotManager.captureImage(in: CGRect(x: screen.frame.minX, y: top - screen.frame.maxY, width: screen.frame.width, height: screen.frame.height))
-        let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
+        let windows = onScreen()
         page.startFreeze()
-        let freeze = Freeze(screen: screen, image: image, windows: windows, recipients: recipients, picked: picked, page: page)
+        let freeze = Freeze(screen: screen, windows: windows, recipients: recipients, picked: picked, page: page)
         freeze.onFinish = onFinish
         for pid in Set(windows.compactMap { $0[kCGWindowOwnerPID as String] as? Int32 }) where pid != getpid() && freeze.awake.insert(pid).inserted {
             Task { await wake(pid) }
@@ -103,6 +105,10 @@ final class Freeze: NSObject {
         let list = freeze.recipients.map { ["session": $0.session, "name": $0.name.isEmpty ? $0.page : $0.name, "project": $0.project.isEmpty ? "No project" : $0.project, "busy": $0.busy, "picked": $0.session == freeze.picked] as [String: Any] }
         _ = try? await page.run("__bridge.agents(list)", ["list": list], in: Page.world)
         await freeze.setCursor()
+    }
+
+    static func onScreen() -> [[String: Any]] {
+        CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
     }
 
     func setCursor() async {
@@ -138,22 +144,23 @@ final class Freeze: NSObject {
         return AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success ? value : nil
     }
 
-    func element(at point: CGPoint) async -> [String: JSONValue] {
+    func element(at point: CGPoint, picture: Picture?) async -> [String: JSONValue] {
         let spot = global(point)
         guard let info = window(at: spot), let pid = info[kCGWindowOwnerPID as String] as? Int32 else { return [:] }
         var out: [String: JSONValue] = ["app": .string(info[kCGWindowOwnerName as String] as? String ?? "")]
         if let title = info[kCGWindowName as String] as? String, !title.isEmpty { out["window"] = .string(title) }
         let offset = CGPoint(x: spot.x - point.x, y: spot.y - point.y)
-        return await Self.label(out, at: point, offset: offset, in: pid == getpid() ? nil : pid, image: image, scale: CGFloat(image.width) / screen.frame.width)
+        return await Self.label(out, at: point, offset: offset, in: pid == getpid() ? nil : pid, picture: picture)
     }
 
-    @concurrent nonisolated static func label(_ known: [String: JSONValue], at point: CGPoint, offset: CGPoint, in pid: pid_t?, image: CGImage, scale: CGFloat) async -> [String: JSONValue] {
+    @concurrent nonisolated static func label(_ known: [String: JSONValue], at point: CGPoint, offset: CGPoint, in pid: pid_t?, picture: Picture?) async -> [String: JSONValue] {
         var out = known
         let frame = pid.flatMap { accessible(at: CGPoint(x: point.x + offset.x, y: point.y + offset.y), in: $0, into: &out) }?.offsetBy(dx: -offset.x, dy: -offset.y)
-        guard out["label"] == nil else { return out }
+        guard out["label"] == nil, let picture else { return out }
         let small = frame.map { $0.width < 800 && $0.height < 240 } ?? false
         let area = small ? frame! : CGRect(x: point.x - 160, y: point.y - 16, width: 320, height: 32)
-        if let text = read(area, in: image, scale: scale) { out["label"] = .string(text); out["labelFrom"] = .string("pixels") }
+        let scale = CGFloat(picture.image.width) / picture.frame.width
+        if let text = read(area.offsetBy(dx: -picture.frame.minX, dy: -picture.frame.minY), in: picture.image, scale: scale) { out["label"] = .string(text); out["labelFrom"] = .string("pixels") }
         return out
     }
 
@@ -317,14 +324,51 @@ final class Freeze: NSObject {
         return (spot, w > 0 && h > 0 ? CGRect(x: spot.x, y: spot.y, width: w * size.width, height: h * size.height) : nil)
     }
 
-    func describe(_ anchor: JSONValue) async -> String {
-        let probe = Comment(id: "", text: "", target: "", anchor: anchor, version: 1)
-        let (spot, box) = area(of: probe)
-        let found = await element(at: box.map { CGPoint(x: $0.midX, y: $0.midY) } ?? spot)
+    func describe(_ anchor: JSONValue, picture: Picture?) async -> String {
+        let (spot, box) = area(of: Self.probe(anchor))
+        let found = await element(at: box.map { CGPoint(x: $0.midX, y: $0.midY) } ?? spot, picture: picture)
         func string(_ key: String) -> String? { if case .string(let s)? = found[key] { s } else { nil } }
         let what = [string("role"), string("label").map { "\"\($0)\"" }].compactMap { $0 }.joined(separator: " ")
         let place = string("url") ?? string("window")
         return [what.isEmpty ? nil : what, string("app"), place].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    static func probe(_ anchor: JSONValue) -> Comment { Comment(id: "", text: "", target: "", anchor: anchor, version: 1) }
+
+    // MARK: Pictures
+
+    func take(_ id: String, anchor: JSONValue) {
+        windows = Self.onScreen()
+        let frame = region(for: Self.probe(anchor))
+        captures += 1
+        taking[id] = Task { await shoot(frame) }
+    }
+
+    func region(for note: Comment) -> CGRect {
+        let (spot, box) = area(of: note)
+        let bounds = CGRect(origin: .zero, size: screen.frame.size)
+        if let box { return box.insetBy(dx: -40, dy: -40).intersection(bounds) }
+        let room = window(at: global(spot)).map { local(Self.frame(of: $0)).intersection(bounds) } ?? bounds
+        let width = min(room.width, 1000), height = min(room.height, 600)
+        let x = min(max(spot.x - width / 2, room.minX), room.maxX - width)
+        let y = min(max(spot.y - height / 2, room.minY), room.maxY - height)
+        return CGRect(x: x, y: y, width: width, height: height)
+    }
+
+    func shoot(_ frame: CGRect) async -> Picture? {
+        let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
+        guard let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true),
+              let display = content.displays.first(where: { $0.displayID == number }) else { return nil }
+        let filter = SCContentFilter(display: display, excludingWindows: content.windows.filter { $0.windowID == CGWindowID(panel.windowNumber) })
+        let scale = CGFloat(filter.pointPixelScale)
+        let config = SCStreamConfiguration()
+        config.sourceRect = frame
+        config.width = Int(frame.width * scale)
+        config.height = Int(frame.height * scale)
+        config.showsCursor = false
+        config.captureResolution = .best
+        guard let image = try? await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config) else { return nil }
+        return Picture(image: image, frame: frame)
     }
 
     // MARK: Sending
@@ -356,28 +400,22 @@ final class Freeze: NSObject {
 
     // MARK: Output
 
-    func crop(_ note: Comment) -> Data? {
-        guard let box = area(of: note).box else { return nil }
-        let scale = CGFloat(image.width) / screen.frame.width
-        guard let cut = image.cropping(to: CGRect(x: box.minX * scale, y: box.minY * scale, width: box.width * scale, height: box.height * scale).integral) else { return nil }
-        return NSBitmapImageRep(cgImage: cut).representation(using: .png, properties: [:])
-    }
-
-    func annotated() -> Data? {
+    func picture(of index: Int) -> (data: Data, width: CGFloat)? {
+        let note = notes[index]
+        guard let picture = pictures[note.id] else { return nil }
+        let image = picture.image, frame = picture.frame
         guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: image.width, pixelsHigh: image.height, bitsPerSample: 8, samplesPerPixel: 4,
-                                         hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { return nil }
-        guard let context = NSGraphicsContext(bitmapImageRep: rep)?.cgContext else { return nil }
+                                         hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0),
+              let context = NSGraphicsContext(bitmapImageRep: rep)?.cgContext else { return nil }
         context.translateBy(x: 0, y: CGFloat(image.height))
-        context.scaleBy(x: CGFloat(image.width) / screen.frame.width, y: -CGFloat(image.height) / screen.frame.height)
+        context.scaleBy(x: CGFloat(image.width) / frame.width, y: -CGFloat(image.height) / frame.height)
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
-        NSImage(cgImage: image, size: screen.frame.size).draw(in: CGRect(origin: .zero, size: screen.frame.size), from: .zero, operation: .copy, fraction: 1, respectFlipped: true, hints: nil)
-        for (index, note) in notes.enumerated() {
-            let (spot, box) = area(of: note)
-            FreezeView.draw(number: index + 1, at: spot, box: box)
-        }
+        NSImage(cgImage: image, size: frame.size).draw(in: CGRect(origin: .zero, size: frame.size), from: .zero, operation: .copy, fraction: 1, respectFlipped: true, hints: nil)
+        let (spot, box) = area(of: note)
+        FreezeView.draw(number: index + 1, at: CGPoint(x: spot.x - frame.minX, y: spot.y - frame.minY), box: box?.offsetBy(dx: -frame.minX, dy: -frame.minY))
         NSGraphicsContext.restoreGraphicsState()
-        return rep.representation(using: .png, properties: [:])
+        return rep.representation(using: .png, properties: [:]).map { ($0, frame.width) }
     }
 }
 

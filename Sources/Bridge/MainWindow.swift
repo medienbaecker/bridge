@@ -270,7 +270,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
     func sendDraft(_ location: String, to session: String) -> Bool {
         guard model.agents[session] != nil, model.listing.entry(location) != nil else { return false }
         let page = model.page(for: location)
-        guard page.isDraft, !page.sidecar.answers.isEmpty else { return false }
+        guard page.isDraft, !page.sidecar.blank else { return false }
         model.hand(location, to: session)
         if let cwd = model.agents[session]?.cwd, !cwd.isEmpty {
             let project = Ground.projectRoot(for: cwd)
@@ -386,7 +386,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
             guard let page else { return false }
             if page.isDraft {
                 item.toolTip = "Pick the agent it goes to"
-                return !page.sidecar.answers.isEmpty
+                return !page.sidecar.blank
             }
             return page.viewingVersion == nil
         default: return true

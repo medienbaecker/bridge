@@ -21,7 +21,7 @@ public struct Comment: Codable, Equatable, Sendable, Identifiable {
     public var anchor: JSONValue
     public var said: [Say]
     public var lost: Bool?
-    public var crop: String?
+    public var picture: String?
 
     public init(id: String, text: String, target: String, anchor: JSONValue, version: Int, at: Date = Date()) {
         self.id = id; self.text = text; self.target = target; self.anchor = anchor
@@ -186,6 +186,8 @@ public struct Sidecar: Codable, Equatable, Sendable {
 
     public var answered: Bool { status == "sent" || status == "closed" }
 
+    public var blank: Bool { answers.isEmpty && openComments.isEmpty }
+
     public var defaults: [String: JSONValue] { proposed.filter { answers[$0.key] == nil } }
 
     public static func own(_ v: Version) -> [String: JSONValue] { v.answers.filter { !(v.defaults ?? []).contains($0.key) } }
@@ -207,13 +209,13 @@ public struct Sidecar: Codable, Equatable, Sendable {
         }
         let answers = JSON.string(JSONValue.object(answers), pretty: false)
         var text = collectedAt != nil ? "Bridge: The user wrote more on \(file) since you read it (version \(version)): \(answers)."
-            : Paths.inDrafts(file) ? "Bridge: The user wrote you a bridge, \(file): \(answers). It is their own request, not an answer to a page of yours." + (self.answers["screenshot"] == nil ? "" : " `screenshot` is their screen with their numbered notes drawn on it; each note's target says what it points at on screen, and a note drawn as a box has `crop`, that area on its own.") + (self.answers["files"] == nil ? "" : " `files` lists what they attached.")
+            : Paths.inDrafts(file) ? "Bridge: The user wrote you a bridge, \(file)" + (self.answers.isEmpty ? "" : ": \(answers)") + ". It is their own request, not an answer to a page of yours." + (self.answers["files"] == nil ? "" : " `files` lists what they attached.")
             : "Bridge: The user answered \(file) (version \(version)): \(answers)."
         if !withdrawn.isEmpty { text += " They withdrew their answer to \(withdrawn.joined(separator: ", "))." }
         let left = defaults.count
         if left > 0 { text += " \(left) control\(left == 1 ? " was" : "s were") left at the page's default (`defaults` in --read)." }
         let open = openComments.count
-        if open > 0, Paths.inDrafts(file) { text += " They also left \(open) note\(open == 1 ? "" : "s"); read them with `\(cli) --pins \(file)`." }
+        if open > 0, Paths.inDrafts(file) { text += " They pointed at their screen with \(open) numbered note\(open == 1 ? "" : "s"); read them with `\(cli) --pins \(file)`: each note's `target` says what it points at, and `picture` is the window or area under it with the note's number drawn on it." }
         return text + " Full answer: `\(cli) --read \(file)`. Act on it, then `\(cli) --cross \(file)`."
     }
 }
