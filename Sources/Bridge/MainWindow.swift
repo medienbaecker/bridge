@@ -305,7 +305,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         // AppKit puts the window title after the sidebar separator, over the list, and
         // handing that identifier to the second divider hangs the toolbar. So the
         // window's title is hidden and the toolbar carries its own two titles.
-        [.toggleSidebar, Self.newBridge, .sidebarTrackingSeparator, Self.listName, Self.bridgesSeparator, Self.docTitle, .flexibleSpace, Self.point, .space, Self.send]
+        [.toggleSidebar, .sidebarTrackingSeparator, Self.listName, .flexibleSpace, Self.newBridge, Self.bridgesSeparator, Self.docTitle, .flexibleSpace, Self.point, .space, Self.send]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
