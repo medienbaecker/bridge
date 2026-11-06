@@ -124,6 +124,7 @@ code:is([data-quote], [data-quoted])::before { content: attr(data-quote) attr(da
 .bridge-agents {
   position: fixed;
   inset: auto 0 0 0;
+  width: 100%;
   height: 30px;
   box-sizing: border-box;
   margin: 0;

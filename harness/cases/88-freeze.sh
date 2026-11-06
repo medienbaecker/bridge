@@ -38,6 +38,7 @@ down=$(on_screen "return document.querySelector('.bridge-agents-list').scrollLef
 bridge --do freeze-scroll "400 $bottom -30 0" >/dev/null; settle 0.3
 back=$(on_screen "return document.querySelector('.bridge-agents-list').scrollLeft")
 on_screen "document.querySelector('.bridge-agents-list').style.maxWidth = ''" >/dev/null
+check_json "the bar spans the screen, never wider" "$(on_screen "return document.querySelector('.bridge-agents').getBoundingClientRect().width === innerWidth")" '.' "true"
 check "a real scroll anywhere on the bar moves the agents sideways, the wheel and a sideways swipe" "$(jq -n --argjson d "$down" --argjson b "$back" '[$d > 0, $b < $d] | map(tostring) | join(",")' -r)" "true,true"
 centre=$(printf '%s' "$state" | jq -r '.freeze.screenFrame as $s | "\(.windowFrame.x - $s[0] + .windowFrame.width / 2) \(($s[1] + $s[3]) - (.windowFrame.y + .windowFrame.height) + .windowFrame.height / 2)"')
 corner=$(printf '%s' "$centre" | awk '{ print $1 - 60, $2 - 60 }')
