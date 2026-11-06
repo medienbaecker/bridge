@@ -3,7 +3,7 @@ import BridgeCore
 
 enum Builder {
     struct Failure: Sendable { var text: String; var file: String?; var line: Int?; var lineText: String? }
-    enum Result: Sendable { case built(URL, ms: Int), failed([Failure]) }
+    enum Result: Sendable { case built(URL), failed([Failure]) }
 
     nonisolated static let toolkit: URL? = {
         let env = ProcessInfo.processInfo.environment
@@ -24,7 +24,6 @@ enum Builder {
         let out = Paths.builds.appendingPathComponent(Paths.id(for: source))
         let dist = toolkit.appendingPathComponent("dist")
         let dir = URL(fileURLWithPath: source).deletingLastPathComponent()
-        let started = Date()
         let p = Process()
         p.executableURL = URL(fileURLWithPath: esbuild)
         p.currentDirectoryURL = dir
@@ -82,7 +81,7 @@ enum Builder {
         """
         do { try html.write(to: out.appendingPathComponent("index.html"), atomically: true, encoding: .utf8) }
         catch { return .failed([Failure(text: "could not write index.html: \(error)")]) }
-        return .built(out.appendingPathComponent("index.html"), ms: Int(Date().timeIntervalSince(started) * 1000))
+        return .built(out.appendingPathComponent("index.html"))
     }
 
     nonisolated static func failures(_ log: String, in dir: URL) -> [Failure] {

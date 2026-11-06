@@ -79,7 +79,7 @@ final class SettingsWindow: NSWindowController {
         separator.boxType = .separator
 
         let grid = NSGridView(views: [
-            [label("Freeze the screen:"), recorder],
+            [label("Point at the screen:"), recorder],
             [NSGridCell.emptyContentView, hint("Starts a new bridge from any app.")],
             [NSGridCell.emptyContentView, loginRow],
             [separator],

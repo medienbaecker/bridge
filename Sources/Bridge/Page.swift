@@ -50,7 +50,6 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
     var watcher: Watcher?
     var media: [String: Date] = [:]
     var buildFailed = false
-    var buildMs: Int?
     var frames: [WKFrameInfo] = []
     var frameLinks: [String: Links] = [:]
     var shape: String?
@@ -218,9 +217,8 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
             lastData = try? Data(contentsOf: Paths.dataFile(for: location))
             Task { @MainActor in
                 switch await Builder.build(location) {
-                case .built(let index, let ms):
+                case .built(let index):
                     buildFailed = false
-                    buildMs = ms
                     note = nil
                     webView.loadFileURL(index, allowingReadAccessTo: URL(fileURLWithPath: "/"))
                 case .failed(let failures):

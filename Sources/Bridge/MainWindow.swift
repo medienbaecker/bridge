@@ -335,7 +335,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
             item.label = Model.untitled; item.toolTip = "Write a bridge to an agent (⌘N)"
             item.image = Self.symbol("square.and.pencil", Model.untitled)
         case Self.point:
-            item.label = "Point"; item.toolTip = "Freeze the screen and point at something"
+            item.label = "Point"; item.toolTip = "Point at something on screen"
             item.image = Self.symbol("mappin.and.ellipse", "Point")
         case Self.send:
             item.toolTip = "Send your answer"

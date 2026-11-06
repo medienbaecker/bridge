@@ -305,7 +305,6 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         var out: [String: JSONValue] = [
             "clip": .number(Double(clip)), "table": .number(Double(outline.bounds.width)),
             "columnX": .number(Double(scroll.convert(scroll.bounds, to: nil).minX + inset)),
-            "safeLeft": .number(Double(inset)),
             "scroller": .string(scroll.scrollerStyle == .legacy ? "legacy" : "overlay"),
         ]
         if let row = outline.selectedRowIndexes.first, let rv = outline.rowView(atRow: row, makeIfNecessary: false) as? BridgeRowView {
@@ -313,24 +312,14 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
             // rectangle would not reflect what is on screen.
             out["emphasized"] = .bool(rv.isEmphasized)
             out["timeColor"] = .string(rv.timeColorName)
-            out["rowFrame"] = .string("\(rv.frame)")
             if let win = rv.window {
                 let f = rv.convert(rv.bounds, to: nil)
                 out["rowInWindow"] = .object(["x": .number(Double(f.minX)), "top": .number(Double(win.frame.height - f.maxY)), "width": .number(Double(f.width)), "height": .number(Double(f.height))])
             }
             out["column"] = .number(Double(outline.tableColumns.first?.width ?? -1))
             if let cell = rv.cell {
-                out["titleX"] = .number(Double(cell.title.convert(cell.title.bounds, to: nil).minX))
-                out["dotX"] = .number(Double(cell.dot.convert(cell.dot.bounds, to: nil).minX))
                 out["timeX"] = .number(Double(cell.time.convert(cell.time.bounds, to: nil).minX))
-                out["titleRight"] = .number(Double(cell.title.convert(cell.title.bounds, to: nil).maxX))
             }
-            out["intercell"] = .number(Double(outline.intercellSpacing.width))
-            out["outlineFrame"] = .string("\(outline.frame)")
-            out["clipBounds"] = .string("\(scroll.contentView.bounds)")
-            out["selectionStyle"] = .number(Double(outline.selectionHighlightStyle.rawValue))
-            // The harness window is never key, so the active mapping is reported rather than observed.
-            out["activeTimeColor"] = .string(BridgeRowView.timeColorName(selected: true, emphasized: true))
         }
         var v: NSView? = view
         var vibrant = false
@@ -341,15 +330,10 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
             v = x.superview
         }
         out["vibrant"] = .bool(vibrant)
-        out["intercellHeight"] = .number(Double(outline.intercellSpacing.height))
         out["rows"] = .array((0..<outline.numberOfRows).compactMap { r in
             guard let cell = outline.view(atColumn: 0, row: r, makeIfNecessary: false) as? BridgeCell else { return nil }
             return .object(["title": .string(cell.title.stringValue), "dim": .bool(cell.dim), "struck": .bool(cell.struck), "unread": .bool(cell.unread)])
         })
-        var chain: [String] = []
-        v = view
-        while let x = v { chain.append(String(describing: type(of: x)) + ((x as? NSVisualEffectView).map { " material=\($0.material.rawValue)" } ?? "")); v = x.superview }
-        out["ancestry"] = .array(chain.map { .string($0) })
         return out
     }
 

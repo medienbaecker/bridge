@@ -227,7 +227,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             out["viewingVersion"] = page.viewingVersion.map { .number(Double($0)) } ?? .null
             out["answers"] = .number(Double(page.sidecar.answers.count))
             out["ready"] = .bool(page.ready)
-            out["buildMs"] = page.buildMs.map { .number(Double($0)) } ?? .null
             out["zoom"] = .number(Double((page.zoom * 100).rounded() / 100))
             out["links"] = .string(page.links.rawValue)
         }
