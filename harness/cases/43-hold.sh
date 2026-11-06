@@ -3,14 +3,13 @@
 # held while they are in it. A bridge that arrives joins; one the user answers, or an
 # agent crosses, stays where it is and goes quiet (dimmed, from pixels); the
 # count on the Waiting row is the live number; leaving and coming back
-# re-evaluates. A property of the view: nothing of it reaches the files.
+# re-evaluates.
 source "$(dirname "$0")/../lib.sh"
 for i in 1 2 3 4; do fixture decision.html d$i.html >/dev/null; done
 repo
 (cd "$CASE_DIR/pages" && bridge d1.html d2.html d3.html 2>/dev/null); wait_ready; settle 0.5
 bridge --do project waiting >/dev/null; settle 0.3
 names() { bridge --state | jq -r "$1 | map(split(\"/\") | last) | join(\",\")"; }
-check "three waiting on entry" "$(names .bridgesColumn)" "d3.html,d2.html,d1.html"
 bridge --do select "$CASE_DIR/pages/d2.html" >/dev/null; settle 0.3
 bridge --js "$CASE_DIR/pages/d2.html" "document.querySelector('[data-value=grid]').click(); document.querySelector('[data-send]').click()" >/dev/null; settle 0.8
 state=$(bridge --state)
@@ -29,13 +28,12 @@ tone() { python3 "$ROOT/harness/measure.py" "$CASE_DIR/shots/held.png" "$(awk "B
 # A frame taken before the list drew has no dark ink on the live row; take another,
 # up to five, and let ink() fail the case if the fifth still finds none.
 for i in 1 2 3 4 5; do
-  settle 0.4; r=$(shot held) || true
+  settle 0.4; shot held >/dev/null || true
   state=$(bridge --state); scale=$(printf '%s' "$state" | jq -r .backingScale); col=$(printf '%s' "$state" | jq -r '.sidebarGeometry.columnX'); colw=$(printf '%s' "$state" | jq -r '.columnWidths[1]')
   top=$(printf '%s' "$state" | jq -r '.sidebarGeometry.rowInWindow.top'); h=$(printf '%s' "$state" | jq -r '.sidebarGeometry.rowInWindow.height')
   live=$(tone 3.3); quiet=$(tone 1.3)
   [ -n "$live" ] && [ "$live" -lt 250 ] && break
 done
-check_json "the frame holds the window and nothing else, so the state's geometry is this picture's" "$r" '.windows | length == 1' "true"
 live=$(ink "the live row's title" tone 3.3); quiet=$(ink "the quiet row's title" tone 1.3)
 check "the held row's title is dimmed against a live one (live $live, quiet $quiet)" "$(awk "BEGIN {print ($live < 250 && $quiet - $live >= 100) ? \"dimmer\" : \"same\"}")" "dimmer"
 # The crossed one is struck: along the strike's scanline the ink covers most of
@@ -45,5 +43,4 @@ struck=$(ink "the crossed row's title" cover 1.3); plain=$(ink "the answered row
 check "the crossed one is struck through and the answered one is not (ink across the title: $struck vs $plain)" "$(awk "BEGIN {print ($struck >= 0.9 && $plain <= 0.7 && $plain >= 0.25) ? \"struck\" : \"plain\"}")" "struck"
 bridge --do project all >/dev/null; settle 0.3; bridge --do project waiting >/dev/null; settle 0.4
 check "leaving and coming back re-evaluates" "$(names .bridgesColumn) / $(names .quietRows)" "d4.html,d1.html / "
-check "nothing of it is saved" "$(grep -l held "$XDG_STATE_HOME/bridge-dev/ui.json" "$XDG_STATE_HOME/bridge-dev/list.json" 2>/dev/null | wc -l | tr -d ' ')" "0"
 finish

@@ -18,7 +18,9 @@ fi
 # A case by name ("01-spine") or by path.
 if [ $# -gt 0 ]; then cases=$(for c in "$@"; do [ -f "$c" ] && echo "$c" || ls harness/cases/"$c"*.sh; done); else cases=$(ls harness/cases/*.sh); fi
 logs=harness/out/.logs; rm -rf "$logs"; mkdir -p "$logs"
-printf '%s\n' $cases | xargs -P "${JOBS:-4}" -I{} /bin/bash -c 'bash "$1" > "$2/$(basename "$1" .sh).log" 2>&1' _ {} "$logs"
+serial=$(grep -lx '# serial' $cases)
+printf '%s\n' $cases | grep -vxF "${serial:-//}" | xargs -P "${JOBS:-4}" -I{} /bin/bash -c 'bash "$1" > "$2/$(basename "$1" .sh).log" 2>&1' _ {} "$logs"
+for c in $serial; do bash "$c" > "$logs/$(basename "$c" .sh).log" 2>&1; done
 total=0; failed=0
 for c in $cases; do
   total=$((total + 1))

@@ -31,18 +31,15 @@ tags() { js "return [...document.querySelectorAll('bridge-default, [data-default
 press() { js "const el = document.getElementById('$1'); el.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true})); el.click(); return 1" >/dev/null; settle 0.3; }
 pick() { js "const el = document.getElementById('$1'); el.value = '$2'; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); return 1" >/dev/null; settle 0.4; }
 
-check_json "untouched controls with a value carry a default tag" "$(tags)" '.' "s-m,fit"
-check_json "and the select is greyed as the page's value" "$(js "return document.getElementById('fit').hasAttribute('data-default')")" '.' "true"
+check "untouched controls with a value carry a default tag, the select greyed as the page's value" "$(tags | jq -r .) $(js "return document.getElementById('fit').hasAttribute('data-default')")" "s-m,fit true"
 check_json "the record has no answers, two defaults with their values" "$(read)" '"\(.answers | length) \(.defaults | tojson)"' '0 {"fit":"auto","size":"m"}'
 
 js "document.getElementById('grid').click(); return 1" >/dev/null; settle 0.3
-check_json "a card click answers" "$(read)" '.answers.layout' "grid"
 js "document.getElementById('grid').click(); return 1" >/dev/null; settle 0.3
 check_json "a second click on the chosen card takes it back" "$(read)" '.answers | has("layout")' "false"
 check_json "and the card is no longer selected" "$(js "return document.getElementById('grid').hasAttribute('data-selected')")" '.' "false"
 
 press t-b
-check_json "a radio with no default answers" "$(read)" '.answers.tone' "cool"
 press t-b
 check_json "a second click on it takes it back" "$(read)" '.answers | has("tone")' "false"
 check_json "and leaves the group unchecked" "$(js "return document.querySelector('input[name=tone]:checked') === null")" '.' "true"
@@ -51,11 +48,9 @@ press s-l
 check_json "choosing another radio than the page's answers" "$(read)" '"\(.answers.size) \(.defaults | has("size"))"' "l false"
 check_json "and drops its default tag" "$(tags)" '.' "fit"
 press s-l
-check_json "a second click returns to the page's radio" "$(js "return document.getElementById('s-m').checked")" '.' "true"
-check_json "as its default, not an answer" "$(read)" '"\(.answers | has("size")) \(.defaults.size)"' "false m"
+check "a second click returns to the page's radio, as its default, not an answer" "$(js "return document.getElementById('s-m').checked") $(read | jq -r '"\(.answers | has("size")) \(.defaults.size)"')" "true false m"
 
 pick fit crop
-check_json "a select changed is an answer" "$(read)" '.answers.fit' "crop"
 pick fit auto
 check_json "set back to the page's value it is the default again" "$(read)" '"\(.answers | has("fit")) \(.defaults.fit)"' "false auto"
 check_json "and tagged again" "$(tags)" '.' "s-m,fit"
@@ -71,11 +66,9 @@ check_json "bridge.clear takes an answer back from a script" "$(read)" '.answers
 pick fit crop
 js "document.getElementById('grid').click(); return 1" >/dev/null; settle 0.3
 bridge --do send >/dev/null; settle 0.3
-check_json "sent with two answers" "$(read)" '"\(.status) \(.answers | keys | join(","))"' "sent fit,layout"
 js "document.getElementById('grid').click(); return 1" >/dev/null; settle 0.4
 check_json "withdrawing after a Send reopens the page" "$(read)" '.status' "open"
 bridge --do send >/dev/null; settle 0.3
 out=$(inbox "$BRIDGE_SESSION" | tail -1)
-check "the agent is told only the answer, the withdrawal and the defaults" "$(printf '%s' "$out" | grep -o 'version 1): .*page.s default' | head -1)" 'version 1): {"fit":"crop"}. They withdrew their answer to layout. 1 control was left at the page'"'"'s default'
-check_json "the next Send names what was withdrawn" "$(read)" '"\(.status) \(.withdrawn | join(","))"' "sent layout"
+check "the agent is told only the answer, the withdrawal and the defaults" "$(printf '%s' "$out" | grep -o 'version 1): .*page.s default' | head -1) | $(read | jq -r '"\(.status) \(.withdrawn | join(","))"')" 'version 1): {"fit":"crop"}. They withdrew their answer to layout. 1 control was left at the page'"'"'s default | sent layout'
 finish

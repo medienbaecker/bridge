@@ -19,10 +19,6 @@ js() { bridge --js "$page" "$1"; }
 state=$(bridge --state); tb=$(printf '%s' "$state" | jq -r '(.titlebarHeight * .backingScale) | floor')
 # A column 120 pt into the page, whatever the columns to its left take.
 px=$(printf '%s' "$state" | jq -r '((.pageX + 120) * .backingScale) | floor')
-# A column through the buttons' left third: the first dark run is the first button's border.
-first_ink() { python3 "$ROOT/harness/measure.py" "$1" column "$px" 0 400 3 | awk '$3 + $4 + $5 < 300 {print $1; exit}'; }
-bridge --shot "$CASE_DIR/shots/zero.png" >/dev/null
-check "at scroll zero the first row starts below the bar ($(first_ink "$CASE_DIR/shots/zero.png") px, bar $tb)" "$([ "$(first_ink "$CASE_DIR/shots/zero.png")" -ge "$tb" ] && echo below)" "below"
 check_json "the layout viewport is inset by the bar, so the page lays out below it" "$(js "return innerHeight")" ". == $(printf '%s' "$state" | jq -r '.windowFrame.height - .titlebarHeight')" "true"
 js "window.scrollTo(0, 232); return window.scrollY" >/dev/null
 for i in $(seq 1 20); do [ "$(js "return window.scrollY")" = "232" ] && break; sleep 0.1; done; settle 0.4

@@ -14,8 +14,7 @@ before=$(bridge --state | jq -c '.pageWindows[0].topLeft')
 
 relaunch
 s=$(bridge --state)
-check_json "after a relaunch the bridge has its window again" "$s" '[.pageWindows[] | select(.location | endswith("/p1.html"))] | length' "1"
-check_json "that window shows the page" "$s" '.pageWindows[0] | .showsPage and .visible' "true"
+check_json "after a relaunch the bridge has its window again, showing the page" "$s" '[.pageWindows[] | select(.location | endswith("/p1.html")) | .showsPage and .visible] | . == [true]' "true"
 check "where it was" "$(jq -c '.pageWindows[0].topLeft' <<< "$s")" "$before"
 
 bridge --do closewindow "$p1" >/dev/null; settle 0.3

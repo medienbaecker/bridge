@@ -2,6 +2,7 @@
 # Local development hosts with self-signed certificates load; anything else keeps
 # normal certificate validation.
 source "$(dirname "$0")/../lib.sh"
+# serial
 
 site="$CASE_DIR/site"; mkdir -p "$site"
 printf '<!doctype html><html><head><meta charset="utf-8"><title>Sicher</title></head><body><h1>Über https</h1></body></html>' > "$site/index.html"
@@ -15,7 +16,7 @@ server=$!
 # server that never came up reported "https does not load" instead of naming
 # itself, which is what this case's flake has looked like every time.
 for i in $(seq 1 100); do nc -z 127.0.0.1 "$port" 2>/dev/null && break; sleep 0.1; done
-check "the test server is listening before anything is presented" "$(nc -z 127.0.0.1 "$port" 2>/dev/null && echo listening)$(head -c 120 "$CASE_DIR/server.log")" "listening"
+nc -z 127.0.0.1 "$port" 2>/dev/null || fault "the test server never listened: $(head -c 120 "$CASE_DIR/server.log")"
 trap 'kill $server 2>/dev/null; bridge --quit >/dev/null 2>&1 || true' EXIT
 sleep 0.6
 
@@ -27,6 +28,5 @@ check_json "a self-signed local host loads over https" "$(bridge --js "$url" "re
 bad="https://$other:$port/"
 (cd "$CASE_DIR" && bridge "$bad")
 sleep 2
-check_json "the same certificate on an out-of-scope host is refused" "$(bridge --js "$bad" "return location.href")" '.' "about:blank"
-check "refused pages never become ready" "$(bridge --state | jq -r '.ready')" "false"
+check "the same certificate on an out-of-scope host is refused and never becomes ready" "$(bridge --js "$bad" "return location.href" | jq -r .) $(bridge --state | jq -r '.ready')" "about:blank false"
 finish

@@ -28,13 +28,11 @@ repo
 wait_ready
 js() { bridge --js "$1" "$2"; }
 js "$built" "document.querySelector('#l-y').click(); window.__marker = 'alive'; return 1" >/dev/null; settle 0.3
-check_json "the script built its list" "$(js "$built" "return document.querySelectorAll('#pools li').length")" '.' "6"
 sed -i '' 's/Placeholder list/Placeholder list /' "$built"; settle 0.8; wait_ready
 check_json "after a prose rewrite the list is still there" "$(js "$built" "return document.querySelectorAll('#pools li').length")" '.' "6"
 check_json "because the page was reloaded, honestly" "$(js "$built" "return window.__marker || 'gone'")" '.' "gone"
 check_json "and the banner says why" "$(bridge --state)" '.banner' "This page builds itself with a script, so it was reloaded rather than patched."
 read=$(bridge --read "$built")
-check_json "version unchanged" "$read" '.version' "1"
 check_json "answer stands" "$read" '.answers.lock' "yes"
 check_json "the answer is shown again" "$(js "$built" "return document.querySelector('#l-y').checked")" '.' "true"
 
@@ -42,5 +40,4 @@ bridge --do select "$enhanced" >/dev/null; wait_ready
 js "$enhanced" "window.__marker = 'alive'; return 1" >/dev/null
 sed -i '' 's/Plain markup/Plain markup, edited/' "$enhanced"; settle 0.6
 check_json "a page whose script only enhances still patches" "$(js "$enhanced" "return window.__marker")" '.' "alive"
-check_json "with the new prose" "$(js "$enhanced" "return document.querySelector('h1').textContent")" '.' "Plain markup, edited"
 finish

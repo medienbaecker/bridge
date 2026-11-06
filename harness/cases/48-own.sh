@@ -40,9 +40,8 @@ check "after the user drives the radio, the next open sees that value, money sti
 # A script change reloads the page inside one app run and its ready runs again.
 # The user answers the checkbox first, so what the page reads after the reload is only
 # right if it is the record as it is now and not as it was when the window opened.
-bridge --js "$page" "document.getElementById('money').click(); document.body.dataset.marker = 'before'" >/dev/null; settle 0.6
+bridge --js "$page" "document.getElementById('money').click()" >/dev/null; settle 0.6
 perl -pi -e 's/bridge\.ready\(function \(\) \{/bridge.ready(function () { void 0;/' "$page"; settle 1.5
-check "the script change reloaded the page" "$(bridge --js "$page" "return String(document.body.dataset.marker)" | jq -r .)" "undefined"
 check "after the reload the page reads the record as it is now, not as it opened" "$(bridge --js "$page" "return document.body.dataset.own + ' ' + document.body.dataset.any + ' ' + document.body.dataset.isDefault + ' ' + document.body.dataset.moneyDefault" | jq -r .)" "range range false false"
 bridge --js "$page" "bridge.set('money', false); return bridge.isDefault('money')" >/dev/null; settle 0.6
 check_json "a value the page sets is never a default" "$(bridge --read "$page")" '"\(.answers.money) \(.defaults | join(","))"' "false "

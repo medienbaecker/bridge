@@ -5,8 +5,7 @@
 source "$(dirname "$0")/../lib.sh"
 page=$(fixture decision.html fresh.html); answered=$(fixture decision.html answered.html)
 r=$(bridge --shot "$page" "$CASE_DIR/shots/fresh.png" --width 600)
-check_json "it reports the size it rendered at" "$r" '"\(.width) \(.height > 200)"' "600 true"
-check "at twice the points, like the window" "$(sips -g pixelWidth "$CASE_DIR/shots/fresh.png" | awk '/pixelWidth/ {print $2}')" "1200"
+check "it renders at the size it reports, at twice the points, like the window" "$(printf '%s' "$r" | jq -r '"\(.width) \(.height > 200)"') $(sips -g pixelWidth "$CASE_DIR/shots/fresh.png" | awk '/pixelWidth/ {print $2}')" "600 true 1200"
 colours=$(ink "the rendered page" python3 - "$CASE_DIR/shots/fresh.png" <<'PY'
 import struct, subprocess, sys, tempfile
 bmp = tempfile.mktemp(suffix=".bmp")
@@ -25,6 +24,5 @@ check "nothing is recorded for it" "$([ -e "$(sidecar "$page")" ] && echo record
 bridge --js "$answered" "document.querySelector('[data-value=grid]').click()" >/dev/null; settle 0.5
 before=$(shasum "$(sidecar "$answered")" | cut -d' ' -f1)
 bridge --shot "$answered" "$CASE_DIR/shots/answered.png" >/dev/null
-check "an answered page's record is untouched" "$(shasum "$(sidecar "$answered")" | cut -d' ' -f1)" "$before"
-check_json "and it is still version 1 with the answer" "$(bridge --read "$answered")" '"\(.version) \(.answers.layout)"' "1 grid"
+check "an answered page's record is untouched, still version 1 with the answer" "$(shasum "$(sidecar "$answered")" | cut -d' ' -f1) $(bridge --read "$answered" | jq -r '"\(.version) \(.answers.layout)"')" "$before 1 grid"
 finish

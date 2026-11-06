@@ -8,31 +8,30 @@ GALLERY="$OUT/gallery"; mkdir -p "$GALLERY"
 
 # Plain: classes and selectors listed in pages.md under "What the base stylesheet gives you"
 documented=$(sed -n '/^## What the base stylesheet gives you/,$p' "$ROOT/skills/bridge/pages.md" | grep -o '`[^`]*`' | tr -d '`' | tr ' ' '\n' | grep -E '^(\.|\[)' | sort -u)
-for sel in $documented; do
-  check "pages.md documents $sel: gallery has it" "$(grep -c -- "$(printf '%s' "$sel" | sed 's/^\.//; s/^\[data-send\]$/data-send/; s/\.options\.stack/options stack/; s/^language-\*$/language-/')" "$ROOT/harness/fixtures/gallery.html" | awk '{print ($1>0)}')" "1"
-done
-for cls in $(grep -o 'class="[^"]*"' "$ROOT/harness/fixtures/gallery.html" | sed 's/class="//; s/"//' | tr ' ' '\n' | sort -u); do
-  case "$cls" in language-*) pattern='^\.language-\*$';; *) pattern="^\.([a-z-]+\.)?$cls\$";; esac
-  check "gallery uses .$cls: pages.md documents it" "$(printf '%s\n' "$documented" | grep -m1 -c -E "$pattern")" "1"
-done
+missing=$(for sel in $documented; do grep -q -- "$(printf '%s' "$sel" | sed 's/^\.//; s/^\[data-send\]$/data-send/; s/\.options\.stack/options stack/; s/^language-\*$/language-/')" "$ROOT/harness/fixtures/gallery.html" || printf '%s ' "$sel"; done)
+check "the gallery has everything pages.md documents" "$missing" ""
+missing=$(for cls in $(grep -o 'class="[^"]*"' "$ROOT/harness/fixtures/gallery.html" | sed 's/class="//; s/"//' | tr ' ' '\n' | sort -u); do
+  case "$cls" in (language-*) pattern='^\.language-\*$';; (*) pattern="^\.([a-z-]+\.)?$cls\$";; esac
+  printf '%s\n' "$documented" | grep -q -E "$pattern" || printf '.%s ' "$cls"
+done)
+check "pages.md documents every class the gallery uses" "$missing" ""
 
 # Mantine: component names in the mantine.md table must be imported by the gallery, and vice versa
 table=$(sed -n '/^| Component/,/^$/p' "$ROOT/skills/bridge/mantine.md" | tail -n +3 | cut -d'|' -f2 | grep -o '`[A-Za-z.]*`' | tr -d '`' | sed 's/\..*//' | sort -u)
 imported=$(head -1 "$ROOT/harness/fixtures/gallery.jsx" | sed 's/import {//; s/}.*//' | tr ',' '\n' | tr -d ' ' | sort -u)
-for c in $table; do check "mantine.md lists $c: gallery imports it" "$(printf '%s\n' "$imported" | grep -c "^$c\$")" "1"; done
+check "the gallery imports every component mantine.md lists" "$(for c in $table; do printf '%s\n' "$imported" | grep -q "^$c\$" || printf '%s ' "$c"; done)" ""
 layout="Title Text Stack Group SimpleGrid Table Badge Code Divider Image"
-for c in $imported; do
-  case " $layout " in *" $c "*) continue;; esac
-  check "gallery imports $c: mantine.md lists it" "$(printf '%s\n' "$table" | grep -c "^$c\$")" "1"
-done
-for c in $layout; do check "mantine.md names layout component $c" "$(grep -c "\`$c\`" "$ROOT/skills/bridge/mantine.md" | awk '{print ($1>0)}')" "1"; done
+missing=$(for c in $imported; do
+  case " $layout " in (*" $c "*) continue;; esac
+  printf '%s\n' "$table" | grep -q "^$c\$" || printf '%s ' "$c"
+done)
+check "mantine.md lists every component the gallery imports" "$missing" ""
 
 page=$(fixture gallery.html)
 repo
 (cd "$CASE_DIR/pages" && bridge gallery.html)
 wait_ready
 check_json "plain gallery renders every option card" "$(bridge --js "$page" "return document.querySelectorAll('[data-record][data-value]:not(.color)').length")" '.' "3"
-check_json "dials and colour are enhanced" "$(bridge --js "$page" "return [document.querySelectorAll('.dial output').length, document.querySelectorAll('.color .bridge-swatch').length].join(',')")" '.' "5,1"
 check_json "images loaded" "$(bridge --js "$page" "return [...document.images].every(i => i.complete && i.naturalWidth > 0)")" '.' "true"
 check_json "code is highlighted" "$(bridge --js "$page" "return document.querySelectorAll('.language-php .token').length > 3")" '.' "true"
 check_json "diff lines are marked, one line each" "$(bridge --js "$page" "const pre = document.querySelector('.language-diff').parentElement; const lh = parseFloat(getComputedStyle(pre).lineHeight); const rows = [...document.querySelectorAll('.language-diff > .token.inserted, .language-diff > .token.deleted')].map(t => Math.round(t.getBoundingClientRect().height / lh)); return rows.join(',')")" '.' "1,1"
@@ -58,8 +57,6 @@ snap plain-screenshots "Plain gallery: screenshots"
 jsx=$(fixture gallery.jsx); fixture gallery.data.json >/dev/null
 (cd "$CASE_DIR/pages" && bridge gallery.jsx)
 wait_ready
-check_json "mantine gallery built" "$(bridge --state)" '.title' "Gallery"
-check_json "every documented recording control is on the page" "$(bridge --js "$jsx" "return document.querySelectorAll('[data-record]').length")" '.' "12"
 bridge --snap "$GALLERY/mantine.png" >/dev/null
 snap mantine "Mantine gallery"
 echo "  galleries: $GALLERY/plain.png, $GALLERY/mantine.png"

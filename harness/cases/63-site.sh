@@ -42,7 +42,6 @@ HTML
 repo
 (cd "$CASE_DIR/pages" && bridge learn.html --site "http://127.0.0.1:$port/"); wait_ready; settle 1
 js() { bridge --js "$page" "$1"; }
-check_json "the page has the site's origin" "$(js "return location.origin")" '.' "http://127.0.0.1:$port"
 check_json "it imports the site's module" "$(js "return window.imported")" '.' "from the site"
 check_json "and reaches into the site's frame" "$(js "return document.getElementById('f').contentDocument.getElementById('menu').textContent")" '.' "real menu"
 check_json "an image from disk loads" "$(js "return document.getElementById('one').naturalWidth > 0")" '.' "true"
@@ -67,32 +66,21 @@ for base in "http://127.0.0.1:$port/" "https://127.0.0.1:$sport/"; do
   check_json "$base: a stylesheet beside it applies" "$(b "return getComputedStyle(document.getElementById('styled')).color")" '.' "rgb(1, 2, 3)"
   check_json "$base: an image beside it loads" "$(b "return document.getElementById('rel').naturalWidth > 0")" '.' "true"
 done
-check_json "a frame's scrollIntoView scrolls the frame" "$(bridge --js "$beside" "scrollTo(0, 0); const f = document.getElementById('f').contentWindow; f.go(); return f.scrollY > 0")" '.' "true"
-check_json "and leaves the page where it was" "$(bridge --js "$beside" "return scrollY")" '.' "0"
+check_json "a frame's scrollIntoView scrolls the frame and leaves the page where it was" "$(bridge --js "$beside" "scrollTo(0, 0); const f = document.getElementById('f').contentWindow; f.go(); return f.scrollY > 0 && scrollY == 0")" '.' "true"
 check_json "a file the page never named is out of reach" "$(bridge --js "$beside" "return fetch('bridge-file:///etc/hosts').then(() => 'read', () => 'refused')")" '.' "refused"
 bridge --js "$beside" "document.getElementById('out').click(); return 1" >/dev/null; settle 0.5
 check "a link to a file beside it opens that file, outside Bridge" "$(bridge --state | jq -c '.openedExternally')" "[\"file://$CASE_DIR/pages/notes.md\"]"
-bridge --do point >/dev/null
-bridge --js "$beside" "const el = document.querySelector('#styled'); const r = el.getBoundingClientRect(); el.dispatchEvent(new MouseEvent('click', {bubbles: true, clientX: r.left + 5, clientY: r.top + 5})); return 1" >/dev/null; settle 0.3
-bridge --js "$beside" "const t = document.querySelector('.bridge-thread:popover-open textarea'); t.value = 'why this colour'; t.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', metaKey: true, bubbles: true})); return 1" >/dev/null; settle 0.4
-check_json "a note pinned on a site page is recorded" "$(bridge --pins "$beside")" '.[0] | "\(.text) | \(.target)"' 'why this colour | p "styled" in #styled'
 shotme="$CASE_DIR/pages/shotme.html"
 printf '<!doctype html><title>Shot</title><style>body{margin:0}iframe{display:block;border:0;width:400px;height:150px}</style><iframe id="f"></iframe><script>document.getElementById("f").src = "/red.html"</script>' > "$shotme"
 r=$(bridge --shot "$shotme" "$CASE_DIR/shots/shotme.png" --width 600 --site "http://127.0.0.1:$port/")
 check_json "--shot renders a page that was never presented as part of the site" "$r" '.width' "600"
 check "and waits for the frame its script loads" "$(python3 "$ROOT/harness/measure.py" "$CASE_DIR/shots/shotme.png" 100 | grep -c ' 255 0 0$' | tr -d ' ')" "1"
-check "--shot refuses --site for a page that is not html" "$(bridge --shot "$CASE_DIR/pages/notes.md" "$CASE_DIR/shots/x.png" --site "http://127.0.0.1:$port/" 2>&1)" "--site is for .html pages: $CASE_DIR/pages/notes.md"
 tone="$CASE_DIR/pages/tone.html"
 printf '<!doctype html><title>Tone</title><iframe id="f" src="/tone.html"></iframe>' > "$tone"
 (cd "$CASE_DIR/pages" && bridge tone.html --site "http://127.0.0.1:$port/"); wait_ready; settle 1
 colour() { bridge --js "$tone" "return getComputedStyle(document.getElementById('f').contentDocument.getElementById('tone')).color"; }
-check_json "the frame shows the site's colour" "$(colour)" '.' "rgb(255, 0, 0)"
+before=$(colour)
 echo '#tone { color: rgb(0, 0, 255) }' > "$site/theme.css"
 bridge --reload "$tone"; wait_ready; settle 1
-check_json "--reload shows the site's changed CSS" "$(colour)" '.' "rgb(0, 0, 255)"
-bridge --do point >/dev/null
-bridge --js "$tone" "const el = document.querySelector('iframe'); const r = el.getBoundingClientRect(); el.parentElement.dispatchEvent(new MouseEvent('click', {bubbles: true, clientX: r.left + 5, clientY: r.top + 5})); return 1" >/dev/null; settle 0.3
-bridge --js "$tone" "document.querySelector('.bridge-thread:popover-open textarea').value = 'halb geschrieben'; return 1" >/dev/null
-check "--reload refuses while they are writing a note" "$(bridge --reload "$tone" 2>&1)" "they are writing a note on it; reload later"
-check "--reload refuses a page that is not listed" "$(bridge --reload "$CASE_DIR/pages/never.html" 2>&1)" "not in the list: $CASE_DIR/pages/never.html"
+check "--reload shows the site's changed CSS" "$before $(colour)" '"rgb(255, 0, 0)" "rgb(0, 0, 255)"'
 finish

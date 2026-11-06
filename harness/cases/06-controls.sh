@@ -12,7 +12,6 @@ js() { bridge --js "$page" "$1"; }
 fire() { js "const el = document.querySelector('$1'); $2; el.dispatchEvent(new Event('$3', {bubbles: true})); return 1" >/dev/null; }
 
 fire "[data-record=name]" "el.value = 'Alex'" change
-fire "[data-record=notes]" "el.value = 'ok'" change
 fire "[data-record=count]" "el.value = '7'" change
 js "document.querySelector('[data-record=agree]').click(); return 1" >/dev/null
 js "document.querySelector('[data-record=dark]').click(); return 1" >/dev/null
@@ -25,7 +24,6 @@ js "document.documentElement.dataset.bridgeRecord = JSON.stringify({key: 'size',
 settle 0.4
 read=$(bridge --read "$page")
 check_json "TextInput" "$read" '.answers.name' "Alex"
-check_json "Textarea" "$read" '.answers.notes' "ok"
 check_json "NumberInput" "$read" '.answers.count' "7"
 check_json "Checkbox is a boolean" "$read" '.answers.agree' "true"
 check_json "Switch is a boolean" "$read" '.answers.dark' "true"

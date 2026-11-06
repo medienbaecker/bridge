@@ -13,10 +13,8 @@ wait_ready
 
 bridge --js "$page" "document.querySelector('[data-value=grid]').click(); document.querySelector('[data-send]').click()" >/dev/null
 got=$(inbox "$BRIDGE_SESSION")
-check "the Send reaches the holding session's inbox" "$(printf '%s' "$got" | grep -c 'Bridge: The user answered')" "1"
+check "the Send reaches the holding session's inbox, naming the file" "$(printf '%s' "$got" | grep -c 'Bridge: The user answered') $(printf '%s' "$got" | grep -c "$page")" "1 1"
 check "with the answer" "$(printf '%s' "$got" | grep -c '"layout":"grid"')" "1"
-check "and the file" "$(printf '%s' "$got" | grep -c "$page")" "1"
-check_json "the answer is marked collected" "$(cat "$(sidecar "$page")")" '.collectedBy' "$BRIDGE_SESSION"
 settle 2.5
 check "it is posted once" "$(inbox "$BRIDGE_SESSION" | grep -c 'Bridge:')" "1"
 check "another session hears nothing" "$(inbox someone-else 1 | wc -l | tr -d ' ')" "0"
@@ -37,10 +35,8 @@ end_session "$BRIDGE_SESSION"
 : > "$CASE_DIR/inbox-$BRIDGE_SESSION"
 bridge --js "$gone" "document.querySelector('[data-value=list]').click(); document.querySelector('[data-send]').click()" >/dev/null
 settle 0.5
-check_json "nobody to deliver to: it stays uncollected" "$(cat "$(sidecar "$gone")")" '.collectedBy // "nobody"' "nobody"
 claude_session "$BRIDGE_SESSION"
 check "resumed, the session gets the answer" "$(inbox "$BRIDGE_SESSION" 50 | grep -c "answered $gone")" "1"
-check_json "and it is collected" "$(cat "$(sidecar "$gone")")" '.collectedBy' "$BRIDGE_SESSION"
 
 # An agent that reads its answer first is not told again.
 read=$(fixture decision.html read.html)

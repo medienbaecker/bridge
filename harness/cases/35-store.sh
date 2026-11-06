@@ -12,10 +12,9 @@ repo
 store=$(sidecar "$old")
 in_store=no; case "$store" in "$XDG_STATE_HOME"/*/answers/old.html-*.bridge.json) in_store=yes;; esac
 check "the record is in the store, under the state dir ($store)" "$in_store" "yes"
-check_json "with the user's answer" "$(cat "$store")" '.answers.name + " " + .status' "Ada sent"
 check_json "restored into the page" "$(bridge --js "$old" "return document.querySelector('input').value")" '.' "Ada"
 check "beside the page the old file is renamed .migrated, its bytes intact, and nothing reads it as the record" "$([ ! -e "$old.bridge.json" ] && shasum "$old.bridge.json.migrated" | cut -d' ' -f1)" "$sum"
-check_json "--read finds it" "$(bridge --read "$old")" '.answers.name' "Ada"
+check_json "--read finds it, with the user's answer" "$(bridge --read "$old")" '.answers.name + " " + .status' "Ada sent"
 (cd "$CASE_DIR/pages" && bridge fresh.html); wait_ready
 bridge --js "$fresh" "const i = document.querySelector('input'); i.value = 'Grace'; i.dispatchEvent(new Event('input', {bubbles: true})); return 1" >/dev/null; settle 0.5
 check_json "a fresh page's answer lands in the store" "$(cat "$(sidecar "$fresh")")" '.answers.name' "Grace"

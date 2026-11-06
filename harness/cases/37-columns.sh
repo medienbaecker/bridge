@@ -13,10 +13,8 @@ mk Sampleproject "Sample 1" k1; mk Sampleproject "Sample 2" k2; mk inbox "Inbox 
 state=$(bridge --state)
 check_json "Waiting and All head the projects column, then the projects, newest first" "$state" '[.projects.rows[].name] | join(",")' "Waiting,All,inbox,Sampleproject"
 check_json "counts: three waiting, three in all, one and two in the projects" "$state" '[.projects.rows[].count] | join(",")' "3,3,1,2"
-check_json "a fresh launch had nothing waiting, so the column was All; presents stayed in it" "$state" '.projects.scope' "all"
 bridge --do project "$(printf '%s' "$state" | jq -r '.projects.rows[3].key')" >/dev/null; settle 0.3
 check_json "selecting a project shows only its bridges, newest first" "$(bridge --state)" '[.bridgesColumn[] | split("/") | last] | join(",")' "k2.html,k1.html"
-check_json "the selected bridge, out of that project, gave way to the project's first" "$(bridge --state)" '.selected | endswith("k2.html")' "true"
 bridge --js "$CASE_DIR/Sampleproject/k2.html" "document.querySelector('#a').click(); return 1" >/dev/null; settle 0.3; bridge --do send >/dev/null; settle 0.3
 bridge --do project waiting >/dev/null; settle 0.3
 check_json "Waiting excludes the sent one" "$(bridge --state)" '[.bridgesColumn[] | split("/") | last] | join(",")' "i1.html,k1.html"

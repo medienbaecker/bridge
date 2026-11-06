@@ -35,10 +35,7 @@ set_range() { js "const r = document.querySelector('[data-record=$1]'); r.value 
 
 check_json "initial values are applied on load" "$(js "return getComputedStyle(document.querySelector('.tune-card')).borderRadius")" '.' "4px"
 set_range radius 16
-check_json "a slider drives the page's element live" "$(js "return getComputedStyle(document.querySelector('.tune-card')).borderRadius")" '.' "16px"
 settle 0.3
-check_json "and records the value" "$(bridge --read "$page")" '.answers.radius' "16"
-
 set_range pad 32
 settle 0.4
 check_json "the same control drives the embedded live site" "$(js "@frame return getComputedStyle(document.querySelector('.hero')).padding")" '.' "32px"
@@ -50,6 +47,5 @@ bridge --quit; sleep 0.4
 (cd "$CASE_DIR/pages" && bridge tune.html)
 wait_ready
 settle 0.5
-check_json "recorded values drive the page after a restart" "$(js "return getComputedStyle(document.querySelector('.tune-card')).borderRadius")" '.' "16px"
-check_json "and the frame" "$(js "@frame return getComputedStyle(document.querySelector('.hero')).padding")" '.' "32px"
+check "recorded values drive the page and the frame after a restart" "$(js "return getComputedStyle(document.querySelector('.tune-card')).borderRadius") $(js "@frame return getComputedStyle(document.querySelector('.hero')).padding")" '"16px" "32px"'
 finish

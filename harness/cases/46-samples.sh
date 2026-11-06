@@ -37,8 +37,7 @@ for page in "$CASE_DIR/pages"/sample-*.html; do
   if [ -n "$keys" ]; then
     settle 0.6
     got=$(bridge --read "$page" | jq -r '[.answers | keys[]] | sort | join(",")')
-    check "$name: every key it declares records when driven ($keys)" "$got" "$keys"
-    check "$name: no key without a driver" "$undriven" ""
+    check "$name: every key it declares records when driven, none without a driver ($keys)" "$got / $undriven" "$keys / "
   fi
   bridge --remove "$page" >/dev/null 2>&1
 done

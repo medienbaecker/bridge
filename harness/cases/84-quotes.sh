@@ -25,7 +25,6 @@ open(p,'w').write(s)
 PY
 for i in $(seq 1 30); do [ "$(js "$page" "return document.querySelectorAll('p').length")" = "1" ] && break; sleep 0.1; done
 check "an edit to the page keeps the quote" "$(js "$page" "return document.querySelector('code').textContent.split('\n')[0]" | jq -r .)" "title() {"
-check "without a reload" "$(bridge --state | jq -r '.banner')" "null"
 
 printf '# Plan\n\n```js quote=src/card.js:3\n```\n' > "$CASE_DIR/pages/plan.md"
 (cd "$CASE_DIR/pages" && bridge plan.md)

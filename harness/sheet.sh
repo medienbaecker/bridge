@@ -37,27 +37,6 @@ settle
 snap nosidebar "Sidebar collapsed"
 bridge --do sidebar >/dev/null
 
-# Notes
-bridge --do point >/dev/null
-snap point "Point mode"
-bridge --js "$page" "const el = document.querySelector('[data-value=list] strong'); const r = el.getBoundingClientRect(); el.dispatchEvent(new MouseEvent('click', {bubbles: true, clientX: r.left + 10, clientY: r.top + 5}))" >/dev/null
-settle
-bridge --js "$page" "document.querySelector('.bridge-thread textarea').value = 'Too heavy at phone width, and the title wraps.'" >/dev/null
-snap composer "The user clicks the List title and types"
-bridge --js "$page" "document.querySelector('.bridge-thread textarea').dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', metaKey: true, bubbles: true}))" >/dev/null
-settle 0.3
-id=$(bridge --pins "$page" | jq -r '.[0].id')
-bridge --working "$page" "$id"; bridge --reply "$page" "$id" "Dropped the side padding at phone width; the title is on one line now."
-settle 0.3
-bridge --js "$page" "document.querySelector('.bridge-pin').click()" >/dev/null
-settle
-snap thread "The agent answered on the thread"
-bridge --js "$page" "document.querySelector('.bridge-thread:popover-open').hidePopover()" >/dev/null
-bridge --do notes >/dev/null
-settle
-snap notes "The Notes popover, native, one line per note"
-bridge --do notes >/dev/null
-
 # A new version
 python3 - "$page" <<'PY'
 import sys; p=sys.argv[1]; s=open(p).read()
@@ -105,6 +84,6 @@ cp "/System/Library/Desktop Pictures/Solid Colors/Silver.png" "$CASE_DIR/pages/s
 wait_ready
 snap text "A text draft: word count and a Copy button"
 bridge --do select "$CASE_DIR/pages/shot.png" >/dev/null; wait_ready
-snap image "An image, ready for a pin"
+snap image "An image"
 echo "sheet: $SHEET/index.html"
 finish

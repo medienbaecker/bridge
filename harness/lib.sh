@@ -11,7 +11,6 @@ export BRIDGE_TEST=1
 export BRIDGE_DEV_APP="$ROOT/build.noindex/Bridge Dev.app"
 export BRIDGE_SESSION="test-$CASE_NAME"
 export BRIDGE_CLAUDE_SESSIONS="$CASE_DIR/claude-sessions"
-export BRIDGE_LINK_GROUP="$CASE_NAME"
 export BRIDGE_SCREEN="${BRIDGE_SCREEN-Test Screen}"
 FAILS=0
 CHECKS=0
@@ -55,17 +54,6 @@ inbox() {
   local i
   for i in $(seq 1 ${2:-30}); do [ -s "$CASE_DIR/inbox-$1" ] && break; sleep 0.1; done
   jq -r . "$CASE_DIR/inbox-$1" 2>/dev/null
-}
-
-b() { XDG_STATE_HOME="$CASE_DIR/state-b" BRIDGE_SESSION="${AGENT:-test-$CASE_NAME-b}" bridge "$@"; }
-
-with_b() {
-  mkdir -p "$CASE_DIR/state-b"
-  trap 'bridge --quit >/dev/null 2>&1; b --quit >/dev/null 2>&1' EXIT
-  bridge --name "${1:-thomas}" >/dev/null; b --name "${2:-yoshie}" >/dev/null
-  bridge --peers >/dev/null; b --peers >/dev/null
-  local i
-  for i in $(seq 1 160); do [ "$(bridge --peers | jq -r '.connected | join(",")')" = "${2:-yoshie}" ] && [ "$(b --peers | jq -r '.connected | join(",")')" = "${1:-thomas}" ] && break; sleep 0.25; done
 }
 
 # A fault found inside a command substitution, where an assignment to FAILS is
@@ -165,3 +153,4 @@ finish() {
   exit "$FAILS"
 }
 trap 'bridge --quit >/dev/null 2>&1 || true' EXIT
+freeze_at() { bridge --state | jq -r --arg at "$1" '($at | split(" ") | map(tonumber)) as [$x, $y] | .freeze.screenFrame as $s | "\(.windowFrame.x - $s[0] + .pageX + $x) \(($s[1] + $s[3]) - (.windowFrame.y + .windowFrame.height) + .pageY + $y)"'; }

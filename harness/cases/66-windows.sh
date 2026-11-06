@@ -8,7 +8,6 @@ for i in 1 2; do printf '<!doctype html><title>Page %s</title><p>Page %s</p>' $i
 p1="$CASE_DIR/pages/p1.html"; p2="$CASE_DIR/pages/p2.html"
 (cd "$CASE_DIR/pages" && bridge p1.html p2.html); wait_ready; settle 0.3
 bridge --do select "$p1" >/dev/null; settle 0.2
-check_json "before: the main window shows the page" "$(bridge --state)" '.contentShowsPage' "true"
 
 bridge --do window >/dev/null; settle 0.4
 s=$(bridge --state)

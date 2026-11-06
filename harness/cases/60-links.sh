@@ -31,26 +31,22 @@ js() { bridge --js "$url" "$1"; }
 click() { js "document.querySelector('$1').click(); return 1" >/dev/null; settle 0.6; }
 home() { js "location.href = '$url'; return 1" >/dev/null; settle 0.6; }
 opened() { bridge --state | jq -c '.openedExternally'; }
+at() { js "return location.href" | jq -r .; }
+at_frame() { fjs "@frame return location.href" | jq -r .; }
 
 (cd "$CASE_DIR" && bridge "$url")
 wait_ready
-check_json "a URL bridge defaults to external" "$(bridge --state)" '.links' "external"
 click a.other
-check_json "external: a link to another host leaves the page alone" "$(js "return location.href")" '.' "$url"
-check "and is handed to the browser" "$(opened)" "[\"$other\"]"
+check "external: a link to another host is handed to the browser, the page left alone" "$(at) $(opened)" "$url [\"$other\"]"
 click a.blank
-check_json "a target=_blank link leaves the page alone" "$(js "return location.href")" '.' "$url"
-check "and is handed to the browser" "$(opened)" "[\"$other\",\"$next\"]"
+check "a target=_blank link is handed to the browser, the page left alone" "$(at) $(opened)" "$url [\"$other\",\"$next\"]"
 click a.same
-check_json "external: a same-host link navigates in Bridge" "$(js "return location.href")" '.' "$next"
-check "and opens nothing" "$(opened | jq length)" "2"
+check "external: a same-host link navigates in Bridge and opens nothing" "$(at) $(opened | jq length)" "$next 2"
 
 (cd "$CASE_DIR" && bridge --links window "$url")
-check_json "--links window is the page's mode" "$(bridge --state)" '.links' "window"
 home
 click a.other
-check_json "window: a link to another host navigates in Bridge" "$(bridge --js "$url" "return location.href")" '.' "$other"
-check "and opens nothing" "$(opened | jq length)" "2"
+check "window: a link to another host navigates in Bridge and opens nothing" "$(bridge --js "$url" "return location.href" | jq -r .) $(opened | jq length)" "$other 2"
 
 exe="$BRIDGE_DEV_APP/Contents/MacOS/$(ls "$BRIDGE_DEV_APP/Contents/MacOS" | head -1)"
 bridge --quit >/dev/null 2>&1; sleep 0.5; "$exe" >/dev/null 2>&1 & sleep 0.3; wait_ready
@@ -62,8 +58,7 @@ home
 click a.anchor
 check_json "browser: an in-page anchor still moves within the page" "$(js "return location.href")" '.' "${url}#end"
 click a.same
-check_json "browser: a same-host link leaves the page alone" "$(js "return location.href")" '.' "${url}#end"
-check "and is handed to the browser" "$(opened)" "[\"$next\"]"
+check "browser: a same-host link is handed to the browser, the page left alone" "$(at) $(opened)" "${url}#end [\"$next\"]"
 
 (cd "$CASE_DIR" && bridge "$url")
 check_json "presenting again without --links goes back to the default" "$(bridge --state)" '.links' "external"
@@ -87,24 +82,20 @@ frames plain
 fjs "document.querySelector('body > a').click(); return 1" >/dev/null; settle 0.6
 check "a local page's own links still open in the browser" "$(opened | jq -r last)" "$other"
 fclick a.other
-check_json "iframe default external: a link to another host leaves the frame alone" "$(fjs "@frame return location.href")" '.' "$url"
-check "and is handed to the browser" "$(opened | jq -r last)" "$other"
+check "iframe default external: a link to another host is handed to the browser, the frame left alone" "$(at_frame) $(opened | jq -r last)" "$url $other"
 fclick a.anchor
 check_json "an in-page anchor stays in the frame" "$(fjs "@frame return location.href")" '.' "${url}#end"
 fclick a.blank
 check "a target=_blank link in a frame is handed to the browser" "$(opened | jq -r last)" "$next"
 fclick a.same
-check_json "a same-host link navigates inside the frame" "$(fjs "@frame return location.href")" '.' "$next"
-check_json "while the page around it stays" "$(fjs "return document.title")" '.' "Frames"
+check "a same-host link navigates inside the frame while the page around it stays" "$(at_frame) $(fjs "return document.title" | jq -r .)" "$next Frames"
 
 frames window 'data-links="window"'
 before=$(opened | jq length)
 fclick a.other
-check_json "data-links=window: a link to another host navigates inside the frame" "$(fjs "@frame return location.href")" '.' "$other"
-check "and opens nothing" "$(opened | jq length)" "$before"
+check "data-links=window: a link to another host navigates inside the frame and opens nothing" "$(at_frame) $(opened | jq length)" "$other $before"
 
 frames browser 'data-links="browser"'
 fclick a.same
-check_json "data-links=browser: a same-host link leaves the frame alone" "$(fjs "@frame return location.href")" '.' "$url"
-check "and is handed to the browser" "$(opened | jq -r last)" "$next"
+check "data-links=browser: a same-host link is handed to the browser, the frame left alone" "$(at_frame) $(opened | jq -r last)" "$url $next"
 finish
