@@ -902,9 +902,6 @@ function __bridgeInit(options) {
       if (chip && !bar.hasAttribute('data-empty')) post('freeze', { send: chip.dataset.session });
     });
     freeze.agents = (list) => {
-      const hint = document.createElement('span');
-      hint.className = 'bridge-agents-hint';
-      hint.textContent = 'Click to pin · drag for a box · Esc to cancel';
       const chips = list.map((agent, i) => {
         const chip = document.createElement('button');
         chip.dataset.session = agent.session;
@@ -928,7 +925,7 @@ function __bridgeInit(options) {
       draft.dataset.session = '';
       draft.className = 'bridge-agents-draft';
       draft.textContent = 'Draft';
-      bar.replaceChildren(hint, scroller, draft);
+      bar.replaceChildren(scroller, draft);
       bar.getAnimations().forEach((a) => a.cancel());
       if (still.matches) return;
       const hidden = bar.animate([{ translate: '0 100%' }], { fill: 'forwards' });

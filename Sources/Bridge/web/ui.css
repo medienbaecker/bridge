@@ -129,7 +129,7 @@ code:is([data-quote], [data-quoted])::before { content: attr(data-quote) attr(da
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 0 4px 0 0;
+  padding: 0 4px;
   border: 0;
   border-top: 1px solid rgb(255 255 255 / 0.14);
   background: #18181a;
@@ -140,7 +140,6 @@ code:is([data-quote], [data-quoted])::before { content: attr(data-quote) attr(da
   z-index: 2147483001;
 }
 .bridge-agents:popover-open { display: flex; }
-.bridge-agents-hint { flex: none; padding: 0 12px; color: rgb(255 255 255 / 0.75); white-space: nowrap; }
 .bridge-agents-list { flex: 1; display: flex; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; overscroll-behavior: contain; }
 .bridge-agents button {
   flex: none;
