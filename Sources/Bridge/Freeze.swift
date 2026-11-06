@@ -7,6 +7,11 @@ import WebKit
 
 final class FreezePanel: NSPanel {
     override var canBecomeKey: Bool { true }
+
+    override func sendEvent(_ event: NSEvent) {
+        guard event.type == .scrollWheel, let freeze = Freeze.current, freeze.panel === self else { return super.sendEvent(event) }
+        freeze.scroll(event)
+    }
 }
 
 final class Freeze: NSObject {
@@ -248,6 +253,11 @@ final class Freeze: NSObject {
     // MARK: Notes
 
     var notes: [Comment] { page.sidecar.comments }
+
+    func scroll(_ event: NSEvent) {
+        let at = local(CGRect(origin: event.cgEvent?.location ?? .zero, size: .zero)).origin
+        page.call("__bridge.wheel(x, y, dx, dy)", ["x": at.x, "y": at.y, "dx": -event.scrollingDeltaX, "dy": -event.scrollingDeltaY])
+    }
 
     func showGlass(_ rect: CGRect?) {
         guard let rect else { glass.isHidden = true; return }

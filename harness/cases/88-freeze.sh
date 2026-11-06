@@ -31,7 +31,14 @@ check_json "the screen is in point mode, a pin under the pointer" "$(on_screen "
 check_json "the cursor Bridge sets is the pin above the bar, the arrow on it" "$(on_screen "return [__bridge.pinsAt(innerWidth / 2, innerHeight / 2), __bridge.pinsAt(innerWidth / 2, innerHeight - 10)]")" 'map(tostring) | join(",")' "true,false"
 check_json "the hover outline is drawn under the page, so pins and note boxes cover it" "$(bridge --state)" '.freeze.outlineUnderPage' "true"
 check_json "over an agent the page shows the normal cursor" "$(on_screen "return getComputedStyle(document.querySelector('.bridge-agents button')).cursor")" '.' "auto"
-check_json "the wheel anywhere on the bar scrolls the agents sideways, also over the hint" "$(on_screen "const list = document.querySelector('.bridge-agents-list'); list.style.maxWidth = '60px'; list.scrollLeft = 0; document.querySelector('.bridge-agents-hint').dispatchEvent(new WheelEvent('wheel', { deltaY: 40, bubbles: true, cancelable: true })); const down = list.scrollLeft; list.querySelector('button').dispatchEvent(new WheelEvent('wheel', { deltaX: -40, bubbles: true, cancelable: true })); const back = list.scrollLeft; list.style.maxWidth = ''; return [down > 0, back < down]")" 'map(tostring) | join(",")' "true,true"
+on_screen "const list = document.querySelector('.bridge-agents-list'); list.style.maxWidth = '60px'; list.scrollLeft = 0" >/dev/null
+bottom=$(bridge --state | jq -r '.freeze.screenFrame[3] - 12')
+bridge --do freeze-scroll "40 $bottom 0 40" >/dev/null; settle 0.3
+down=$(on_screen "return document.querySelector('.bridge-agents-list').scrollLeft")
+bridge --do freeze-scroll "400 $bottom -30 0" >/dev/null; settle 0.3
+back=$(on_screen "return document.querySelector('.bridge-agents-list').scrollLeft")
+on_screen "document.querySelector('.bridge-agents-list').style.maxWidth = ''" >/dev/null
+check "a real scroll anywhere on the bar moves the agents sideways, the wheel and a sideways swipe" "$(jq -n --argjson d "$down" --argjson b "$back" '[$d > 0, $b < $d] | map(tostring) | join(",")' -r)" "true,true"
 centre=$(printf '%s' "$state" | jq -r '.freeze.screenFrame as $s | "\(.windowFrame.x - $s[0] + .windowFrame.width / 2) \(($s[1] + $s[3]) - (.windowFrame.y + .windowFrame.height) + .windowFrame.height / 2)"')
 corner=$(printf '%s' "$centre" | awk '{ print $1 - 60, $2 - 60 }')
 listed() { jq '.bridges | length' "$XDG_STATE_HOME/bridge-dev/list.json"; }

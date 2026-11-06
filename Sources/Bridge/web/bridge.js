@@ -722,7 +722,7 @@ function __bridgeInit(options) {
 
   // ---- the freeze: pins and boxes over the screen, and the agents bar
 
-  let freeze = { agents() {}, reset() {}, leave() {}, pinsAt() { return false; } };
+  let freeze = { agents() {}, reset() {}, leave() {}, wheel() {}, pinsAt() { return false; } };
   if (options.freeze) {
     root.setAttribute('data-bridge-freeze', '');
     const notes = { list: [], pins: new Map(), boxes: new Map(), drafts: {}, pending: null };
@@ -893,11 +893,6 @@ function __bridgeInit(options) {
     const still = matchMedia('(prefers-reduced-motion: reduce)');
     const bar = document.createElement('div');
     bar.className = 'bridge-agents';
-    bar.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      const list = bar.querySelector('.bridge-agents-list');
-      if (list) list.scrollLeft += Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-    }, { passive: false });
     bar.setAttribute('popover', 'manual');
     bar.toggleAttribute('data-empty', true);
     root.appendChild(bar);
@@ -941,6 +936,10 @@ function __bridgeInit(options) {
         hidden.cancel();
         bar.animate([{ translate: '0 100%' }, { translate: '0 0' }], { duration: 220, easing: 'cubic-bezier(0.23, 1, 0.32, 1)' });
       }));
+    };
+    freeze.wheel = (x, y, dx, dy) => {
+      const list = bar.querySelector('.bridge-agents-list');
+      if (list && y >= bar.offsetTop) list.scrollLeft += Math.abs(dx) > Math.abs(dy) ? dx : dy;
     };
     freeze.pinsAt = (x, y) => {
       if (y >= bar.offsetTop) return false;
@@ -1025,6 +1024,7 @@ function __bridgeInit(options) {
     agents: (list) => freeze.agents(list),
     reset: () => freeze.reset(),
     pinsAt: (x, y) => freeze.pinsAt(x, y),
+    wheel: (x, y, dx, dy) => freeze.wheel(x, y, dx, dy),
     leave: () => freeze.leave(),
     state,
     shape,
