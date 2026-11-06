@@ -195,7 +195,8 @@ final class Model {
     }
 
     func present(_ locations: [String], cwd: String, session: String, ground: Ground?, links: String?, site: String?) {
-        let project = Ground.projectRoot(for: cwd)
+        let inPages = cwd.hasPrefix(Paths.pages.path + "/") || cwd == Paths.pages.path
+        let project = Ground.projectRoot(for: inPages ? agents[session]?.cwd ?? cwd : cwd)
         for loc in locations {
             let siteChanged = pages[loc] != nil && listing.entry(loc)?.site != site
             if listing.entry(loc) != nil {
