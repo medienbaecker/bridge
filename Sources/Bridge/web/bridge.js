@@ -893,6 +893,11 @@ function __bridgeInit(options) {
     const still = matchMedia('(prefers-reduced-motion: reduce)');
     const bar = document.createElement('div');
     bar.className = 'bridge-agents';
+    bar.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const list = bar.querySelector('.bridge-agents-list');
+      if (list) list.scrollLeft += Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    }, { passive: false });
     bar.setAttribute('popover', 'manual');
     bar.toggleAttribute('data-empty', true);
     root.appendChild(bar);
@@ -924,11 +929,6 @@ function __bridgeInit(options) {
       const scroller = document.createElement('div');
       scroller.className = 'bridge-agents-list';
       scroller.append(...chips);
-      scroller.addEventListener('wheel', (e) => {
-        if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
-        e.preventDefault();
-        scroller.scrollLeft += e.deltaY;
-      }, { passive: false });
       const draft = document.createElement('button');
       draft.dataset.session = '';
       draft.className = 'bridge-agents-draft';
