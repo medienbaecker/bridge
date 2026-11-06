@@ -108,7 +108,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
             switch command {
             case "cross": for t in targets { model.cross(t, true) }
             case "uncross": for t in targets { model.cross(t, false) }
-            case "remove": for t in targets { model.remove(t) }
+            case "remove": for t in targets { model.trash(t) }
             case "reveal": if let t = targets.first { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: t)]) }
             case "window": for t in targets { openWindow(t) }
             default: break
@@ -406,7 +406,9 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         switch command {
         case "cross": return entry.map { !$0.crossed } ?? false
         case "uncross": return entry?.crossed ?? false
-        case "remove": return entry != nil
+        case "remove":
+            item.title = page.map { targets($0).allSatisfy(Paths.owned) } ?? false ? "Move to Trash" : "Remove from List"
+            return entry != nil
         case "send": return toolbarItems.first { $0.itemIdentifier.rawValue == command }.map(validateToolbarItem) ?? false
         case "reveal": return page.map { $0.kind != .url } ?? false
         case "zoom-in", "zoom-out", "zoom-reset": return shownPage != nil
@@ -502,7 +504,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         case "sendto": if !sendDraft(page.location, to: argument ?? "") { return false }
         case "cross": for t in targets(page) { model.cross(t, true) }
         case "uncross": for t in targets(page) { model.cross(t, false) }
-        case "remove": for t in targets(page) { model.remove(t) }
+        case "remove": for t in targets(page) { model.trash(t) }
         case "previous": page.showVersion((page.viewingVersion ?? page.sidecar.version) - 1)
         case "next": page.showVersion((page.viewingVersion ?? page.sidecar.version) + 1)
         case "select-add":

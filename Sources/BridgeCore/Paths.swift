@@ -61,6 +61,7 @@ public enum Paths {
     public static var builds: URL { stateDir.appendingPathComponent("builds") }
     public static var drafts: URL { stateDir.appendingPathComponent("drafts") }
     public static var pages: URL { stateBase.appendingPathComponent("bridge/pages") }
+    public static func owned(_ location: String) -> Bool { location.hasPrefix(pages.path + "/") || inDrafts(location) }
     public static var freezePage: URL { stateDir.appendingPathComponent("freeze/screen.html") }
     public static func inDrafts(_ location: String) -> Bool { location.hasPrefix(drafts.path + "/") }
 

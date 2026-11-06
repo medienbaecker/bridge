@@ -154,7 +154,7 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         if entries.contains(where: { $0.crossed }) { item("Uncross" + plural, "uncross", "E", [.command, .shift]) }
         menu.addItem(.separator())
         if targets.count == 1, entries.first?.kind != .url { item("Reveal in Finder", "reveal", "R", [.command, .shift]) }
-        item("Remove from List", "remove", "\u{8}")
+        item(targets.allSatisfy(Paths.owned) ? "Move to Trash" : "Remove from List", "remove", "\u{8}")
         return menu
     }
 

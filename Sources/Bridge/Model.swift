@@ -235,6 +235,20 @@ final class Model {
         changed()
     }
 
+    func trash(_ location: String) {
+        remove(location)
+        guard Paths.owned(location) else { return }
+        let file = URL(fileURLWithPath: location)
+        let stem = file.deletingPathExtension().lastPathComponent
+        var items = [file, Paths.sidecar(for: location)]
+        if Paths.inDrafts(location) {
+            items += ((try? FileManager.default.contentsOfDirectory(at: Paths.drafts, includingPropertiesForKeys: nil)) ?? []).filter { $0.lastPathComponent.hasPrefix(stem + ".") && $0 != file }
+        }
+        for item in items where FileManager.default.fileExists(atPath: item.path) {
+            if Env.test { try? FileManager.default.removeItem(at: item) } else { try? FileManager.default.trashItem(at: item, resultingItemURL: nil) }
+        }
+    }
+
     func reset(_ location: String) {
         remove(location)
         try? FileManager.default.removeItem(at: Paths.sidecar(for: location))
