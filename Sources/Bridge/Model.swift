@@ -295,8 +295,10 @@ final class Model {
         entry.title = title
         entry.unread = false
         listing.bridges.append(entry)
-        scope = .project(folder.path)
-        selected = file.path
+        if capture == nil {
+            scope = .project(folder.path)
+            selected = file.path
+        }
         changed()
         return file.path
     }

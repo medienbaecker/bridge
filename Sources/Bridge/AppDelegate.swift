@@ -332,6 +332,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             await Freeze.start(recipients: model.agentsByWork(), picked: picked, page: freezePage) { [weak self] freeze, outcome in
                 guard let self, outcome != .cancel, let location = model.newBridge(capture: freeze) else { return }
                 if case .send(let session) = outcome, window.sendDraft(location, to: session) { return }
+                model.scope = .project(Paths.drafts.path)
+                model.selected = location
+                model.changed()
                 if window.window?.isVisible != true { window.showWindow(nil) }
                 NSApp.activate()
             }

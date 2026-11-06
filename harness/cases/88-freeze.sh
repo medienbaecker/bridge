@@ -68,11 +68,12 @@ state=$(bridge --state)
 check_json "the bar names the agents by their Claude Code title and project, then Draft" "$(on_screen "return [...document.querySelectorAll('.bridge-agents button')].map((b) => b.innerText.replace(/\\n/g, ' ')).join(' | ')")" '.' "1 Lorem draft pages | 2 Freeze review pages | Draft"
 on_screen "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))" >/dev/null; settle 0.3
 check "started from another app, nothing is picked and Return does nothing" "$(bridge --state | jq -r '[.freeze != null, .freeze.picked] | map(tostring) | join(",")') $(on_screen "return document.querySelectorAll('[data-picked]').length")" "true,null 0"
+on=$(bridge --state | jq -r '.selected + " " + .projects.scope')
 bridge --do freeze-send 1 >/dev/null; settle 0.5
 draft=$(jq -r '[.bridges[] | select(.location | contains("/drafts/"))][0].location' "$XDG_STATE_HOME/bridge-dev/list.json")
 for i in $(seq 1 30); do read=$(cat "$(sidecar "$draft")" 2>/dev/null); [ "$(printf '%s' "$read" | jq -r .status)" = sent ] && break; settle 0.1; done
 check "clicking the agent sends it straight away" "$(inbox "$agent" | grep -c 'numbered notes; read them') $(printf '%s' "$read" | jq -r .status)" "1 sent"
-check_json "and you follow it into the agent's project, the draft still open" "$(bridge --state)" '.projects.scope as $s | [($s | startswith("project:") and (contains("/drafts") | not)), (.projects.rows | map(.key) | index($s) != null), (.selected == "'"$draft"'")] | map(tostring) | join(",")' "true,true,true"
+check "and Bridge stays on the page you were on" "$(bridge --state | jq -r '.selected + " " + .projects.scope')" "$on"
 pixels() { sips -g pixelWidth -g pixelHeight "$1" 2>/dev/null | awk '/pixel/ { printf "%s ", $2 }'; }
 first=$(printf '%s' "$read" | jq -r '.comments[0].picture')
 room=$(printf '%s' "$state" | jq -c --arg c "$centre" '.freeze.screenFrame as $s | ($c | split(" ") | map(tonumber)) as [$x, $y] | .windowFrame as $w | ([$w.x - $s[0], 0] | max) as $left | ([$s[1] + $s[3] - $w.y - $w.height, 0] | max) as $top | ([$w.x - $s[0] + $w.width, $s[2]] | min) as $right | ([$s[1] + $s[3] - $w.y, $s[3]] | min) as $bottom | ([$right - $left, 1000] | min) as $width | ([$bottom - $top, 600] | min) as $height | [([([$x - $width / 2, $left] | max), $right - $width] | min), ([([$y - $height / 2, $top] | max), $bottom - $height] | min), $width, $height] | map(round)')

@@ -275,8 +275,6 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         if let cwd = model.agents[session]?.cwd, !cwd.isEmpty {
             let project = Ground.projectRoot(for: cwd)
             model.listing.update(location) { $0.project = project }
-            model.scope = .project(project)
-            model.selected = location
             model.changed()
         }
         page.send()
