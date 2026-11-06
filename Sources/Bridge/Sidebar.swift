@@ -95,12 +95,6 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
 
     let empty = NSTextField(labelWithString: "")
     var emptyText: String { empty.isHidden ? "" : empty.stringValue }
-    /// For the harness: the empty-list label's frame, window points from the top-left.
-    var emptyFrame: [String: JSONValue] {
-        guard let w = view.window else { return [:] }
-        let f = empty.convert(empty.bounds, to: nil)
-        return ["x": .number(Double(f.minX)), "y": .number(Double(w.frame.height - f.maxY)), "width": .number(Double(f.width)), "height": .number(Double(f.height))]
-    }
 
     var dragging = false
 

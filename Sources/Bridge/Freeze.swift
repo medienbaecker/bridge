@@ -25,11 +25,13 @@ final class Freeze: NSObject {
     nonisolated(unsafe) static var current: Freeze?
     nonisolated(unsafe) static var starting = false
     static var colour: NSColor { .controlAccentColor }
-    static var cursor: NSCursor {
+    static var pin: String {
         let accent = colour.usingColorSpace(.sRGB) ?? colour
         let fill = String(format: "#%02X%02X%02X", Int(accent.redComponent * 255), Int(accent.greenComponent * 255), Int(accent.blueComponent * 255))
-        let svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"28\" height=\"32\" viewBox=\"0 0 28 32\"><path d=\"M14 29.6 L6.2 21.8 A11 11 0 1 1 21.8 21.8 Z\" fill=\"\(fill)\" stroke=\"white\" stroke-width=\"2\" stroke-linejoin=\"round\"/><path d=\"M14 9.5v8M10 13.5h8\" stroke=\"white\" stroke-width=\"2\" stroke-linecap=\"round\"/></svg>"
-        guard let image = NSImage(data: Data(svg.utf8)) else { return .crosshair }
+        return "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"28\" height=\"32\" viewBox=\"0 0 28 32\"><path d=\"M14 29.6 L6.2 21.8 A11 11 0 1 1 21.8 21.8 Z\" fill=\"\(fill)\" stroke=\"white\" stroke-width=\"2\" stroke-linejoin=\"round\"/><path d=\"M14 9.5v8M10 13.5h8\" stroke=\"white\" stroke-width=\"2\" stroke-linecap=\"round\"/></svg>"
+    }
+    static var cursor: NSCursor {
+        guard let image = NSImage(data: Data(pin.utf8)) else { return .crosshair }
         return NSCursor(image: image, hotSpot: CGPoint(x: 14, y: 29))
     }
 
@@ -72,17 +74,17 @@ final class Freeze: NSObject {
         panel.setFrame(screen.frame, display: false)
         panel.backgroundColor = .clear
         panel.isOpaque = false
-        let backdrop = NSView(frame: CGRect(origin: .zero, size: screen.frame.size))
+        let content = NSView(frame: CGRect(origin: .zero, size: screen.frame.size))
         overlay.freeze = self
-        overlay.frame = backdrop.bounds
-        backdrop.addSubview(overlay)
+        overlay.frame = content.bounds
+        content.addSubview(overlay)
         glass.cornerRadius = 12
         glass.isHidden = true
-        backdrop.addSubview(glass)
+        content.addSubview(glass)
         page.webView.removeFromSuperview()
-        page.webView.frame = backdrop.bounds
-        backdrop.addSubview(page.webView)
-        panel.contentView = backdrop
+        page.webView.frame = content.bounds
+        content.addSubview(page.webView)
+        panel.contentView = content
     }
 
     static func screenUnderPointer() -> NSScreen? {
@@ -111,7 +113,7 @@ final class Freeze: NSObject {
         freeze.panel.makeKeyAndOrderFront(nil)
         freeze.panel.makeFirstResponder(page.webView)
         let list = freeze.recipients.map { ["session": $0.session, "name": $0.name.isEmpty ? $0.page : $0.name, "project": $0.project.isEmpty ? "No project" : $0.project, "busy": $0.busy, "picked": $0.session == freeze.picked] as [String: Any] }
-        _ = try? await page.run("__bridge.agents(list)", ["list": list], in: Page.world)
+        _ = try? await page.run("__bridge.agents(list); __bridge.cursor(pin)", ["list": list, "pin": pin], in: Page.world)
         await freeze.setCursor()
     }
 
@@ -168,7 +170,7 @@ final class Freeze: NSObject {
         let small = frame.map { $0.width < 800 && $0.height < 240 } ?? false
         let area = small ? frame! : CGRect(x: point.x - 160, y: point.y - 16, width: 320, height: 32)
         let scale = CGFloat(picture.image.width) / picture.frame.width
-        if let text = read(area.offsetBy(dx: -picture.frame.minX, dy: -picture.frame.minY), in: picture.image, scale: scale) { out["label"] = .string(text); out["labelFrom"] = .string("pixels") }
+        if let text = read(area.offsetBy(dx: -picture.frame.minX, dy: -picture.frame.minY), in: picture.image, scale: scale) { out["label"] = .string(text) }
         return out
     }
 
@@ -178,16 +180,13 @@ final class Freeze: NSObject {
         if let role = attribute(hit, "AXRole") as? String { out["role"] = .string(role.replacingOccurrences(of: "AX", with: "").lowercased()) }
         if let label = name(of: hit) { out["label"] = .string(label) }
         var node = attribute(hit, "AXParent") as! AXUIElement?
-        var web: AXUIElement?
         for _ in 0..<40 {
             guard let current = node else { break }
-            if attribute(current, "AXRole") as? String == "AXWebArea" { web = current; break }
+            if attribute(current, "AXRole") as? String == "AXWebArea" {
+                if let url = attribute(current, "AXURL") as? URL { out["url"] = .string(url.absoluteString) }
+                break
+            }
             node = attribute(current, "AXParent") as! AXUIElement?
-        }
-        if let web {
-            if let id = attribute(hit, "AXDOMIdentifier") as? String, !id.isEmpty { out["id"] = .string(id) }
-            if let classes = attribute(hit, "AXDOMClassList") as? [String], !classes.isEmpty { out["classes"] = .array(classes.map { .string($0) }) }
-            if let url = attribute(web, "AXURL") as? URL { out["url"] = .string(url.absoluteString) }
         }
         return bounds(of: hit)
     }
@@ -336,15 +335,15 @@ final class Freeze: NSObject {
         return fallback
     }
 
-    func area(of note: Comment) -> (spot: CGPoint, box: CGRect?) {
+    func area(of anchor: JSONValue) -> (spot: CGPoint, box: CGRect?) {
         let size = screen.frame.size
-        let spot = CGPoint(x: Self.number(note.anchor, "x", 0.5) * size.width, y: Self.number(note.anchor, "y", 0.5) * size.height)
-        let w = Self.number(note.anchor, "w", 0), h = Self.number(note.anchor, "h", 0)
+        let spot = CGPoint(x: Self.number(anchor, "x", 0.5) * size.width, y: Self.number(anchor, "y", 0.5) * size.height)
+        let w = Self.number(anchor, "w", 0), h = Self.number(anchor, "h", 0)
         return (spot, w > 0 && h > 0 ? CGRect(x: spot.x, y: spot.y, width: w * size.width, height: h * size.height) : nil)
     }
 
     func describe(_ anchor: JSONValue, picture: Picture?) async -> String {
-        let (spot, box) = area(of: Self.probe(anchor))
+        let (spot, box) = area(of: anchor)
         let found = await element(at: box.map { CGPoint(x: $0.midX, y: $0.midY) } ?? spot, picture: picture)
         func string(_ key: String) -> String? { if case .string(let s)? = found[key] { s } else { nil } }
         let what = [string("role"), string("label").map { "\"\($0)\"" }].compactMap { $0 }.joined(separator: " ")
@@ -352,19 +351,17 @@ final class Freeze: NSObject {
         return [what.isEmpty ? nil : what, string("app"), place].compactMap { $0 }.joined(separator: " · ")
     }
 
-    static func probe(_ anchor: JSONValue) -> Comment { Comment(id: "", text: "", target: "", anchor: anchor, version: 1) }
-
     // MARK: Pictures
 
     func take(_ id: String, anchor: JSONValue) {
         windows = Self.onScreen()
-        let frame = region(for: Self.probe(anchor))
+        let frame = region(for: anchor)
         captures += 1
         taking[id] = Task { await shoot(frame) }
     }
 
-    func region(for note: Comment) -> CGRect {
-        let (spot, box) = area(of: note)
+    func region(for anchor: JSONValue) -> CGRect {
+        let (spot, box) = area(of: anchor)
         let bounds = CGRect(origin: .zero, size: screen.frame.size)
         if let box { return box.insetBy(dx: -40, dy: -40).intersection(bounds) }
         let room = window(at: global(spot)).map { local(Self.frame(of: $0)).intersection(bounds) } ?? bounds
@@ -438,7 +435,7 @@ final class Freeze: NSObject {
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
         NSImage(cgImage: image, size: frame.size).draw(in: CGRect(origin: .zero, size: frame.size), from: .zero, operation: .copy, fraction: 1, respectFlipped: true, hints: nil)
-        let (spot, box) = area(of: note)
+        let (spot, box) = area(of: note.anchor)
         FreezeView.draw(number: index + 1, at: CGPoint(x: spot.x - frame.minX, y: spot.y - frame.minY), box: box?.offsetBy(dx: -frame.minX, dy: -frame.minY))
         NSGraphicsContext.restoreGraphicsState()
         return rep.representation(using: .png, properties: [:]).map { ($0, frame.width) }

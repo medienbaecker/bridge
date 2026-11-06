@@ -15,7 +15,6 @@ html[data-bridge-freeze] :is(.bridge-composer, .bridge-composer *, .bridge-pin, 
   background: AccentColor;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35), 0 0 0 2px Canvas;
   z-index: 2147483000;
-  cursor: default;
   border: 0;
   padding: 0;
 }
@@ -81,7 +80,6 @@ html[data-bridge-freeze] :is(.bridge-composer, .bridge-composer *, .bridge-pin, 
   border: 1px solid color-mix(in srgb, CanvasText 14%, transparent);
   border-radius: 6px;
   padding: 3px 10px;
-  cursor: default;
 }
 .bridge-composer button.bridge-primary { background: AccentColor; color: white; border-color: transparent; }
 

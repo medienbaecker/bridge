@@ -538,21 +538,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         case "zoom-reset": page.zoom = 1
         case "reveal": if page.kind != .url { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: page.location)]) }
         case "sidebar": window?.contentViewController.map { ($0 as? NSSplitViewController)?.toggleSidebar(nil) }
-        case "dump": print(Snapshot.dump(window!.contentView!.superview!).joined(separator: "\n"))
         case "scrollers": sidebar.outline.enclosingScrollView?.scrollerStyle = argument == "legacy" ? .legacy : .overlay
-        case "columns":
-            let parts = (argument ?? "").split(separator: " ").compactMap { Double($0) }
-            if parts.count == 2 {
-                split.splitViewItems[0].minimumThickness = parts[0]; split.splitViewItems[0].maximumThickness = parts[0]
-                split.splitViewItems[1].minimumThickness = parts[1]; split.splitViewItems[1].maximumThickness = parts[1]
-                window?.layoutIfNeeded()
-            }
-
-        case "separator": window?.titlebarSeparatorStyle = argument == "none" ? .none : argument == "line" ? .line : .automatic
-        case "front":
-            // Only a regular app that LaunchServices activates gets the key window, so this takes focus.
-            NSApp.setActivationPolicy(.regular)
-            let o = Process(); o.executableURL = URL(fileURLWithPath: "/usr/bin/open"); o.arguments = ["-a", Bundle.main.bundlePath]; try? o.run()
         default: return false
         }
         refresh()

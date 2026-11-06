@@ -240,14 +240,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             out["freeze"] = .object(["notes": .array(freeze.notes.map { .object(["text": .string($0.text), "target": .string($0.target), "anchor": $0.anchor]) }),
                                      "highlight": freeze.highlight.map { .array([$0.minX, $0.minY, $0.width, $0.height].map { .number(Double($0)) }) } ?? .null,
                                      "screen": .string(freeze.screen.localizedName), "screenFrame": .array([freeze.screen.frame.minX, freeze.screen.frame.minY, freeze.screen.frame.width, freeze.screen.frame.height].map { .number(Double($0)) }),
-                                     "glass": glass, "outlineUnderPage": .bool(freeze.overlay.superview?.subviews.firstIndex(of: freeze.overlay) ?? 0 < freeze.overlay.superview?.subviews.firstIndex(of: freeze.page.webView) ?? 0), "pinCursor": .bool(NSCursor.current.hotSpot == CGPoint(x: 14, y: 29)), "recipients": .array(freeze.recipients.map { .string($0.label) }),
+                                     "glass": glass, "outlineUnderPage": .bool(freeze.overlay.superview?.subviews.firstIndex(of: freeze.overlay) ?? 0 < freeze.overlay.superview?.subviews.firstIndex(of: freeze.page.webView) ?? 0),
                                      "picked": freeze.picked.map { .string($0) } ?? .null, "captures": .number(Double(freeze.captures)),
                                      "pictures": .array(freeze.notes.map { note in freeze.pictures[note.id].map { p in .array([p.frame.minX, p.frame.minY, p.frame.width, p.frame.height].map { .number(Double($0)) }) } ?? .null })])
         }
         out["webViews"] = .number(Double(window.content.container.subviews.count))
         if let w = window.window {
-            out["windowNumber"] = .number(Double(w.windowNumber))
-            out["windowKey"] = .bool(w.isKeyWindow)
             out["windowVisible"] = .bool(w.isVisible)
             out["backingScale"] = .number(Double(w.backingScaleFactor))
             out["titlebarHeight"] = .number(Double(w.frame.height - w.contentLayoutRect.height))
@@ -264,7 +262,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         out["updateReady"] = .bool(updateReady)
         out["updateText"] = updateText.map { .string($0) } ?? .null
         out["banner"] = window.bannerText.map { .string($0) } ?? .null
-        out["selectedRows"] = .array(window.sidebar.selectedLocations.map { .string($0) })
         out["rowMenu"] = .array(window.rowMenuTitles.map { .string($0) })
         out["rowMenuTargets"] = .array(window.rowMenuTargets.map { .string($0) })
         out["sidebarGeometry"] = .object(window.sidebar.geometry())
@@ -283,7 +280,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         out["listHeaderX"] = .number(Double(window.listHeader.convert(window.listHeader.bounds, to: nil).minX))
         out["documentTitle"] = .string(window.docTitleView.stringValue)
         out["documentTitleX"] = .number(Double(window.docTitleView.convert(window.docTitleView.bounds, to: nil).minX))
-        out["listEmptyFrame"] = .object(window.sidebar.emptyFrame)
         out["bridgesColumn"] = .array(model.shown().map { .string($0.location) })
         out["pageWindows"] = .array(window.windows.sorted { $0.key < $1.key }.map { location, w in
             .object(["location": .string(location), "title": .string(w.window?.title ?? ""), "visible": .bool(w.window?.isVisible ?? false),
@@ -295,7 +291,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             .object(["id": .string($0.itemIdentifier.rawValue), "label": .string($0.label), "enabled": .bool($0.isEnabled), "hidden": .bool($0.isHidden),
                      "symbol": .string($0.image?.accessibilityDescription ?? "")])
         })
-        out["toolbarLabelsShown"] = .bool(window.window?.toolbar?.displayMode == .iconAndLabel)
         out["subtitle"] = .string(window.window?.subtitle ?? "")
         out["sidebar"] = .array(model.listing.projects.map { project in
             .object([

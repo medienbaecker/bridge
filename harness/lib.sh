@@ -92,9 +92,6 @@ ink() {  # ink <what is being measured> <command…>
   if [ -z "$v" ]; then fault "found no ink for $what, so nothing measured here is about the drawing"; printf 'NOINK'; return 1; fi
   printf '%s' "$v"
 }
-# Brings the app to the front for a shot of the active state. Takes focus from
-# whoever is at the machine, so cases only do it when BRIDGE_FRONT=1.
-front() { [ "${BRIDGE_FRONT:-0}" = 1 ] && bridge --do front >/dev/null && sleep 1.5; }
 
 snap() {
   local name="$1"

@@ -67,10 +67,6 @@ enum Snapshot {
         return rep
     }
 
-    static func dump(_ view: NSView, depth: Int = 0) -> [String] {
-        [String(repeating: "  ", count: depth) + "\(type(of: view)) \(view.frame) hidden=\(view.isHidden)"] + view.subviews.flatMap { dump($0, depth: depth + 1) }
-    }
-
     static func views<T: NSView>(in view: NSView, of type: T.Type) -> [T] {
         if let v = view as? T { return [v] }
         return view.subviews.flatMap { views(in: $0, of: type) }
