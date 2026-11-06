@@ -48,6 +48,7 @@ final class Freeze: NSObject {
     var looking = false
     var awake: Set<pid_t> = []
     var describing: [Task<Void, Never>] = []
+    var veiled: [NSWindow] = []
     var taking: [String: Task<Picture?, Never>] = [:]
     var pictures: [String: Picture] = [:]
     var captures = 0
@@ -109,6 +110,10 @@ final class Freeze: NSObject {
         }
         current = freeze
         freeze.previous = previous
+        if NSApp.isHidden {
+            freeze.veiled = NSApp.windows.filter { !($0 is FreezePanel) && $0.alphaValue > 0 }
+            for window in freeze.veiled { window.alphaValue = 0 }
+        }
         freeze.panel.orderFrontRegardless()
         freeze.panel.makeKeyAndOrderFront(nil)
         freeze.panel.makeFirstResponder(page.webView)
@@ -141,7 +146,7 @@ final class Freeze: NSObject {
     }
 
     func window(at point: CGPoint) -> [String: Any]? {
-        windows.first { info in (info[kCGWindowLayer as String] as? Int ?? 0) < 1000 && Self.frame(of: info).contains(point) }
+        windows.first { info in (info[kCGWindowLayer as String] as? Int ?? 0) < 1000 && (info[kCGWindowAlpha as String] as? Double ?? 1) > 0 && Self.frame(of: info).contains(point) }
     }
 
     static func frame(of window: [String: Any]) -> CGRect {
@@ -414,6 +419,8 @@ final class Freeze: NSObject {
         }, completionHandler: {
             panel.orderOut(nil)
             Task { @MainActor in
+                if outcome != .draft, !self.veiled.isEmpty { NSApp.hide(nil) }
+                for window in self.veiled { window.alphaValue = 1 }
                 for task in self.describing { await task.value }
                 self.onFinish(self, outcome)
             }

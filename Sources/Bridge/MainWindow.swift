@@ -460,6 +460,9 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
             guard let freeze = Freeze.current, let n = argument.flatMap(Int.init) else { return false }
             freeze.page.call("document.querySelectorAll('.bridge-agents button')[n].click()", ["n": n])
             return true
+        case "hide":
+            NSApp.hide(nil)
+            return true
         case "freeze-scroll":
             let parts = (argument ?? "").split(separator: " ").compactMap { Double($0) }
             guard parts.count == 4, let freeze = Freeze.current, let scroll = CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 2, wheel1: Int32(-parts[3]), wheel2: Int32(-parts[2]), wheel3: 0) else { return false }

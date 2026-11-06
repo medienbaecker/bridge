@@ -217,7 +217,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     func state() -> JSONValue {
-        var out: [String: JSONValue] = ["running": .bool(true), "test": .bool(Env.test)]
+        var out: [String: JSONValue] = ["running": .bool(true), "test": .bool(Env.test), "appHidden": .bool(NSApp.isHidden)]
         if let page = model.selectedPage {
             out["selected"] = .string(page.location)
             out["title"] = .string(page.title)
@@ -239,7 +239,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             out["freeze"] = .object(["notes": .array(freeze.notes.map { .object(["text": .string($0.text), "target": .string($0.target), "anchor": $0.anchor]) }),
                                      "highlight": freeze.highlight.map { .array([$0.minX, $0.minY, $0.width, $0.height].map { .number(Double($0)) }) } ?? .null,
                                      "screen": .string(freeze.screen.localizedName), "screenFrame": .array([freeze.screen.frame.minX, freeze.screen.frame.minY, freeze.screen.frame.width, freeze.screen.frame.height].map { .number(Double($0)) }),
-                                     "glass": glass, "outlineUnderPage": .bool(freeze.overlay.superview?.subviews.firstIndex(of: freeze.overlay) ?? 0 < freeze.overlay.superview?.subviews.firstIndex(of: freeze.page.webView) ?? 0),
+                                     "glass": glass, "veiled": .number(Double(freeze.veiled.count)), "mainVisible": .bool((window.window?.alphaValue ?? 0) > 0 && window.window?.isVisible == true), "outlineUnderPage": .bool(freeze.overlay.superview?.subviews.firstIndex(of: freeze.overlay) ?? 0 < freeze.overlay.superview?.subviews.firstIndex(of: freeze.page.webView) ?? 0),
                                      "picked": freeze.picked.map { .string($0) } ?? .null, "captures": .number(Double(freeze.captures)),
                                      "pictures": .array(freeze.notes.map { note in freeze.pictures[note.id].map { p in .array([p.frame.minX, p.frame.minY, p.frame.width, p.frame.height].map { .number(Double($0)) }) } ?? .null })])
         }
