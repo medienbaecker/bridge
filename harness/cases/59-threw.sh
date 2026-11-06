@@ -1,5 +1,6 @@
 #!/bin/bash
 source "$(dirname "$0")/../lib.sh"
+# serial
 page="$CASE_DIR/pages/broken.html"
 cat > "$page" <<'HTML'
 <!doctype html><html><head><title>Broken</title></head><body>

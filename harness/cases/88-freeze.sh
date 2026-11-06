@@ -46,16 +46,19 @@ for i in $(seq 1 20); do [ "$(bridge --state | jq '.freeze.highlight != null')" 
 cards=$(bridge --js "$CASE_DIR/pages/cards.html" "@bridge const r = document.querySelector('#cards').getBoundingClientRect(); return [r.top, innerHeight]")
 check_json "hovering over Bridge's own window outlines the element under the pointer, not the window, exactly on it" "$(bridge --state)" '.windowFrame.width as $w | ("'"$centre"'" | split(" ") | map(tonumber)) as [$x, $y] | .freeze.screenFrame as $s | ('"$cards"') as [$top, $height] | (($s[1] + $s[3]) - (.windowFrame.y + .windowFrame.height) + .windowFrame.height - $height + $top) as $want | .freeze.highlight | [length, (.[2] < $w * 0.9), ($x >= .[0] and $x <= .[0] + .[2] and $y >= .[1] and $y <= .[1] + .[3]), ((.[1] - $want) | fabs < 2)] | map(tostring) | join(",")' "4,true,true,true"
 bridge --do freeze-mark "$centre" >/dev/null; settle 0.3
-check_json "a click opens the composer" "$(on_screen "return !!document.querySelector('.bridge-thread:popover-open textarea')")" '.' "true"
+check_json "a click opens the composer" "$(on_screen "return !!document.querySelector('.bridge-composer:popover-open textarea')")" '.' "true"
 first=$(on_screen "return [...document.querySelectorAll('.bridge-pin')].map((p) => p.dataset.n).join()")
-check_json "while a note is open the cursor is the normal one everywhere, a text cursor in the box" "$(on_screen "const t = document.querySelector('.bridge-thread:popover-open'); return [getComputedStyle(t.querySelector('textarea')).cursor, getComputedStyle(t.querySelector('button')).cursor, getComputedStyle(document.body).cursor.startsWith('url(')]")" 'map(tostring) | join(",")' "auto,auto,false"
+check_json "while a note is open the cursor is the normal one everywhere, a text cursor in the box" "$(on_screen "const t = document.querySelector('.bridge-composer:popover-open'); return [getComputedStyle(t.querySelector('textarea')).cursor, getComputedStyle(t.querySelector('button')).cursor, getComputedStyle(document.body).cursor.startsWith('url(')]")" 'map(tostring) | join(",")' "auto,auto,false"
 bridge --do freeze-note "Lorem ipsum dolor sit amet" >/dev/null; settle 0.5
 check "over a Bridge window it is a screenshot note like any other, not a pin on the page" "$(bridge --state | jq -r '.freeze.notes | [length, .[0].text] | map(tostring) | join(",")') $(bridge --pins "$CASE_DIR/pages/cards.html" | jq length)" "1,Lorem ipsum dolor sit amet 0"
 check_json "and the screen stays in point mode for the next one" "$(on_screen "return getComputedStyle(document.body).cursor.startsWith('url(')")" '.' "true"
 bridge --do freeze-mark "40 40 $corner" >/dev/null; settle 0.3
-check_json "a drag draws a box with its composer" "$(on_screen "return [document.querySelectorAll('.bridge-box').length, !!document.querySelector('.bridge-thread:popover-open')]")" 'map(tostring) | join(",")' "1,true"
+check_json "a drag draws a box with its composer" "$(on_screen "return [document.querySelectorAll('.bridge-box').length, !!document.querySelector('.bridge-composer:popover-open')]")" 'map(tostring) | join(",")' "1,true"
 check "each new pin shows its number at once" "$first $(on_screen "return [...document.querySelectorAll('.bridge-pin')].map((p) => p.dataset.n).join()")" '"1" "1,2"'
 bridge --do freeze-note "Consectetur adipiscing elit" >/dev/null; settle 0.5
+on_screen "document.querySelector('.bridge-pin').click()" >/dev/null; settle 0.3
+check_json "a note you already wrote opens with Delete, Cancel and Save" "$(on_screen "return [...document.querySelectorAll('.bridge-composer:popover-open button')].map((b) => b.dataset.act).join()")" '.' "delete,cancel,save"
+on_screen "document.querySelector('.bridge-composer:popover-open [data-act=cancel]').click()" >/dev/null; settle 0.3
 check_json "a box goes on the screenshot with its size" "$(bridge --state)" '.freeze.notes | [length, (.[1].anchor.w > 0)] | map(tostring) | join(",")' "2,true"
 
 state=$(bridge --state)
@@ -82,8 +85,8 @@ bridge --do freeze-mark "$bar" >/dev/null; settle 0.3; bridge --do freeze-note "
 check_json "a note on the window's toolbar names no URL" "$(bridge --state)" '.freeze.notes[0].target | test("http|file:") | not' "true"
 bridge --do freeze-mark "300 300" >/dev/null; settle 0.3
 on_screen "document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 600, clientY: 600, button: 0, buttons: 1 }))" >/dev/null
-on_screen "document.querySelector('.bridge-thread:popover-open')?.hidePopover(); document.body.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 600, clientY: 600 }))" >/dev/null; settle 0.3
-check_json "a click elsewhere closes an empty composer, dropping its pin, and places nothing" "$(on_screen "return [document.querySelectorAll('.bridge-pin').length, !!document.querySelector('.bridge-thread:popover-open')]")" 'map(tostring) | join(",")' "1,false"
+on_screen "document.querySelector('.bridge-composer:popover-open')?.hidePopover(); document.body.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 600, clientY: 600 }))" >/dev/null; settle 0.3
+check_json "a click elsewhere closes an empty composer, dropping its pin, and places nothing" "$(on_screen "return [document.querySelectorAll('.bridge-pin').length, !!document.querySelector('.bridge-composer:popover-open')]")" 'map(tostring) | join(",")' "1,false"
 bridge --do freeze-cancel >/dev/null; settle 0.3
 bridge --do freeze >/dev/null; settle 1
 bridge --do freeze-mark "100 100" >/dev/null; settle 0.3; bridge --do freeze-note "Lorem" >/dev/null
@@ -97,14 +100,14 @@ check "with no notes, an agent can't be picked and nothing is made" "$open $(lis
 
 bridge --do freeze >/dev/null; settle 1
 bridge --do freeze-mark "2 300" >/dev/null; settle 0.3
-check_json "by the left edge the composer stays inside the screen" "$(on_screen "const r = document.querySelector('.bridge-thread:popover-open').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth")" '.' "true"
+check_json "by the left edge the composer stays inside the screen" "$(on_screen "const r = document.querySelector('.bridge-composer:popover-open').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth")" '.' "true"
 bridge --do freeze-note "Lorem" >/dev/null; settle 0.3
 bridge --do freeze-cancel >/dev/null; settle 0.3
 
 bridge --do select "$CASE_DIR/pages/cards.html" >/dev/null; settle 0.3
 bridge --do freeze front >/dev/null; settle 1
 check "started from Bridge, the agent of the selected page is chip 1, picked" "$(bridge --state | jq -r '.freeze.picked') $(on_screen "return [...document.querySelectorAll('.bridge-agents button')].map((b) => (b.hasAttribute('data-picked') ? '*' : '') + (b.querySelector('b') || b).textContent).join(' | ')")" "$agent \"*Freeze review | Lorem draft | Draft\""
-check_json "and drawn like a hovered chip" "$(on_screen "const [picked, other] = document.querySelectorAll('.bridge-agents-list button'); return getComputedStyle(picked).backgroundColor !== getComputedStyle(other).backgroundColor")" '.' "true"
+check_json "and drawn in blue, unlike the others" "$(on_screen "const [picked, other] = document.querySelectorAll('.bridge-agents-list button'); return getComputedStyle(picked).backgroundColor !== getComputedStyle(other).backgroundColor")" '.' "true"
 sent=$(inbox "$agent" | grep -c 'their numbered notes')
 on_screen "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))" >/dev/null; settle 0.5
 check "with no notes, Return does nothing" "$(bridge --state | jq '.freeze != null') $(inbox "$agent" | grep -c 'their numbered notes')" "true $sent"
@@ -116,7 +119,7 @@ end_session "$agent"
 end_session "$other"
 bridge --do freeze >/dev/null; settle 1
 bridge --do freeze-mark "40 $(bridge --state | jq -r '.freeze.screenFrame[3] - 36')" >/dev/null; settle 0.3
-check_json "by the bottom edge the composer opens above its pin, inside the screen" "$(on_screen "const t = document.querySelector('.bridge-thread:popover-open').getBoundingClientRect(); const p = [...document.querySelectorAll('.bridge-pin')].pop().getBoundingClientRect(); return t.bottom <= p.top + 1 && t.top >= 0")" '.' "true"
+check_json "by the bottom edge the composer opens above its pin, inside the screen" "$(on_screen "const t = document.querySelector('.bridge-composer:popover-open').getBoundingClientRect(); const p = [...document.querySelectorAll('.bridge-pin')].pop().getBoundingClientRect(); return t.bottom <= p.top + 1 && t.top >= 0")" '.' "true"
 bridge --do freeze-note "Sed do eiusmod" >/dev/null; settle 0.5
 check_json "with no agent running, the bar offers only Draft" "$(on_screen "return [...document.querySelectorAll('.bridge-agents button')].map((b) => b.innerText).join()")" '.' "Draft"
 bridge --do freeze-send 0 >/dev/null; wait_ready; settle 0.5

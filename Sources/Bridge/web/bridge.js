@@ -313,7 +313,7 @@ function __bridgeInit(options) {
 
   function onInput(e, delayed) {
     const el = e.target;
-    if (ours(el) || el.closest?.('.bridge-thread, .bridge-color')) return;
+    if (ours(el) || el.closest?.('.bridge-composer, .bridge-color')) return;
     if (el.isContentEditable) {
       const host = el.closest('[data-record]');
       if (host) record(host.dataset.record, el.innerText, delayed);
@@ -726,7 +726,7 @@ function __bridgeInit(options) {
   if (options.freeze) {
     root.setAttribute('data-bridge-freeze', '');
     const notes = { list: [], pins: new Map(), boxes: new Map(), drafts: {}, pending: null };
-    const furniture = (el) => !!el?.closest?.('.bridge-pin, .bridge-thread, .bridge-box, .bridge-agents');
+    const furniture = (el) => !!el?.closest?.('.bridge-pin, .bridge-composer, .bridge-box, .bridge-agents');
 
     const place = (el, anchor) => {
       el.style.left = `${anchor.x * 100}vw`;
@@ -763,7 +763,7 @@ function __bridgeInit(options) {
       notes.pins.delete(id);
       notes.boxes.get(id)?.remove();
       notes.boxes.delete(id);
-      notes.thread(id)?.remove();
+      notes.composer(id)?.remove();
     };
 
     notes.set = function (list) {
@@ -778,66 +778,66 @@ function __bridgeInit(options) {
       });
     };
 
-    notes.thread = (id) => document.querySelector(`.bridge-thread[data-id="${CSS.escape(id)}"]`);
+    notes.composer = (id) => document.querySelector(`.bridge-composer[data-id="${CSS.escape(id)}"]`);
 
     notes.toggle = function (id) {
-      const existing = notes.thread(id);
+      const existing = notes.composer(id);
       if (existing && existing.matches(':popover-open')) { existing.hidePopover(); return; }
       notes.open(id);
     };
 
     notes.open = function (id) {
-      let thread = notes.thread(id);
-      if (!thread) {
-        thread = document.createElement('div');
-        thread.className = 'bridge-thread';
-        thread.setAttribute('popover', 'auto');
-        thread.dataset.id = id;
-        thread.style.positionAnchor = `--bridge-pin-${id}`;
-        thread.addEventListener('toggle', (e) => {
+      let composer = notes.composer(id);
+      if (!composer) {
+        composer = document.createElement('div');
+        composer.className = 'bridge-composer';
+        composer.setAttribute('popover', 'auto');
+        composer.dataset.id = id;
+        composer.style.positionAnchor = `--bridge-pin-${id}`;
+        composer.addEventListener('toggle', (e) => {
           notes.pins.get(id)?.toggleAttribute('data-open', e.newState === 'open');
-          if (e.newState === 'open' || !thread.isConnected) return;
-          notes.drafts[id] = thread.querySelector('textarea').value;
+          if (e.newState === 'open' || !composer.isConnected) return;
+          notes.drafts[id] = composer.querySelector('textarea').value;
           if (id === notes.pending?.id && !notes.drafts[id]) notes.cancelPending();
         });
-        root.appendChild(thread);
+        root.appendChild(composer);
       }
       const note = notes.list.find((x) => x.id === id);
-      thread.innerHTML = '<textarea placeholder="What about this?" rows="2"></textarea><div class="bridge-bar">'
-        + (note ? '<button data-act="delete">Delete</button>' : '<button data-act="cancel">Cancel</button>')
+      composer.innerHTML = '<textarea placeholder="What about this?" rows="2"></textarea><div class="bridge-bar">'
+        + (note ? '<span><button data-act="delete">Delete</button> <button data-act="cancel">Cancel</button></span>' : '<button data-act="cancel">Cancel</button>')
         + '<button data-act="save" class="bridge-primary">Save <kbd>⌘⏎</kbd></button></div>';
-      const box = thread.querySelector('textarea');
+      const box = composer.querySelector('textarea');
       box.value = id in notes.drafts ? notes.drafts[id] : note?.text || '';
       box.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && e.metaKey) { e.preventDefault(); notes.act(id, 'save'); }
-        if (e.key === 'Escape') { e.preventDefault(); thread.hidePopover(); }
+        if (e.key === 'Escape') { e.preventDefault(); composer.hidePopover(); }
       });
-      thread.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => notes.act(id, b.dataset.act)));
-      thread.showPopover();
-      notes.fit(thread);
+      composer.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => notes.act(id, b.dataset.act)));
+      composer.showPopover();
+      notes.fit(composer);
       box.focus();
       box.setSelectionRange(box.value.length, box.value.length);
     };
 
-    notes.fit = function (thread) {
-      thread.style.translate = '';
-      const r = thread.getBoundingClientRect();
+    notes.fit = function (composer) {
+      composer.style.translate = '';
+      const r = composer.getBoundingClientRect();
       const dx = Math.max(8 - r.left, 0) + Math.min(innerWidth - 8 - r.right, 0);
       const dy = Math.max(8 - r.top, 0) + Math.min(innerHeight - 8 - r.bottom, 0);
-      thread.style.translate = `${dx}px ${dy}px`;
+      composer.style.translate = `${dx}px ${dy}px`;
     };
 
     notes.act = async function (id, action) {
-      const thread = notes.thread(id);
-      const text = thread.querySelector('textarea').value.trim();
-      if (action === 'cancel') { delete notes.drafts[id]; thread.hidePopover(); notes.cancelPending(); return; }
+      const composer = notes.composer(id);
+      const text = composer.querySelector('textarea').value.trim();
+      if (action === 'cancel') { delete notes.drafts[id]; composer.hidePopover(); notes.cancelPending(); return; }
       if (action === 'save' && !text) return;
       const pending = notes.pending?.id === id ? notes.pending : null;
       const list = pending ? (await post('pin', { anchor: pending.anchor, text })).notes
         : await post('note', { id, action: action === 'save' ? 'edit' : 'delete', text });
       delete notes.drafts[id];
-      thread.hidePopover();
-      thread.remove();
+      composer.hidePopover();
+      composer.remove();
       if (pending) { notes.drop(id); notes.pending = null; }
       notes.set(list);
     };
@@ -868,7 +868,7 @@ function __bridgeInit(options) {
     }, true);
     document.addEventListener('pointerdown', (e) => {
       if (e.button !== 0 || furniture(e.target)) return;
-      pressed = { x: e.clientX, y: e.clientY, composing: !!document.querySelector('.bridge-thread:popover-open'), drew: false };
+      pressed = { x: e.clientX, y: e.clientY, composing: !!document.querySelector('.bridge-composer:popover-open'), drew: false };
       if (!pressed.composing) e.preventDefault();
     }, true);
     document.addEventListener('pointermove', (e) => {
@@ -952,7 +952,7 @@ function __bridgeInit(options) {
       notes.set([]);
     };
     document.addEventListener('keydown', (e) => {
-      if (e.target.closest?.('textarea, input') || document.querySelector('.bridge-thread:popover-open')) return;
+      if (e.target.closest?.('textarea, input') || document.querySelector('.bridge-composer:popover-open')) return;
       if (e.key === 'Escape') { e.preventDefault(); post('freeze', { key: 'escape' }); }
       if (e.key === 'Enter' && !e.target.closest?.('button')) { e.preventDefault(); bar.querySelector('button[data-picked]')?.click(); }
       if (/^[1-9]$/.test(e.key)) { e.preventDefault(); bar.querySelectorAll('button:not(.bridge-agents-draft)')[e.key - 1]?.click(); }
@@ -962,7 +962,7 @@ function __bridgeInit(options) {
       if (frame) return;
       frame = requestAnimationFrame(() => {
         frame = 0;
-        if (pressed || document.querySelector('.bridge-thread:popover-open') || e.target.closest?.('.bridge-agents')) post('hover');
+        if (pressed || document.querySelector('.bridge-composer:popover-open') || e.target.closest?.('.bridge-agents')) post('hover');
         else post('hover', { x: e.clientX / innerWidth, y: e.clientY / innerHeight });
       });
     });

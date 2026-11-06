@@ -35,6 +35,7 @@ final class Freeze: NSObject {
     var pointer: CGPoint?
     var looking = false
     var awake: Set<pid_t> = []
+    var describing: [Task<Void, Never>] = []
     var onFinish: (Freeze, Outcome) -> Void = { _, _ in }
 
     let picked: String?
@@ -137,38 +138,43 @@ final class Freeze: NSObject {
         return AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success ? value : nil
     }
 
-    func element(at point: CGPoint, reading: Bool = false) -> (frame: CGRect?, description: [String: JSONValue]) {
+    func element(at point: CGPoint) async -> [String: JSONValue] {
         let spot = global(point)
-        guard let info = window(at: spot), let pid = info[kCGWindowOwnerPID as String] as? Int32 else { return (nil, [:]) }
+        guard let info = window(at: spot), let pid = info[kCGWindowOwnerPID as String] as? Int32 else { return [:] }
         var out: [String: JSONValue] = ["app": .string(info[kCGWindowOwnerName as String] as? String ?? "")]
         if let title = info[kCGWindowName as String] as? String, !title.isEmpty { out["window"] = .string(title) }
-        let frame = pid == getpid() ? nil : accessible(at: spot, in: pid, into: &out)
-        if reading, out["label"] == nil {
-            let small = frame.map { $0.width < 800 && $0.height < 240 } ?? false
-            let area = small ? frame! : CGRect(x: point.x - 160, y: point.y - 16, width: 320, height: 32)
-            if let text = read(area) { out["label"] = .string(text); out["labelFrom"] = .string("pixels") }
-        }
-        return (frame, out)
+        let offset = CGPoint(x: spot.x - point.x, y: spot.y - point.y)
+        return await Self.label(out, at: point, offset: offset, in: pid == getpid() ? nil : pid, image: image, scale: CGFloat(image.width) / screen.frame.width)
     }
 
-    func accessible(at spot: CGPoint, in pid: pid_t, into out: inout [String: JSONValue]) -> CGRect? {
+    @concurrent nonisolated static func label(_ known: [String: JSONValue], at point: CGPoint, offset: CGPoint, in pid: pid_t?, image: CGImage, scale: CGFloat) async -> [String: JSONValue] {
+        var out = known
+        let frame = pid.flatMap { accessible(at: CGPoint(x: point.x + offset.x, y: point.y + offset.y), in: $0, into: &out) }?.offsetBy(dx: -offset.x, dy: -offset.y)
+        guard out["label"] == nil else { return out }
+        let small = frame.map { $0.width < 800 && $0.height < 240 } ?? false
+        let area = small ? frame! : CGRect(x: point.x - 160, y: point.y - 16, width: 320, height: 32)
+        if let text = read(area, in: image, scale: scale) { out["label"] = .string(text); out["labelFrom"] = .string("pixels") }
+        return out
+    }
+
+    nonisolated static func accessible(at spot: CGPoint, in pid: pid_t, into out: inout [String: JSONValue]) -> CGRect? {
         var hit: AXUIElement?
         guard AXIsProcessTrusted(), AXUIElementCopyElementAtPosition(AXUIElementCreateApplication(pid), Float(spot.x), Float(spot.y), &hit) == .success, let hit else { return nil }
-        if let role = Self.attribute(hit, "AXRole") as? String { out["role"] = .string(role.replacingOccurrences(of: "AX", with: "").lowercased()) }
-        if let label = Self.name(of: hit) { out["label"] = .string(label) }
-        var node = Self.attribute(hit, "AXParent") as! AXUIElement?
+        if let role = attribute(hit, "AXRole") as? String { out["role"] = .string(role.replacingOccurrences(of: "AX", with: "").lowercased()) }
+        if let label = name(of: hit) { out["label"] = .string(label) }
+        var node = attribute(hit, "AXParent") as! AXUIElement?
         var web: AXUIElement?
         for _ in 0..<40 {
             guard let current = node else { break }
-            if Self.attribute(current, "AXRole") as? String == "AXWebArea" { web = current; break }
-            node = Self.attribute(current, "AXParent") as! AXUIElement?
+            if attribute(current, "AXRole") as? String == "AXWebArea" { web = current; break }
+            node = attribute(current, "AXParent") as! AXUIElement?
         }
         if let web {
-            if let id = Self.attribute(hit, "AXDOMIdentifier") as? String, !id.isEmpty { out["id"] = .string(id) }
-            if let classes = Self.attribute(hit, "AXDOMClassList") as? [String], !classes.isEmpty { out["classes"] = .array(classes.map { .string($0) }) }
-            if let url = Self.attribute(web, "AXURL") as? URL { out["url"] = .string(url.absoluteString) }
+            if let id = attribute(hit, "AXDOMIdentifier") as? String, !id.isEmpty { out["id"] = .string(id) }
+            if let classes = attribute(hit, "AXDOMClassList") as? [String], !classes.isEmpty { out["classes"] = .array(classes.map { .string($0) }) }
+            if let url = attribute(web, "AXURL") as? URL { out["url"] = .string(url.absoluteString) }
         }
-        return Self.bounds(of: hit).map(local)
+        return bounds(of: hit)
     }
 
     nonisolated static func bounds(of element: AXUIElement) -> CGRect? {
@@ -189,7 +195,7 @@ final class Freeze: NSObject {
         return bounds(of: hit)
     }
 
-    static func text(_ element: AXUIElement) -> String? {
+    nonisolated static func text(_ element: AXUIElement) -> String? {
         for name in ["AXTitle", "AXDescription", "AXValue", "AXPlaceholderValue", "AXHelp"] {
             if let text = attribute(element, name) as? String {
                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -199,7 +205,7 @@ final class Freeze: NSObject {
         return nil
     }
 
-    static func name(of element: AXUIElement) -> String? {
+    nonisolated static func name(of element: AXUIElement) -> String? {
         if let own = text(element) { return own }
         if let label = attribute(element, "AXTitleUIElement"), CFGetTypeID(label) == AXUIElementGetTypeID(), let text = text(label as! AXUIElement) { return text }
         guard let size = attribute(element, "AXSize") else { return nil }
@@ -217,9 +223,8 @@ final class Freeze: NSObject {
         return nil
     }
 
-    func read(_ frame: CGRect) -> String? {
+    nonisolated static func read(_ frame: CGRect, in image: CGImage, scale: CGFloat) -> String? {
         guard frame.width > 4, frame.height > 4 else { return nil }
-        let scale = CGFloat(image.width) / screen.frame.width
         let pixels = CGRect(x: frame.minX * scale, y: frame.minY * scale, width: frame.width * scale, height: frame.height * scale).integral
         guard let crop = image.cropping(to: pixels) else { return nil }
         let request = VNRecognizeTextRequest()
@@ -312,10 +317,10 @@ final class Freeze: NSObject {
         return (spot, w > 0 && h > 0 ? CGRect(x: spot.x, y: spot.y, width: w * size.width, height: h * size.height) : nil)
     }
 
-    func describe(_ anchor: JSONValue) -> String {
+    func describe(_ anchor: JSONValue) async -> String {
         let probe = Comment(id: "", text: "", target: "", anchor: anchor, version: 1)
         let (spot, box) = area(of: probe)
-        let found = element(at: box.map { CGPoint(x: $0.midX, y: $0.midY) } ?? spot, reading: true).description
+        let found = await element(at: box.map { CGPoint(x: $0.midX, y: $0.midY) } ?? spot)
         func string(_ key: String) -> String? { if case .string(let s)? = found[key] { s } else { nil } }
         let what = [string("role"), string("label").map { "\"\($0)\"" }].compactMap { $0 }.joined(separator: " ")
         let place = string("url") ?? string("window")
@@ -341,7 +346,10 @@ final class Freeze: NSObject {
             panel.animator().alphaValue = 0
         }, completionHandler: {
             panel.orderOut(nil)
-            self.onFinish(self, outcome)
+            Task { @MainActor in
+                for task in self.describing { await task.value }
+                self.onFinish(self, outcome)
+            }
         })
         if outcome != .draft { previous?.activate() }
     }

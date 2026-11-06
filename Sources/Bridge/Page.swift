@@ -392,8 +392,10 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         case "pin":
             guard freezing, let freeze = Freeze.current else { replyHandler(nil, "not freezing"); return }
             let anchor = JSONValue(any: body["anchor"] ?? NSNull())
-            addComment(anchor: anchor, target: freeze.describe(anchor), text: body["text"] as? String ?? "")
-            replyHandler(["notes": notesJSON()], nil)
+            freeze.describing.append(Task {
+                addComment(anchor: anchor, target: await freeze.describe(anchor), text: body["text"] as? String ?? "")
+                replyHandler(["notes": notesJSON()], nil)
+            })
         case "note":
             let id = body["id"] as? String ?? ""
             if body["action"] as? String == "edit" { editComment(id, text: body["text"] as? String ?? "") } else { deleteComment(id) }

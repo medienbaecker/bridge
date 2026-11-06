@@ -451,7 +451,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         case "freeze-note":
             guard let freeze = Freeze.current else { return false }
             freeze.page.call("""
-                const box = document.querySelector('.bridge-thread:popover-open textarea');
+                const box = document.querySelector('.bridge-composer:popover-open textarea');
                 box.value = text;
                 box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true }));
                 """, ["text": argument ?? ""])
