@@ -796,6 +796,7 @@ function __bridgeInit(options) {
         composer.style.positionAnchor = `--bridge-pin-${id}`;
         composer.addEventListener('toggle', (e) => {
           notes.pins.get(id)?.toggleAttribute('data-open', e.newState === 'open');
+          if (e.newState !== 'open') post('glass');
           if (e.newState === 'open' || !composer.isConnected) return;
           notes.drafts[id] = composer.querySelector('textarea').value;
           if (id === notes.pending?.id && !notes.drafts[id]) notes.cancelPending();
@@ -825,6 +826,8 @@ function __bridgeInit(options) {
       const dx = Math.max(8 - r.left, 0) + Math.min(innerWidth - 8 - r.right, 0);
       const dy = Math.max(8 - r.top, 0) + Math.min(innerHeight - 8 - r.bottom, 0);
       composer.style.translate = `${dx}px ${dy}px`;
+      const placed = composer.getBoundingClientRect();
+      post('glass', { rect: [placed.left, placed.top, placed.width, placed.height] });
     };
 
     notes.act = async function (id, action) {

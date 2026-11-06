@@ -33,6 +33,7 @@ final class Freeze: NSObject {
     let page: Page
     let panel: FreezePanel
     let overlay = FreezeView()
+    let glass = NSGlassEffectView()
     let recipients: [Model.Recipient]
     var previous: NSRunningApplication?
     var highlight: CGRect?
@@ -70,6 +71,9 @@ final class Freeze: NSObject {
         overlay.freeze = self
         overlay.frame = backdrop.bounds
         backdrop.addSubview(overlay)
+        glass.cornerRadius = 12
+        glass.isHidden = true
+        backdrop.addSubview(glass)
         page.webView.removeFromSuperview()
         page.webView.frame = backdrop.bounds
         backdrop.addSubview(page.webView)
@@ -244,6 +248,12 @@ final class Freeze: NSObject {
     // MARK: Notes
 
     var notes: [Comment] { page.sidecar.comments }
+
+    func showGlass(_ rect: CGRect?) {
+        guard let rect else { glass.isHidden = true; return }
+        glass.frame = CGRect(x: rect.minX, y: screen.frame.height - rect.maxY, width: rect.width, height: rect.height)
+        glass.isHidden = false
+    }
 
     func hover(_ point: CGPoint) {
         pointer = point

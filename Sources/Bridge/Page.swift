@@ -384,6 +384,10 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         case "freeze":
             if let session = body["send"] as? String { Freeze.current?.send(to: session.isEmpty ? nil : session) } else { Freeze.current?.cancel() }
             replyHandler(nil, nil)
+        case "glass":
+            let rect = (body["rect"] as? [Double]).map { CGRect(x: $0[0], y: $0[1], width: $0[2], height: $0[3]) }
+            Freeze.current?.showGlass(rect)
+            replyHandler(nil, nil)
         case "hover":
             if let freeze = Freeze.current {
                 if let x = body["x"] as? Double, let y = body["y"] as? Double { freeze.hover(CGPoint(x: x * freeze.screen.frame.width, y: y * freeze.screen.frame.height)) } else { freeze.unhover() }

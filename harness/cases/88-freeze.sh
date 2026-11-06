@@ -48,6 +48,8 @@ cards=$(bridge --js "$CASE_DIR/pages/cards.html" "@bridge const r = document.que
 check_json "hovering over Bridge's own window outlines the element under the pointer, not the window, exactly on it" "$(bridge --state)" '.windowFrame.width as $w | ("'"$centre"'" | split(" ") | map(tonumber)) as [$x, $y] | .freeze.screenFrame as $s | ('"$cards"') as [$top, $height] | (($s[1] + $s[3]) - (.windowFrame.y + .windowFrame.height) + .windowFrame.height - $height + $top) as $want | .freeze.highlight | [length, (.[2] < $w * 0.9), ($x >= .[0] and $x <= .[0] + .[2] and $y >= .[1] and $y <= .[1] + .[3]), ((.[1] - $want) | fabs < 2)] | map(tostring) | join(",")' "4,true,true,true"
 bridge --do freeze-mark "$centre" >/dev/null; settle 0.3
 check_json "a click opens the composer" "$(on_screen "return !!document.querySelector('.bridge-composer:popover-open textarea')")" '.' "true"
+box=$(on_screen "const r = document.querySelector('.bridge-composer:popover-open').getBoundingClientRect(); return [r.left, r.top, r.width, r.height].map(Math.round)")
+check "under the open box sits macOS's own glass, exactly its size, and no shadow of ours" "$(bridge --state | jq -c '.freeze.glass | map(round)') $(on_screen "return getComputedStyle(document.querySelector('.bridge-composer:popover-open')).boxShadow" | jq -r .)" "$(printf '%s' "$box" | jq -c .) none"
 composer=$(on_screen "const r = document.querySelector('.bridge-composer:popover-open').getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom]")
 first=$(on_screen "return [...document.querySelectorAll('.bridge-pin')].map((p) => p.dataset.n).join()")
 check_json "while a note is open the cursor is the normal one everywhere, a text cursor in the box" "$(on_screen "const t = document.querySelector('.bridge-composer:popover-open'); return [getComputedStyle(t.querySelector('textarea')).cursor, getComputedStyle(t.querySelector('button')).cursor, getComputedStyle(document.body).cursor.startsWith('url(')]")" 'map(tostring) | join(",")' "auto,auto,false"
@@ -97,6 +99,7 @@ bridge --do freeze-mark "300 300" >/dev/null; settle 0.3
 on_screen "document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 600, clientY: 600, button: 0, buttons: 1 }))" >/dev/null
 on_screen "document.querySelector('.bridge-composer:popover-open')?.hidePopover(); document.body.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 600, clientY: 600 }))" >/dev/null; settle 0.3
 check_json "a click elsewhere closes an empty composer, dropping its pin, and places nothing" "$(on_screen "return [document.querySelectorAll('.bridge-pin').length, !!document.querySelector('.bridge-composer:popover-open')]")" 'map(tostring) | join(",")' "1,false"
+check_json "and its glass goes with it" "$(bridge --state)" '.freeze.glass' "null"
 bridge --do freeze-cancel >/dev/null; settle 0.3
 bridge --do freeze >/dev/null; settle 1
 bridge --do freeze-mark "100 100" >/dev/null; settle 0.3; bridge --do freeze-note "Lorem" >/dev/null

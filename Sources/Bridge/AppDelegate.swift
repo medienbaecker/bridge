@@ -235,10 +235,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         out["settings"] = settingsWindow.state()
         out["freezePanels"] = .number(Double(NSApp.windows.filter { $0 is FreezePanel && $0.isVisible }.count))
         if let freeze = Freeze.current {
+            let shown = freeze.glass.frame
+            let glass: JSONValue = freeze.glass.isHidden ? .null : .array([shown.minX, freeze.screen.frame.height - shown.maxY, shown.width, shown.height].map { .number(Double($0)) })
             out["freeze"] = .object(["notes": .array(freeze.notes.map { .object(["text": .string($0.text), "target": .string($0.target), "anchor": $0.anchor]) }),
                                      "highlight": freeze.highlight.map { .array([$0.minX, $0.minY, $0.width, $0.height].map { .number(Double($0)) }) } ?? .null,
                                      "screen": .string(freeze.screen.localizedName), "screenFrame": .array([freeze.screen.frame.minX, freeze.screen.frame.minY, freeze.screen.frame.width, freeze.screen.frame.height].map { .number(Double($0)) }),
-                                     "outlineUnderPage": .bool(freeze.overlay.superview?.subviews.firstIndex(of: freeze.overlay) ?? 0 < freeze.overlay.superview?.subviews.firstIndex(of: freeze.page.webView) ?? 0), "pinCursor": .bool(NSCursor.current.hotSpot == CGPoint(x: 14, y: 29)), "recipients": .array(freeze.recipients.map { .string($0.label) }),
+                                     "glass": glass, "outlineUnderPage": .bool(freeze.overlay.superview?.subviews.firstIndex(of: freeze.overlay) ?? 0 < freeze.overlay.superview?.subviews.firstIndex(of: freeze.page.webView) ?? 0), "pinCursor": .bool(NSCursor.current.hotSpot == CGPoint(x: 14, y: 29)), "recipients": .array(freeze.recipients.map { .string($0.label) }),
                                      "picked": freeze.picked.map { .string($0) } ?? .null, "captures": .number(Double(freeze.captures)),
                                      "pictures": .array(freeze.notes.map { note in freeze.pictures[note.id].map { p in .array([p.frame.minX, p.frame.minY, p.frame.width, p.frame.height].map { .number(Double($0)) }) } ?? .null })])
         }
