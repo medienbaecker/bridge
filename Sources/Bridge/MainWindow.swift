@@ -249,7 +249,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         guard let window, let content = window.contentView else { return }
         let menu = NSMenu()
         menu.addItem(withTitle: "Send to", action: nil, keyEquivalent: "").isEnabled = false
-        for recipient in model.agentsByWork() {
+        for recipient in model.agentsByStart() {
             let item = menu.addItem(withTitle: recipient.label, action: #selector(sendTo(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = [recipient.session, page.location]

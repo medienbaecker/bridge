@@ -60,9 +60,8 @@ final class Freeze: NSObject {
         self.screen = screen
         self.windows = windows
         self.page = page
-        let held = recipients.filter { $0.session == picked }
-        self.recipients = Array((held + recipients.filter { $0.session != picked }).prefix(9))
-        self.picked = held.first?.session
+        self.recipients = recipients
+        self.picked = recipients.contains { $0.session == picked } ? picked : nil
         panel = FreezePanel(contentRect: screen.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         super.init()
         panel.level = .screenSaver
@@ -117,7 +116,7 @@ final class Freeze: NSObject {
         freeze.panel.orderFrontRegardless()
         freeze.panel.makeKeyAndOrderFront(nil)
         freeze.panel.makeFirstResponder(page.webView)
-        let list = freeze.recipients.map { ["session": $0.session, "name": $0.name.isEmpty ? $0.page : $0.name, "project": $0.project.isEmpty ? "No project" : $0.project, "busy": $0.busy, "picked": $0.session == freeze.picked] as [String: Any] }
+        let list = freeze.recipients.map { ["session": $0.session, "name": $0.name.isEmpty ? $0.page : $0.name, "project": $0.project.isEmpty ? "No project" : $0.project, "busy": $0.busy, "picked": $0.session == freeze.picked, "colour": Self.css(Model.colour(of: $0.session))] as [String: Any] }
         _ = try? await page.run("__bridge.agents(list); __bridge.cursor(pin)", ["list": list, "pin": pin], in: Page.world)
         await freeze.setCursor()
     }
@@ -261,6 +260,11 @@ final class Freeze: NSObject {
     func scroll(_ event: NSEvent) {
         let at = local(CGRect(origin: event.cgEvent?.location ?? .zero, size: .zero)).origin
         page.call("__bridge.wheel(x, y, dx, dy)", ["x": at.x, "y": at.y, "dx": -event.scrollingDeltaX, "dy": -event.scrollingDeltaY])
+    }
+
+    static func css(_ colour: NSColor) -> String {
+        guard let rgb = colour.usingColorSpace(.sRGB) else { return "gray" }
+        return "rgb(\(Int(rgb.redComponent * 255)) \(Int(rgb.greenComponent * 255)) \(Int(rgb.blueComponent * 255)))"
     }
 
     func showGlass(_ rect: CGRect?) {

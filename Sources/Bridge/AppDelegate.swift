@@ -230,7 +230,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             out["zoom"] = .number(Double((page.zoom * 100).rounded() / 100))
             out["links"] = .string(page.links.rawValue)
         }
-        out["agents"] = .array(model.agentsByWork().map { .string($0.label) })
+        out["agents"] = .array(model.agentsByStart().map { .string($0.label) })
         out["settings"] = settingsWindow.state()
         out["freezePanels"] = .number(Double(NSApp.windows.filter { $0 is FreezePanel && $0.isVisible }.count))
         if let freeze = Freeze.current {
@@ -325,7 +325,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         let page = (NSApp.keyWindow?.windowController as? PageWindow)?.page ?? model.selectedPage
         let picked = fromBridge ? page.flatMap { model.listing.entry($0.location)?.session } : nil
         Task {
-            await Freeze.start(recipients: model.agentsByWork(), picked: picked, page: freezePage) { [weak self] freeze, outcome in
+            await Freeze.start(recipients: model.agentsByStart(), picked: picked, page: freezePage) { [weak self] freeze, outcome in
                 guard let self, outcome != .cancel, let location = model.newBridge(capture: freeze) else { return }
                 if case .send(let session) = outcome, window.sendDraft(location, to: session) { return }
                 model.scope = .project(Paths.drafts.path)

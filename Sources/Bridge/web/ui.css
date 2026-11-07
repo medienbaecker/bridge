@@ -160,6 +160,8 @@ code:is([data-quote], [data-quoted])::before { content: attr(data-quote) attr(da
 .bridge-agents button[data-picked] { background: AccentColor; }
 .bridge-agents button:active { scale: 0.96; filter: brightness(0.9); }
 .bridge-agents button[data-busy]::after { content: ""; flex: none; width: 7px; height: 7px; border-radius: 50%; background: #f0a83a; }
+.bridge-agents i { flex: none; width: 8px; height: 8px; border-radius: 50%; }
+.bridge-agents-nobody { flex: 1; padding: 0 8px; color: rgb(255 255 255 / 0.7); white-space: nowrap; }
 .bridge-agents kbd { flex: none; min-width: 16px; height: 16px; border-radius: 4px; background: rgb(255 255 255 / 0.2); font: 600 11px/16px -apple-system, system-ui, sans-serif; text-align: center; }
 .bridge-agents b { font-weight: 600; }
 .bridge-agents small { color: rgb(255 255 255 / 0.7); }

@@ -10,6 +10,7 @@ public enum ClaudeSessions {
         public let cwd: String
         public let name: String
         public let named: Bool
+        public var started: Double = 0
         public let life: Life
         public let socket: String
     }
@@ -34,6 +35,7 @@ public enum ClaudeSessions {
                 else { continue }
                 out[session] = Live(pid: pid, session: session, cwd: obj["cwd"] as? String ?? "", name: obj["name"] as? String ?? "",
                                     named: obj["nameSource"] as? String == "user",
+                                    started: (obj["startedAt"] as? NSNumber)?.doubleValue ?? 0,
                                     life: obj["status"] as? String == "busy" ? .working : .idle,
                                     socket: obj["messagingSocketPath"] as? String ?? "")
             }

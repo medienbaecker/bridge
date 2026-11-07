@@ -15,7 +15,7 @@ check "New bridge opens a draft in Drafts" "$([[ "$draft" == "$XDG_STATE_HOME"/b
 check_json "it is called New bridge until it has words" "$(bridge --state)" '.title' "New bridge"
 check_json "the projects column has Drafts, selected" "$(bridge --state)" '.projects | [.scope, (.rows | map(.name) | index("Drafts") != null)] | @tsv' "project:$XDG_STATE_HOME/bridge-dev/drafts	true"
 check "an empty draft cannot be sent" "$(send_enabled)" "false"
-check_json "agents are named by their last page, idle first" "$(bridge --state)" '.agents | join(" | ")' "Card layout for the archive · pages · idle | No page yet · pages · busy"
+check_json "agents are named by their last page, in the order they started" "$(bridge --state)" '.agents | join(" | ")' "No page yet · pages · busy | Card layout for the archive · pages · idle"
 
 long="Donaudampfschifffahrtsgesellschaftskapitänswitwenrentenantragsformular bitte prüfen"
 js "const t = document.getElementById('text'); t.value = '$long\nLorem ipsum dolor sit amet.'; t.dispatchEvent(new Event('input', { bubbles: true }))" >/dev/null

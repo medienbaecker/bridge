@@ -331,17 +331,19 @@ final class Model {
         var label: String { [page, project, busy ? "busy" : "idle"].filter { !$0.isEmpty }.joined(separator: " · ") }
     }
 
-    func agentsByWork() -> [Recipient] {
-        let pages = Dictionary(uniqueKeysWithValues: agents.keys.map { ($0, lastPage(of: $0)) })
-        let sorted = agents.values.sorted { a, b in
-            if (a.life == .working) != (b.life == .working) { return a.life != .working }
-            return (pages[a.session]??.presentedAt ?? .distantPast) > (pages[b.session]??.presentedAt ?? .distantPast)
-        }
-        return sorted.map { agent in
-            Recipient(session: agent.session, name: ClaudeSessions.title(of: agent), page: pages[agent.session]??.title ?? "No page yet",
+    func agentsByStart() -> [Recipient] {
+        agents.values.sorted { ($0.started, $0.session) < ($1.started, $1.session) }.map { agent in
+            Recipient(session: agent.session, name: ClaudeSessions.title(of: agent), page: lastPage(of: agent.session)?.title ?? "No page yet",
                       project: agent.cwd.isEmpty ? "" : (Ground.projectRoot(for: agent.cwd) as NSString).lastPathComponent, busy: agent.life == .working)
         }
     }
+
+    static let agentColours: [NSColor] = [.systemPink, .systemGreen, .systemPurple, .systemTeal, .systemRed, .systemIndigo, .systemMint, .systemBrown]
+
+    static func colour(of session: String) -> NSColor {
+        agentColours[session.utf8.reduce(0) { ($0 &* 31 &+ Int($1)) & 0xFFFF } % agentColours.count]
+    }
+
 
     func setTitle(_ title: String, for location: String) {
         guard let e = listing.entry(location), e.title != title, !title.isEmpty else { return }

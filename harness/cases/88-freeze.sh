@@ -76,11 +76,11 @@ on_screen "document.querySelector('.bridge-composer:popover-open [data-act=cance
 check_json "a box goes on the screenshot with its size" "$(bridge --state)" '.freeze.notes | [length, (.[1].anchor.w > 0)] | map(tostring) | join(",")' "2,true"
 
 state=$(bridge --state)
-check_json "the bar names the agents by their Claude Code title and project, then Draft" "$(on_screen "return [...document.querySelectorAll('.bridge-agents button')].map((b) => b.innerText.replace(/\\n/g, ' ')).join(' | ')")" '.' "1 Lorem draft pages | 2 Freeze review pages | Draft"
+check_json "the bar names the agents by their Claude Code title and project, in the order they started, then Draft" "$(on_screen "return [...document.querySelectorAll('.bridge-agents button')].map((b) => b.innerText.replace(/\\n/g, ' ')).join(' | ')")" '.' "1 Freeze review pages | 2 Lorem draft pages | Draft"
 on_screen "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))" >/dev/null; settle 0.3
 check "started from another app, nothing is picked and Return does nothing" "$(bridge --state | jq -r '[.freeze != null, .freeze.picked] | map(tostring) | join(",")') $(on_screen "return document.querySelectorAll('[data-picked]').length")" "true,null 0"
 on=$(bridge --state | jq -r '.selected + " " + .projects.scope')
-bridge --do freeze-send 1 >/dev/null; settle 0.5
+bridge --do freeze-send 0 >/dev/null; settle 0.5
 draft=$(jq -r '[.bridges[] | select(.location | contains("/drafts/"))][0].location' "$XDG_STATE_HOME/bridge-dev/list.json")
 for i in $(seq 1 30); do read=$(cat "$(sidecar "$draft")" 2>/dev/null); [ "$(printf '%s' "$read" | jq -r .status)" = sent ] && break; settle 0.1; done
 check "clicking the agent sends it straight away" "$(inbox "$agent" | grep -c 'numbered notes; read them') $(printf '%s' "$read" | jq -r .status)" "1 sent"
@@ -126,16 +126,16 @@ check_json "by the left edge the composer stays inside the screen" "$(on_screen 
 bridge --do freeze-note "Lorem" >/dev/null; settle 0.3
 bridge --do freeze-cancel >/dev/null; settle 0.3
 
-bridge --do select "$CASE_DIR/pages/cards.html" >/dev/null; settle 0.3
+bridge --do select "$CASE_DIR/pages/other.html" >/dev/null; settle 0.3
 bridge --do freeze front >/dev/null; settle 1
-check "started from Bridge, the agent of the selected page is chip 1, picked" "$(bridge --state | jq -r '.freeze.picked') $(on_screen "return [...document.querySelectorAll('.bridge-agents button')].map((b) => (b.hasAttribute('data-picked') ? '*' : '') + (b.querySelector('b') || b).textContent).join(' | ')")" "$agent \"*Freeze review | Lorem draft | Draft\""
-check_json "and drawn in blue, unlike the others" "$(on_screen "const [picked, other] = document.querySelectorAll('.bridge-agents-list button'); return getComputedStyle(picked).backgroundColor !== getComputedStyle(other).backgroundColor")" '.' "true"
+check "started from Bridge, the agent of the selected page lights up in its own place" "$(bridge --state | jq -r '.freeze.picked') $(on_screen "return [...document.querySelectorAll('.bridge-agents button')].map((b) => (b.hasAttribute('data-picked') ? '*' : '') + (b.querySelector('b') || b).textContent).join(' | ')")" "$other \"Freeze review | *Lorem draft | Draft\""
+check_json "drawn in blue, unlike the others, each with its own colour dot" "$(on_screen "const picked = document.querySelector('.bridge-agents-list [data-picked]'); const other = document.querySelector('.bridge-agents-list button:not([data-picked])'); const dots = [...document.querySelectorAll('.bridge-agents-list i')].map((i) => getComputedStyle(i).backgroundColor); return getComputedStyle(picked).backgroundColor !== getComputedStyle(other).backgroundColor && dots.length === 2 && dots.every((d) => d !== 'rgba(0, 0, 0, 0)')")" '.' "true"
 sent=$(inbox "$agent" | grep -c 'numbered note')
 on_screen "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))" >/dev/null; settle 0.5
 check "with no notes, Return does nothing" "$(bridge --state | jq '.freeze != null') $(inbox "$agent" | grep -c 'numbered note')" "true $sent"
 bridge --do freeze-mark "300 300" >/dev/null; settle 0.3; bridge --do freeze-note "Ut enim ad minim" >/dev/null; settle 0.5
 on_screen "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))" >/dev/null; settle 1
-check "Return sends it to the picked agent" "$(bridge --state | jq '.freeze == null') $(inbox "$agent" | grep -c 'numbered note') $(inbox "$other" 3 | grep -c 'numbered note')" "true $((sent + 1)) 0"
+check "Return sends it to the picked agent" "$(bridge --state | jq '.freeze == null') $(inbox "$other" 3 | grep -c 'numbered note') $(inbox "$agent" | grep -c 'numbered note')" "true 1 $sent"
 
 end_session "$agent"
 end_session "$other"
@@ -143,9 +143,9 @@ bridge --do freeze >/dev/null; settle 1
 bridge --do freeze-mark "40 $(bridge --state | jq -r '.freeze.screenFrame[3] - 36')" >/dev/null; settle 0.3
 check_json "by the bottom edge the composer opens above its pin, inside the screen" "$(on_screen "const t = document.querySelector('.bridge-composer:popover-open').getBoundingClientRect(); const p = [...document.querySelectorAll('.bridge-pin')].pop().getBoundingClientRect(); return t.bottom <= p.top + 1 && t.top >= 0")" '.' "true"
 bridge --do freeze-note "Sed do eiusmod" >/dev/null; settle 0.5
-check_json "with no agent running, the bar offers only Draft" "$(on_screen "return [...document.querySelectorAll('.bridge-agents button')].map((b) => b.innerText).join()")" '.' "Draft"
-bridge --do freeze-send 0 >/dev/null; wait_ready; settle 0.5
-check_json "which opens the draft" "$(bridge --state)" '.title' "Sed do eiusmod"
+check_json "with no agent running, the bar says so and offers only Draft, picked" "$(on_screen "return document.querySelector('.bridge-agents').innerText.replace(/\\n/g, ' ') + ' ' + [...document.querySelectorAll('.bridge-agents [data-picked]')].map((b) => b.innerText).join()")" '.' "No agent running Draft Draft"
+on_screen "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))" >/dev/null; wait_ready; settle 0.5
+check_json "and Return opens the draft" "$(bridge --state)" '.title' "Sed do eiusmod"
 bridge --do point >/dev/null; settle 1
 check_json "the Point button starts the freeze" "$(bridge --state)" '.freeze != null' "true"
 bridge --do resize "800 500" >/dev/null; settle 0.5

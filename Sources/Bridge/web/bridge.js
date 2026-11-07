@@ -909,13 +909,15 @@ function __bridgeInit(options) {
         chip.toggleAttribute('data-picked', agent.picked);
         const key = document.createElement('kbd');
         key.textContent = i + 1;
+        const colour = document.createElement('i');
+        colour.style.background = agent.colour;
         const label = document.createElement('span');
         const name = document.createElement('b');
         name.textContent = agent.name;
         const project = document.createElement('small');
         project.textContent = agent.project;
         label.append(name, ' ', project);
-        chip.append(key, label);
+        chip.append(key, colour, label);
         return chip;
       });
       const scroller = document.createElement('div');
@@ -925,7 +927,15 @@ function __bridgeInit(options) {
       draft.dataset.session = '';
       draft.className = 'bridge-agents-draft';
       draft.textContent = 'Draft';
-      bar.replaceChildren(scroller, draft);
+      if (list.length) bar.replaceChildren(scroller, draft);
+      else {
+        const nobody = document.createElement('span');
+        nobody.className = 'bridge-agents-nobody';
+        nobody.textContent = 'No agent running';
+        draft.toggleAttribute('data-picked', true);
+        bar.replaceChildren(nobody, draft);
+      }
+      bar.querySelector('.bridge-agents-list [data-picked]')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
       bar.getAnimations().forEach((a) => a.cancel());
       if (still.matches) return;
       const hidden = bar.animate([{ translate: '0 100%' }], { fill: 'forwards' });
