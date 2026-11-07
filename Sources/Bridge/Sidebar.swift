@@ -332,7 +332,7 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         out["vibrant"] = .bool(vibrant)
         out["rows"] = .array((0..<outline.numberOfRows).compactMap { r in
             guard let cell = outline.view(atColumn: 0, row: r, makeIfNecessary: false) as? BridgeCell else { return nil }
-            return .object(["title": .string(cell.title.stringValue), "dim": .bool(cell.dim), "struck": .bool(cell.struck), "unread": .bool(cell.unread)])
+            return .object(["title": .string(cell.title.stringValue), "dim": .bool(cell.dim), "struck": .bool(cell.struck), "unread": .bool(cell.unread), "dot": .string(cell.unread ? Freeze.css(cell.dot.color) : "")])
         })
         return out
     }
@@ -506,16 +506,18 @@ final class BridgeCell: NSTableCellView {
         presentedAt = entry.presentedAt
         tick()
         unread = entry.unread
+        agentColour = entry.session.isEmpty ? nil : Model.colour(of: entry.session)
         dot.toolTip = entry.unread ? "Unread" : nil
         paintDot()
     }
 
     private(set) var unread = false
+    private(set) var agentColour: NSColor?
 
     // An accent dot on the accent pill would vanish, so on the emphasized pill it
     // takes the pill's text colour.
     private func paintDot() {
-        dot.color = unread ? (backgroundStyle == .emphasized ? .alternateSelectedControlTextColor : .controlAccentColor) : .clear
+        dot.color = unread ? (backgroundStyle == .emphasized ? .alternateSelectedControlTextColor : agentColour ?? .controlAccentColor) : .clear
     }
 
     // AppKit restyles on every background-style change, so the title style is
