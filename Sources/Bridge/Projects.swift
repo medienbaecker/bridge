@@ -4,7 +4,7 @@ import BridgeCore
 /// The left column: the two smart scopes, then the projects with their waiting
 /// counts, and the update row at its foot.
 final class ProjectsController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
-    enum Row: Equatable { case scope(Scope), gap, more(Int) }
+    enum Row: Equatable { case scope(Scope), gap }
 
 
     let model: Model
@@ -67,11 +67,7 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
         if model.listing.projects.contains(drafts) { rows += [.scope(.project(drafts)), .gap] }
         let mine = model.listing.projects.filter { $0 != drafts }
         let active = mine.filter { p in model.listing.bridges.contains { $0.project == p && !$0.crossed } }
-        rows += active.map { .scope(.project($0)) }
-        let rest = mine.filter { !active.contains($0) }
-        if !rest.isEmpty {
-            if model.showAllProjects { rows += rest.map { .scope(.project($0)) }; rows.append(.more(0)) } else { rows.append(.more(rest.count)) }
-        }
+        rows += (active + mine.filter { !active.contains($0) }).map { .scope(.project($0)) }
         table.reloadData()
         if let i = rows.firstIndex(of: .scope(model.scope)) { table.selectRowIndexes([i], byExtendingSelection: false) }
     }
@@ -140,10 +136,6 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
     func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool {
         switch rows[row] {
         case .scope: return true
-        case .more:
-            model.showAllProjects.toggle()
-            DispatchQueue.main.async { self.reload() }
-            return false
         default: return false
         }
     }
@@ -152,10 +144,6 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
         switch rows[row] {
         case .gap:
             return NSView()
-        case .more(let n):
-            let cell = tableView.makeView(withIdentifier: ScopeCell.id, owner: nil) as? ScopeCell ?? ScopeCell()
-            cell.more(n == 0 ? "Fewer projects" : "\(n) more project\(n == 1 ? "" : "s")…")
-            return cell
         case .scope(let scope):
             let cell = tableView.makeView(withIdentifier: ScopeCell.id, owner: nil) as? ScopeCell ?? ScopeCell()
             cell.show(scope, model: model)
@@ -182,7 +170,6 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
     func key(_ row: Row) -> String? {
         switch row {
         case .scope(let s): return s.key
-        case .more: return "more"
         case .gap: return nil
         }
     }
@@ -247,13 +234,6 @@ final class ScopeCell: NSTableCellView {
         case .all: return model.listing.bridges.filter { !$0.crossed }.count
         case .project(let p): return model.waitingCount(in: p)
         }
-    }
-
-    func more(_ text: String) {
-        icon.image = nil
-        name.stringValue = text
-        name.textColor = .secondaryLabelColor
-        count.stringValue = ""
     }
 
     func show(_ scope: Scope, model: Model) {

@@ -149,7 +149,6 @@ final class Model {
         if !Env.test, !NSApp.isActive { Notify.updated(listing.entry(location)) }
     }
 
-    var showAllProjects: Bool = Model.remembered("showAllProjects") as? Bool ?? false { didSet { Self.remember(showAllProjects, "showAllProjects") } }
 
     func deliver(_ page: Page) {
         let s = page.sidecar
