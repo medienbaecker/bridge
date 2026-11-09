@@ -100,7 +100,7 @@ final class Freeze: NSObject {
         defer { starting = false }
         _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": !Env.test] as CFDictionary)
         AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 0.25)
-        let previous = NSWorkspace.shared.frontmostApplication.flatMap { $0 == .current ? nil : $0 }
+        let previous = Env.test ? nil : NSWorkspace.shared.frontmostApplication.flatMap { $0 == .current ? nil : $0 }
         let windows = onScreen()
         page.startFreeze()
         let freeze = Freeze(screen: screen, windows: windows, recipients: recipients, picked: picked, page: page)
@@ -115,7 +115,7 @@ final class Freeze: NSObject {
             for window in freeze.veiled { window.alphaValue = 0 }
         }
         freeze.panel.orderFrontRegardless()
-        freeze.panel.makeKeyAndOrderFront(nil)
+        if !Env.test { freeze.panel.makeKeyAndOrderFront(nil) }
         freeze.panel.makeFirstResponder(page.webView)
         let list = freeze.recipients.map { ["session": $0.session, "name": $0.name.isEmpty ? $0.page : $0.name, "project": $0.project.isEmpty ? "No project" : $0.project, "busy": $0.busy, "picked": $0.session == freeze.picked, "colour": Self.css(Model.colour(of: $0.session))] as [String: Any] }
         _ = try? await page.run("__bridge.agents(list); __bridge.cursor(pin)", ["list": list, "pin": pin], in: Page.world)

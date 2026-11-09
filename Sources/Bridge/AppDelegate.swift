@@ -337,7 +337,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                 model.selected = location
                 model.changed()
                 if window.window?.isVisible != true { window.showWindow(nil) }
-                NSApp.activate()
+                if !Env.test { NSApp.activate() }
             }
         }
     }
