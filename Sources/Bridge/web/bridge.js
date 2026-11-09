@@ -853,6 +853,7 @@ function __bridgeInit(options) {
         place(box, anchor);
         box.style.width = `${anchor.w * 100}vw`;
         box.style.height = `${anchor.h * 100}vh`;
+        box.style.anchorName = `--bridge-box-${id}`;
         root.appendChild(box);
         box.showPopover();
         notes.boxes.set(id, box);
@@ -867,7 +868,8 @@ function __bridgeInit(options) {
       composer.className = 'bridge-composer';
       composer.setAttribute('popover', 'auto');
       composer.dataset.id = id;
-      composer.style.positionAnchor = `--bridge-pin-${id}`;
+      composer.style.positionAnchor = anchor.w ? `--bridge-box-${id}` : `--bridge-pin-${id}`;
+      composer.toggleAttribute('data-box', !!anchor.w);
       composer.addEventListener('beforetoggle', (e) => { if (e.newState === 'open') notes.render(id); });
       composer.addEventListener('toggle', (e) => {
         pin.toggleAttribute('data-open', e.newState === 'open');

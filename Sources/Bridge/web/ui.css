@@ -143,6 +143,7 @@ code:is([data-quote], [data-quoted])::before { content: attr(data-quote) attr(da
   z-index: 2147482999;
 }
 .bridge-box:popover-open { display: block; }
+.bridge-composer[data-box] { margin: 8px 0; }
 [data-bridge-freeze], [data-bridge-freeze] body { background: transparent !important; margin: 0; overflow: hidden; }
 .bridge-agents {
   position: fixed;

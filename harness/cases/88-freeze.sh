@@ -68,6 +68,7 @@ pictured=$(bridge --state | jq -c '.freeze.pictures[0]')
 check_json "and the screen stays in point mode for the next one" "$(on_screen "return getComputedStyle(document.body).cursor.startsWith('url(')")" '.' "true"
 bridge --do freeze-mark "40 40 $corner" >/dev/null; settle 0.3
 check_json "a drag draws a box with its composer" "$(on_screen "return [document.querySelectorAll('.bridge-box').length, !!document.querySelector('.bridge-composer:popover-open')]")" 'map(tostring) | join(",")' "1,true"
+check_json "the box's note opens outside the box, its border never crossing it" "$(on_screen "const b = document.querySelector('.bridge-box').getBoundingClientRect(), c = document.querySelector('.bridge-composer:popover-open').getBoundingClientRect(); return c.top >= b.bottom || c.bottom <= b.top || c.left >= b.right || c.right <= b.left")" '.' "true"
 check "each new pin shows its number at once" "$first $(on_screen "return [...document.querySelectorAll('.bridge-pin')].map((p) => p.dataset.n).join()")" '"1" "1,2"'
 bridge --do freeze-note "Consectetur adipiscing elit" >/dev/null; settle 0.5
 on_screen "document.querySelector('.bridge-pin').click()" >/dev/null; settle 0.3
