@@ -379,3 +379,15 @@ private let kitOfShapes = ".options { } .draft { } .bars { } .bar { }"
     #expect(s.handOver("/p/page.html", cli: "bridge").contains("closed /p/page.html without answering"))
 }
 
+
+@Test func placeGuessesTheProject() {
+    let projects = ["bridge", "kirby-foo", "shop"]
+    #expect(Place.project(url: "http://kirby-foo.test/panel", window: "Panel", among: projects) == "kirby-foo")
+    #expect(Place.project(url: "https://www.Kirby-Foo.test/", window: nil, among: projects) == "kirby-foo")
+    #expect(Place.project(url: "https://shop.example.com/", window: "bridge — shop", among: projects) == nil)
+    #expect(Place.project(url: nil, window: "Bridge.swift — bridge", among: projects) == "bridge")
+    #expect(Place.project(url: nil, window: "bridges and kirby-foobar", among: projects) == nil)
+    #expect(Place.key(url: "https://shop.example.com/a", app: "Safari") == "shop.example.com")
+    #expect(Place.key(url: "file:///Users/x/a.html", app: "Safari") == "Safari")
+    #expect(Place.key(url: nil, app: "Figma") == "Figma")
+}

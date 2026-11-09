@@ -77,8 +77,7 @@ check_json "a box goes on the screenshot with its size" "$(bridge --state)" '.fr
 
 state=$(bridge --state)
 check_json "the bar names the agents by their Claude Code title and project, in the order they started, then Draft" "$(on_screen "return [...document.querySelectorAll('.bridge-agents button')].map((b) => b.innerText.replace(/\\n/g, ' ')).join(' | ')")" '.' "1 Freeze review pages | 2 Lorem draft pages | Draft"
-on_screen "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))" >/dev/null; settle 0.3
-check "started from another app, nothing is picked and Return does nothing" "$(bridge --state | jq -r '[.freeze != null, .freeze.picked] | map(tostring) | join(",")') $(on_screen "return document.querySelectorAll('[data-picked]').length")" "true,null 0"
+check "started from another app, the pin on a page picks that page's agent" "$(bridge --state | jq -r '.freeze.picked') $(on_screen "return document.querySelectorAll('[data-picked]').length")" "$agent 1"
 on=$(bridge --state | jq -r '.selected + " " + .projects.scope')
 bridge --do freeze-send 0 >/dev/null; settle 0.5
 for i in $(seq 1 30); do [ "$(inbox "$agent" | grep -c 'sent you notes')" = 1 ] && break; settle 0.1; done

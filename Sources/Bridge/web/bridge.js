@@ -834,7 +834,7 @@ function __bridgeInit(options) {
 
   // ---- the freeze: pins and boxes over the screen, and the agents bar
 
-  let freeze = { agents() {}, cursor() {}, reset() {}, leave() {}, wheel() {}, pinsAt() { return false; } };
+  let freeze = { agents() {}, pick() {}, cursor() {}, reset() {}, leave() {}, wheel() {}, pinsAt() { return false; } };
   if (options.freeze) {
     root.setAttribute('data-bridge-freeze', '');
     const notes = { list: [], pins: new Map(), boxes: new Map(), drafts: {}, pending: null, dragging: null };
@@ -1104,6 +1104,10 @@ function __bridgeInit(options) {
         bar.animate([{ translate: '0 100%' }, { translate: '0 0' }], { duration: 220, easing: 'cubic-bezier(0.23, 1, 0.32, 1)' });
       }));
     };
+    freeze.pick = (session) => {
+      for (const chip of bar.querySelectorAll('.bridge-agents-list button')) chip.toggleAttribute('data-picked', chip.dataset.session === session);
+      bar.querySelector('.bridge-agents-list [data-picked]')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+    };
     freeze.cursor = (pin) => root.style.setProperty('--bridge-cursor', `url("data:image/svg+xml,${encodeURIComponent(pin)}") 14 29, crosshair`);
     freeze.wheel = (x, y, dx, dy) => {
       const list = bar.querySelector('.bridge-agents-list');
@@ -1183,6 +1187,7 @@ function __bridgeInit(options) {
     pins: (list) => pins.show(list),
     status: setStatus,
     agents: (list) => freeze.agents(list),
+    pick: (session) => freeze.pick(session),
     cursor: (pin) => freeze.cursor(pin),
     reset: () => freeze.reset(),
     pinsAt: (x, y) => freeze.pinsAt(x, y),

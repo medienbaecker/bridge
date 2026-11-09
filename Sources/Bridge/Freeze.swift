@@ -55,7 +55,8 @@ final class Freeze: NSObject {
     var captures = 0
     var onFinish: (Freeze, Outcome) -> Void = { _, _ in }
 
-    let picked: String?
+    var picked: String?
+    var places: [String: String] = [:]
 
     init(screen: NSScreen, windows: [[String: Any]], recipients: [Model.Recipient], picked: String?, page: Page) {
         self.screen = screen
@@ -352,13 +353,41 @@ final class Freeze: NSObject {
         return (spot, w > 0 && h > 0 ? CGRect(x: spot.x, y: spot.y, width: w * size.width, height: h * size.height) : nil)
     }
 
-    func describe(_ anchor: JSONValue, picture: Picture?) async -> String {
+    func describe(_ anchor: JSONValue, picture: Picture?) async -> (target: String, found: [String: JSONValue]) {
         let (spot, box) = area(of: anchor)
         let found = await element(at: box.map { CGPoint(x: $0.midX, y: $0.midY) } ?? spot, picture: picture)
-        func string(_ key: String) -> String? { if case .string(let s)? = found[key] { s } else { nil } }
+        func string(_ key: String) -> String? { found[key]?.stringValue }
         let what = [string("role"), string("label").map { "\"\($0)\"" }].compactMap { $0 }.joined(separator: " ")
         let place = string("url") ?? string("window")
-        return [what.isEmpty ? nil : what, string("app"), place].compactMap { $0 }.joined(separator: " · ")
+        return ([what.isEmpty ? nil : what, string("app"), place].compactMap { $0 }.joined(separator: " · "), found)
+    }
+
+    // MARK: Guessing the agent
+
+    func landed(_ id: String, found: [String: JSONValue]) async {
+        let url = found["url"]?.stringValue
+        let key = Place.key(url: url, app: found["app"]?.stringValue ?? "")
+        places[id] = placed[id] == nil && !key.isEmpty ? key : nil
+        guard picked == nil, let session = guess(id, url: url, window: found["window"]?.stringValue) else { return }
+        picked = session
+        _ = try? await page.run("__bridge.pick(session)", ["session": session], in: Page.world)
+    }
+
+    func guess(_ id: String, url: String?, window: String?) -> String? {
+        if let location = placed[id]?.page {
+            let session = page.model.listing.entry(location)?.session
+            return recipients.contains { $0.session == session } ? session : nil
+        }
+        let remembered = (Model.remembered("places") as? [String: String])?[places[id] ?? ""]
+        guard let project = Place.project(url: url, window: window, among: recipients.map(\.project).filter { !$0.isEmpty }) ?? remembered else { return nil }
+        return recipients.last { $0.project == project }?.session
+    }
+
+    func remember(_ notes: [Comment], sentTo session: String) {
+        guard let project = recipients.first(where: { $0.session == session })?.project, !project.isEmpty else { return }
+        var remembered = Model.remembered("places") as? [String: String] ?? [:]
+        for note in notes { if let key = places[note.id] { remembered[key] = project } }
+        Model.remember(remembered, "places")
     }
 
     // MARK: Pins on Bridge's own pages

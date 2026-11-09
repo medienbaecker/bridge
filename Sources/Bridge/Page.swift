@@ -400,9 +400,11 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
             let taking = freeze.taking.removeValue(forKey: body["mark"] as? String ?? "")
             freeze.describing.append(Task {
                 let picture = await taking?.value
-                let id = addComment(anchor: anchor, target: await freeze.describe(anchor, picture: picture), text: body["text"] as? String ?? "")
+                let (target, found) = await freeze.describe(anchor, picture: picture)
+                let id = addComment(anchor: anchor, target: target, text: body["text"] as? String ?? "")
                 freeze.pictures[id] = picture
                 freeze.placed[id] = await freeze.place(anchor)
+                await freeze.landed(id, found: found)
                 replyHandler(["notes": notesJSON()], nil)
             })
         case "note":
@@ -415,9 +417,11 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
                 let taking = freeze.taking.removeValue(forKey: id)
                 freeze.describing.append(Task {
                     let picture = await taking?.value
-                    moveComment(id, anchor: anchor, target: await freeze.describe(anchor, picture: picture))
+                    let (target, found) = await freeze.describe(anchor, picture: picture)
+                    moveComment(id, anchor: anchor, target: target)
                     freeze.pictures[id] = picture
                     freeze.placed[id] = await freeze.place(anchor)
+                    await freeze.landed(id, found: found)
                     replyHandler(notesJSON(), nil)
                 })
                 return

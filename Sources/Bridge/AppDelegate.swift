@@ -329,7 +329,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                 guard let self, outcome != .cancel else { return }
                 let session: String? = if case .send(let s) = outcome, model.agents[s] != nil { s } else { nil }
                 let (draft, pages, outside) = model.land(freeze, keep: session == nil)
-                if let session { return model.tell(session, pages: pages, outside: outside) }
+                if let session {
+                    freeze.remember(outside.map(\.note), sentTo: session)
+                    return model.tell(session, pages: pages, outside: outside)
+                }
                 guard let location = draft ?? pages.first else { return }
                 model.scope = .project(draft == nil ? model.listing.entry(location)?.project ?? Paths.drafts.path : Paths.drafts.path)
                 model.selected = location
