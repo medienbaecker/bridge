@@ -74,6 +74,7 @@ glass "document.querySelector('.bridge-composer:popover-open textarea').value = 
 glass "const pin = [...document.querySelectorAll('.bridge-pin')].pop(); const r = pin.getBoundingClientRect(); const at = (dx) => ({ bubbles: true, clientX: r.left + 11 + dx, clientY: r.top + 11, button: 0, buttons: 1, pointerId: 1 }); pin.dispatchEvent(new PointerEvent('pointerdown', at(0))); pin.dispatchEvent(new PointerEvent('pointermove', at(40)))" >/dev/null; settle 0.5
 during=$(glass "const r = document.querySelector('.bridge-composer:popover-open').getBoundingClientRect(); return [r.left, r.top, r.width, r.height].map(Math.round)" | jq -c .)
 check "while a pin is dragged, macOS's glass stays under its note" "$(bridge --state | jq -c '.freeze.glass | map(round)')" "$during"
+check_json "and the element under the pin's tip is outlined, though its note is open" "$(bridge --state)" '.freeze.highlight != null' "true"
 glass "const pin = [...document.querySelectorAll('.bridge-pin')].pop(); const r = pin.getBoundingClientRect(); const at = { bubbles: true, clientX: r.left + 11, clientY: r.top + 11, button: 0, pointerId: 1 }; pin.dispatchEvent(new PointerEvent('pointermove', at)); pin.dispatchEvent(new PointerEvent('pointerup', at)); pin.click()" >/dev/null; settle 0.8
 before=$(pin_x); drag
 check "dragging a new pin moves it and keeps its note open with what you typed" "$(( $(pin_x) - before )) $(glass "const c = document.querySelector('.bridge-composer:popover-open'); return c ? c.querySelector('textarea').value : 'closed'" | jq -r .)" "60 Halb geschrieben"

@@ -837,7 +837,7 @@ function __bridgeInit(options) {
   let freeze = { agents() {}, cursor() {}, reset() {}, leave() {}, wheel() {}, pinsAt() { return false; } };
   if (options.freeze) {
     root.setAttribute('data-bridge-freeze', '');
-    const notes = { list: [], pins: new Map(), boxes: new Map(), drafts: {}, pending: null };
+    const notes = { list: [], pins: new Map(), boxes: new Map(), drafts: {}, pending: null, dragging: null };
     const furniture = (el) => !!el?.closest?.('.bridge-pin, .bridge-composer, .bridge-box, .bridge-agents');
 
     const place = (el, anchor) => {
@@ -907,9 +907,12 @@ function __bridgeInit(options) {
         const box = notes.boxes.get(id);
         if (box) place(box, anchor);
         from.anchor = anchor;
+        notes.dragging = anchor;
         notes.follow(id);
       });
       pin.addEventListener('pointerup', async () => {
+        notes.dragging = null;
+        post('hover');
         const moved = from?.moved && from.anchor;
         from = moved ? { dropped: true } : null;
         if (!moved) return;
@@ -1130,7 +1133,9 @@ function __bridgeInit(options) {
       if (frame) return;
       frame = requestAnimationFrame(() => {
         frame = 0;
-        if (pressed || document.querySelector('.bridge-composer:popover-open') || e.target.closest?.('.bridge-agents')) post('hover');
+        const dragged = notes.dragging;
+        if (dragged) post('hover', { x: dragged.x + (dragged.w || 0) / 2, y: dragged.y + (dragged.h || 0) / 2 });
+        else if (pressed || document.querySelector('.bridge-composer:popover-open') || e.target.closest?.('.bridge-agents')) post('hover');
         else post('hover', { x: e.clientX / innerWidth, y: e.clientY / innerHeight });
       });
     });
