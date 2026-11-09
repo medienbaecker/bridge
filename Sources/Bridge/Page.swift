@@ -402,6 +402,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
                 let picture = await taking?.value
                 let id = addComment(anchor: anchor, target: await freeze.describe(anchor, picture: picture), text: body["text"] as? String ?? "")
                 freeze.pictures[id] = picture
+                freeze.placed[id] = await freeze.place(anchor)
                 replyHandler(["notes": notesJSON()], nil)
             })
         case "note":
@@ -428,6 +429,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
             "readOnly": viewingVersion != nil || unreadable != nil || missing,
             "version": sidecar.version,
             "proposed": any(.object(sidecar.proposed)),
+            "pins": pinsJSON(),
         ]
     }
 
@@ -673,6 +675,21 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         guard let i = sidecar.comments.firstIndex(where: { $0.id == id }) else { return }
         sidecar.comments[i].state = done ? "done" : "open"
         save(); model.onChange()
+        showPins()
+    }
+
+    func pin(_ notes: [Comment]) {
+        sidecar.comments += notes
+        save()
+        showPins()
+    }
+
+    func pinsJSON() -> [Any] {
+        sidecar.openComments.filter { Freeze.onElement($0.anchor) }.map { any(.object(["id": .string($0.id), "text": .string($0.text), "anchor": $0.anchor])) }
+    }
+
+    func showPins() {
+        call("__bridge.pins(list)", ["list": pinsJSON()])
     }
 
     func notesJSON() -> [Any] {

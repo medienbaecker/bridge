@@ -18,8 +18,8 @@ bridge --shot <file> <out.png> [--width N] [--site <url>]   the page rendered of
          [--scale N]                    painted again at N pixels per CSS pixel (1 to 8, default 2): sharp detail
 bridge --reload <file>                 reload the page and its frames from scratch, e.g. after the site's CSS changed
 bridge --waiters                       agent processes waiting for an answer, with age and memory, JSON
-bridge --pins   <draft>                the open notes on a draft the user made by pointing at their screen: text, target, picture
-bridge --done / --reopen <draft> <id>  mark a note handled, so --pins leaves it out, or bring it back
+bridge --pins   <file>                 the open notes the user made by pointing at their screen, on a draft or pinned to a page: text, element, target, picture
+bridge --done / --reopen <file> <id>   mark a note handled, so --pins leaves it out and its pin leaves the page, or bring it back
 ```
 
 Files are resolved against the current directory. Present from inside the
@@ -66,7 +66,7 @@ broken in the user's window; fix it before they look.
   "defaults": { "size": "m" },                                        // the page's values the user left untouched; never in answers
   "withdrawn": [ "tone" ],                                            // answered at the last Send, taken back since; only when there is one
   "sent": "2026-09-20T13:31:32Z",
-  "comments": [                                                       // a draft's notes; see --pins
+  "comments": [                                                       // the notes on a draft, or pinned to this page; see --pins
     { "id": "3f9a1c2b", "text": "too heavy at phone width", "target": "button \"Theme\" · Helium · http://…", "state": "open | done", "version": 1 }
   ],
   "history": [ { "version": 1, "answers": { "layout": "list" } } ],   // earlier versions' answers; never current

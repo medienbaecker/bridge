@@ -21,7 +21,7 @@ bridge-dev --shot <out.png>             a picture of the app's window
 bridge-dev --shot <file> <out.png> [--width N] [--site <url>]   the page rendered off-screen as the window would show it, without presenting it
 bridge-dev --reload <file>              reload the page and its frames from scratch, e.g. after the site's CSS changed
 bridge-dev --waiters                    the agent processes waiting for an answer, with their age and memory, JSON
-bridge-dev --pins   <file>              the open notes on a draft made by freezing the screen
+bridge-dev --pins   <file>              the open notes made by pointing: on a draft, or pinned to a page
 bridge-dev --done / --reopen <file> <id>   mark a note handled, so --pins leaves it out, or bring it back
 bridge-dev --hook post-write             Claude Code PostToolUse hook: tell the agent when its write made a new version or the page threw
 """.replacingOccurrences(of: "bridge-dev", with: me)
@@ -262,6 +262,7 @@ case "--pins":
     print(json: JSONValue.array(s.openComments.map { c in
         var out: [String: JSONValue] = ["id": .string(c.id), "text": .string(c.text), "target": .string(c.target)]
         if let picture = c.picture { out["picture"] = .string(picture) }
+        if case .object(let anchor) = c.anchor, let selector = anchor["selector"] { out["element"] = selector }
         return .object(out)
     }))
 

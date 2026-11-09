@@ -273,6 +273,7 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
     /// Only in the lists that cross projects: in a project's own list it would be
     /// the same word on every row.
     func subtitle(for entry: BridgeEntry) -> String? {
+        if Paths.inDrafts(entry.location), !entry.session.isEmpty, !entry.crossed { return "Sent to \(entry.projectName)" }
         guard model.scope == .waiting || model.scope == .all else { return nil }
         var parts = [entry.projectName].filter { !$0.isEmpty }
         if let why = model.unheard(entry) { parts.append(why) }

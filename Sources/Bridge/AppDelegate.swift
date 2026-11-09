@@ -326,9 +326,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         let picked = fromBridge ? page.flatMap { model.listing.entry($0.location)?.session } : nil
         Task {
             await Freeze.start(recipients: model.agentsByStart(), picked: picked, page: freezePage) { [weak self] freeze, outcome in
-                guard let self, outcome != .cancel, let location = model.newBridge(capture: freeze) else { return }
-                if case .send(let session) = outcome, window.sendDraft(location, to: session) { return }
-                model.scope = .project(Paths.drafts.path)
+                guard let self, outcome != .cancel else { return }
+                let (draft, pages) = model.land(freeze)
+                if case .send(let session) = outcome {
+                    model.tell(session, about: pages)
+                    guard let draft, !window.sendDraft(draft, to: session) else { return }
+                }
+                guard let location = draft ?? pages.first else { return }
+                model.scope = .project(draft == nil ? model.listing.entry(location)?.project ?? Paths.drafts.path : Paths.drafts.path)
                 model.selected = location
                 model.changed()
                 if window.window?.isVisible != true { window.showWindow(nil) }

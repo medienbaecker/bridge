@@ -63,7 +63,7 @@ composer=$(on_screen "const r = document.querySelector('.bridge-composer:popover
 first=$(on_screen "return [...document.querySelectorAll('.bridge-pin')].map((p) => p.dataset.n).join()")
 check_json "while a note is open the cursor is the normal one everywhere, a text cursor in the box" "$(on_screen "const t = document.querySelector('.bridge-composer:popover-open'); return [getComputedStyle(t.querySelector('textarea')).cursor, getComputedStyle(t.querySelector('button')).cursor, getComputedStyle(document.body).cursor.startsWith('url(')]")" 'map(tostring) | join(",")' "auto,auto,false"
 bridge --do freeze-note "Lorem ipsum dolor sit amet" >/dev/null; settle 0.5
-check "over a Bridge window it is a screen note like any other, not a pin on the page" "$(bridge --state | jq -r '.freeze.notes | [length, .[0].text] | map(tostring) | join(",")') $(bridge --pins "$CASE_DIR/pages/cards.html" | jq length)" "1,Lorem ipsum dolor sit amet 0"
+check "while the glass is up, a note over a Bridge window is a screen note, not yet on the page" "$(bridge --state | jq -r '.freeze.notes | [length, .[0].text] | map(tostring) | join(",")') $(bridge --pins "$CASE_DIR/pages/cards.html" | jq length)" "1,Lorem ipsum dolor sit amet 0"
 pictured=$(bridge --state | jq -c '.freeze.pictures[0]')
 check_json "and the screen stays in point mode for the next one" "$(on_screen "return getComputedStyle(document.body).cursor.startsWith('url(')")" '.' "true"
 bridge --do freeze-mark "40 40 $corner" >/dev/null; settle 0.3
@@ -83,20 +83,20 @@ on=$(bridge --state | jq -r '.selected + " " + .projects.scope')
 bridge --do freeze-send 0 >/dev/null; settle 0.5
 draft=$(jq -r '[.bridges[] | select(.location | contains("/drafts/"))][0].location' "$XDG_STATE_HOME/bridge-dev/list.json")
 for i in $(seq 1 30); do read=$(cat "$(sidecar "$draft")" 2>/dev/null); [ "$(printf '%s' "$read" | jq -r .status)" = sent ] && break; settle 0.1; done
-check "clicking the agent sends it straight away" "$(inbox "$agent" | grep -c 'numbered notes; read them') $(printf '%s' "$read" | jq -r .status)" "1 sent"
+check "clicking the agent sends it straight away: the pin on the page to the page, the box to a draft" "$(inbox "$agent" | grep -c 'pinned notes on') $(inbox "$agent" | grep -c 'numbered note; read them') $(printf '%s' "$read" | jq -r .status)" "1 1 sent"
 check "and Bridge stays on the page you were on" "$(bridge --state | jq -r '.selected + " " + .projects.scope')" "$on"
 pixels() { sips -g pixelWidth -g pixelHeight "$1" 2>/dev/null | awk '/pixel/ { printf "%s ", $2 }'; }
-first=$(printf '%s' "$read" | jq -r '.comments[0].picture')
+first=$(bridge --pins "$CASE_DIR/pages/cards.html" | jq -r '.[0].picture')
 room=$(printf '%s' "$state" | jq -c --arg c "$centre" '.freeze.screenFrame as $s | ($c | split(" ") | map(tonumber)) as [$x, $y] | .windowFrame as $w | ([$w.x - $s[0], 0] | max) as $left | ([$s[1] + $s[3] - $w.y - $w.height, 0] | max) as $top | ([$w.x - $s[0] + $w.width, $s[2]] | min) as $right | ([$s[1] + $s[3] - $w.y, $s[3]] | min) as $bottom | ([$right - $left, 1000] | min) as $width | ([$bottom - $top, 600] | min) as $height | [([([$x - $width / 2, $left] | max), $right - $width] | min), ([([$y - $height / 2, $top] | max), $bottom - $height] | min), $width, $height] | map(round)')
 check "a pin's picture is the window under it, at most 1000 by 600, not the screen" "$(printf '%s' "$pictured" | jq -c 'map(round)') $(pixels "$first")" "$room $(printf '%s' "$state" | jq -r --argjson r "$room" '"\($r[2] * .backingScale | round) \($r[3] * .backingScale | round) "')"
 under=$(printf '%s' "$state" | jq -r --argjson c "$composer" --argjson p "$pictured" '.backingScale as $k | [($c[0] - $p[0] + 4), ($c[1] - $p[1] + 4), ($c[2] - $p[0] - 4), ($c[3] - $p[1] - 4)] | map(. * $k | round) | join(" ")')
 pin=$(printf '%s' "$state" | jq -r --arg c "$centre" --argjson p "$pictured" '.backingScale as $k | ($c | split(" ") | map(tonumber)) as [$x, $y] | [($x - $p[0] - 12), ($y - $p[1] - 30), ($x - $p[0] + 12), ($y - $p[1])] | map(. * $k | round) | join(" ")')
 check "Bridge's own glass is not in it: where the composer stood is the plain page, beside the drawn pin" "$(python3 "$ROOT/harness/measure.py" "$first" region $under | awk '{print $2}') $(python3 "$ROOT/harness/measure.py" "$first" region $pin | awk '{print ($2 > 3) ? "inked" : $2}')" "1 inked"
-box=$(printf '%s' "$read" | jq -r '.comments[1].picture')
+box=$(printf '%s' "$read" | jq -r '.comments[0].picture')
 want=$(printf '%s' "$state" | jq -r --arg c "$corner" '(($c | split(" ")[0] | tonumber) - 40 + 80) * .backingScale | round')
 check "a box's picture is the box with 40 points around it" "$(sips -g pixelWidth "$box" 2>/dev/null | awk -v w="$want" '/pixelWidth/ { d = $2 - w; print (d * d <= 4) ? "yes" : $2 }')" "yes"
-check "--pins gives each note its picture" "$(bridge --pins "$draft" | jq -c 'map(.picture | test("\\.[12]\\.png$"))') $(ls "$first" "$box" | wc -l | tr -d ' ')" "[true,true] 2"
-check_json "opened, the draft shows one picture per note, each with its text, and no pins of its own" "$(bridge --js "$draft" "@bridge return [[...document.querySelectorAll('#notes li')].map((li) => li.querySelector('img').naturalWidth > 0).join(), [...document.querySelectorAll('#notes li')].map((li) => li.textContent).join('|'), document.querySelectorAll('.bridge-pin').length]")" 'map(tostring) | join(",")' "true,true,Lorem ipsum dolor sit amet|Consectetur adipiscing elit,0"
+check "--pins gives each note its picture, numbered as on the glass" "$(bridge --pins "$CASE_DIR/pages/cards.html" | jq -c 'map(.picture | test("\\.1\\.png$"))') $(bridge --pins "$draft" | jq -c 'map(.picture | test("\\.2\\.png$"))') $(ls "$first" "$box" | wc -l | tr -d ' ')" "[true] [true] 2"
+check_json "opened, the draft shows one picture per note, each with its text, and no pins of its own" "$(bridge --js "$draft" "@bridge return [[...document.querySelectorAll('#notes li')].map((li) => li.querySelector('img').naturalWidth > 0).join(), [...document.querySelectorAll('#notes li')].map((li) => li.textContent).join('|'), document.querySelectorAll('.bridge-pin').length]")" 'map(tostring) | join(",")' "true,Consectetur adipiscing elit,0"
 
 before=$(listed)
 bar=$(printf '%s' "$state" | jq -r '.freeze.screenFrame as $s | "\(.windowFrame.x - $s[0] + .windowFrame.width - 140) \(($s[1] + $s[3]) - (.windowFrame.y + .windowFrame.height) + 26)"')

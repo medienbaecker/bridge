@@ -247,6 +247,7 @@ function __bridgeInit(options) {
     applyPrevious(payload.previous);
     frameRefused();
     applyDrives();
+    if (!options.freeze) pins.show(payload.pins || []);
   }
 
   function send() {
@@ -720,6 +721,117 @@ function __bridgeInit(options) {
     return { reload: false };
   }
 
+  // ---- pins the user left on the page
+
+  function cssPath(el) {
+    const parts = [];
+    let node = el;
+    while (node && node !== document.body && parts.length < 6) {
+      if (node.id) { parts.unshift('#' + CSS.escape(node.id)); break; }
+      let part = node.localName;
+      const classes = [...node.classList].filter((c) => !c.startsWith('bridge-')).slice(0, 3);
+      if (classes.length) part += '.' + classes.map(CSS.escape).join('.');
+      const same = [...node.parentElement.children].filter((c) => c.localName === node.localName);
+      if (same.length > 1) part += `:nth-of-type(${same.indexOf(node) + 1})`;
+      parts.unshift(part);
+      node = node.parentElement;
+    }
+    return parts.join(' > ');
+  }
+
+  function sameText(el, text) {
+    if (!text) return true;
+    const now = (el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ');
+    return now.startsWith(text.slice(0, 30));
+  }
+
+  const pins = { list: [], buttons: new Map() };
+
+  pins.anchor = function (x, y) {
+    const el = document.elementsFromPoint(x, y).find((e) => !ours(e));
+    if (!el || el === document.body || el === document.documentElement) return null;
+    const rect = el.getBoundingClientRect();
+    const fraction = (v) => (Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.5);
+    return {
+      selector: cssPath(el), tag: el.localName, classes: [...el.classList].filter((c) => !c.startsWith('bridge-')),
+      index: [...el.parentElement.children].filter((c) => c.localName === el.localName).indexOf(el),
+      text: (el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 80),
+      x: fraction((x - rect.left) / rect.width), y: fraction((y - rect.top) / rect.height),
+    };
+  };
+
+  pins.find = function (anchor) {
+    try {
+      const hit = document.querySelector(anchor.selector);
+      if (hit && hit.localName === anchor.tag && sameText(hit, anchor.text)) return hit;
+    } catch (e) { /* selector no longer parses */ }
+    const candidates = [...document.getElementsByTagName(anchor.tag)].filter((el) =>
+      !ours(el) && anchor.classes.every((c) => el.classList.contains(c)) && sameText(el, anchor.text));
+    return candidates.find((el) => [...el.parentElement.children].filter((c) => c.localName === el.localName).indexOf(el) === anchor.index) || candidates[0] || null;
+  };
+
+  pins.show = function (list) {
+    pins.list = list;
+    const ids = new Set(list.map((p) => p.id));
+    for (const [id, button] of pins.buttons) if (!ids.has(id)) { button.remove(); button.popoverTargetElement.remove(); pins.buttons.delete(id); }
+    list.forEach((pin, i) => {
+      let button = pins.buttons.get(pin.id);
+      if (!button) {
+        button = document.createElement('button');
+        button.className = 'bridge-pin';
+        button.setAttribute('popover', 'manual');
+        button.style.anchorName = `--bridge-pin-${pin.id}`;
+        const note = document.createElement('div');
+        note.className = 'bridge-note';
+        note.setAttribute('popover', 'auto');
+        note.style.positionAnchor = `--bridge-pin-${pin.id}`;
+        note.addEventListener('beforetoggle', (e) => { if (e.newState === 'open') pins.fill(button); });
+        note.addEventListener('toggle', (e) => button.toggleAttribute('data-open', e.newState === 'open'));
+        button.popoverTargetElement = note;
+        root.append(button, note);
+        pins.buttons.set(pin.id, button);
+      }
+      button.pin = pin;
+      button.dataset.n = i + 1;
+      button.title = pin.text;
+    });
+    pins.place();
+  };
+
+  pins.place = function () {
+    const anchored = new Map();
+    let lost = 0;
+    for (const el of document.querySelectorAll('[style*="--bridge-at-"]')) el.style.removeProperty('anchor-name');
+    for (const pin of pins.list) {
+      const button = pins.buttons.get(pin.id);
+      const el = pins.find(pin.anchor);
+      button.toggleAttribute('data-lost', !el);
+      if (el) {
+        anchored.set(el, [...(anchored.get(el) || []), `--bridge-at-${pin.id}`]);
+        button.style.positionAnchor = `--bridge-at-${pin.id}`;
+        button.style.left = `calc(anchor(left) + anchor-size(width) * ${pin.anchor.x})`;
+        button.style.top = `calc(anchor(top) + anchor-size(height) * ${pin.anchor.y})`;
+        button.style.right = '';
+      } else {
+        button.style.positionAnchor = 'none';
+        button.style.left = 'auto';
+        button.style.right = '16px';
+        button.style.top = `${52 + lost * 30}px`;
+        lost += 1;
+      }
+      if (!button.matches(':popover-open')) button.showPopover();
+      pins.fill(button);
+    }
+    for (const [el, names] of anchored) el.style.anchorName = names.join(', ');
+  };
+
+  pins.fill = function (button) {
+    const note = button.popoverTargetElement;
+    note.replaceChildren();
+    if (button.hasAttribute('data-lost')) note.append(Object.assign(document.createElement('div'), { className: 'bridge-lost', textContent: 'Pointing at nothing now' }));
+    note.append(button.pin.text);
+  };
+
   // ---- the freeze: pins and boxes over the screen, and the agents bar
 
   let freeze = { agents() {}, cursor() {}, reset() {}, leave() {}, wheel() {}, pinsAt() { return false; } };
@@ -1017,6 +1129,8 @@ function __bridgeInit(options) {
 
   globalThis.__bridge = {
     patch,
+    anchor: (x, y) => pins.anchor(x, y),
+    pins: (list) => pins.show(list),
     status: setStatus,
     agents: (list) => freeze.agents(list),
     cursor: (pin) => freeze.cursor(pin),

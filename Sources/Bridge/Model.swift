@@ -236,13 +236,18 @@ final class Model {
 
     func trash(_ location: String) {
         remove(location)
-        guard Paths.owned(location) else { return }
+        let pictures = Sidecar.peek(Paths.sidecar(for: location)).comments.compactMap(\.picture).filter(Paths.inDrafts).map { URL(fileURLWithPath: $0) }
+        guard Paths.owned(location) else { return discard(pictures) }
         let file = URL(fileURLWithPath: location)
         let stem = file.deletingPathExtension().lastPathComponent
-        var items = [file, Paths.sidecar(for: location)]
+        var items = [file, Paths.sidecar(for: location)] + pictures
         if Paths.inDrafts(location) {
             items += ((try? FileManager.default.contentsOfDirectory(at: Paths.drafts, includingPropertiesForKeys: nil)) ?? []).filter { $0.lastPathComponent.hasPrefix(stem + ".") && $0 != file }
         }
+        discard(items)
+    }
+
+    func discard(_ items: [URL]) {
         for item in items where FileManager.default.fileExists(atPath: item.path) {
             if Env.test { try? FileManager.default.removeItem(at: item) } else { try? FileManager.default.trashItem(at: item, resultingItemURL: nil) }
         }
@@ -269,14 +274,46 @@ final class Model {
 
     func isDraft(_ entry: BridgeEntry) -> Bool { Paths.inDrafts(entry.location) && entry.session.isEmpty }
 
-    @discardableResult func newBridge(capture: Freeze? = nil) -> String? {
+    @discardableResult func newBridge() -> String? {
         let folder = Paths.drafts
-        if capture == nil, let empty = listing.bridges.first(where: { isDraft($0) && !$0.crossed && (pages[$0.location]?.sidecar ?? Sidecar.peek(Paths.sidecar(for: $0.location))).blank }) {
+        if let empty = listing.bridges.first(where: { isDraft($0) && !$0.crossed && (pages[$0.location]?.sidecar ?? Sidecar.peek(Paths.sidecar(for: $0.location))).blank }) {
             scope = .project(folder.path)
             selected = empty.location
             changed()
             return empty.location
         }
+        guard let file = draft(newFile()) else { return nil }
+        scope = .project(folder.path)
+        selected = file
+        changed()
+        return file
+    }
+
+    func land(_ capture: Freeze) -> (draft: String?, pages: [String]) {
+        let file = newFile()
+        var outside: [Comment] = []
+        var widths: [String: CGFloat] = [:]
+        var pinned: [String: [Comment]] = [:]
+        var order: [String] = []
+        for (index, var note) in capture.notes.enumerated() {
+            let path = file.deletingPathExtension().appendingPathExtension("\(index + 1).png")
+            if let (data, width) = capture.picture(of: index), (try? data.write(to: path)) != nil {
+                note.picture = path.path
+                widths[note.id] = width
+            }
+            guard let (location, anchor) = capture.placed[note.id] else { outside.append(note); continue }
+            note.anchor = anchor
+            if pinned[location] == nil { order.append(location) }
+            pinned[location, default: []].append(note)
+        }
+        for location in order { page(for: location).pin(pinned[location]!) }
+        let draft = outside.isEmpty ? nil : draft(file, notes: outside, widths: widths)
+        if draft != nil { changed() }
+        return (draft, order)
+    }
+
+    func newFile() -> URL {
+        let folder = Paths.drafts
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let format = DateFormatter()
         format.dateFormat = "yyyy-MM-dd-HHmmss"
@@ -284,37 +321,34 @@ final class Model {
         var file = folder.appendingPathComponent("\(stamp).html")
         var number = 2
         while FileManager.default.fileExists(atPath: file.path) { file = folder.appendingPathComponent("\(stamp)-\(number).html"); number += 1 }
+        return file
+    }
+
+    func draft(_ file: URL, notes: [Comment] = [], widths: [String: CGFloat] = [:]) -> String? {
         let template = Bundle.module.url(forResource: "web", withExtension: nil)!.appendingPathComponent("draft.html")
         guard var html = try? String(contentsOf: template, encoding: .utf8) else { return nil }
-        var title = Self.untitled
-        if let capture, !capture.notes.isEmpty {
+        if !notes.isEmpty {
             func escape(_ text: String) -> String { text.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: "\"", with: "&quot;") }
-            var notes = capture.notes
-            var list = ""
-            for index in notes.indices {
-                let path = file.deletingPathExtension().appendingPathExtension("\(index + 1).png")
-                var image = ""
-                if let (data, width) = capture.picture(of: index), (try? data.write(to: path)) != nil {
-                    notes[index].picture = path.path
-                    image = "<img src=\"\(escape(path.path))\" width=\"\(Int(width))\" alt=\"\">"
-                }
-                list += "<li>\(image)<p>\(escape(notes[index].text))</p></li>"
-            }
+            let list = notes.map { note in
+                let image = note.picture.map { "<img src=\"\(escape($0))\" width=\"\(Int(widths[note.id] ?? 0))\" alt=\"\">" } ?? ""
+                return "<li>\(image)<p>\(escape(note.text))</p></li>"
+            }.joined()
             html = html.replacingOccurrences(of: "<!--capture-->", with: "<ol id=\"notes\">\(list)</ol>")
             try? Sidecar.modify(Paths.sidecar(for: file.path)) { $0.comments = notes }
-            title = notes[0].text
         }
         guard (try? html.write(to: file, atomically: true, encoding: .utf8)) != nil else { return nil }
-        var entry = BridgeEntry(location: file.path, project: folder.path, session: "")
-        entry.title = title
+        var entry = BridgeEntry(location: file.path, project: Paths.drafts.path, session: "")
+        entry.title = notes.first?.text ?? Self.untitled
         entry.unread = false
         listing.bridges.append(entry)
-        if capture == nil {
-            scope = .project(folder.path)
-            selected = file.path
-        }
-        changed()
         return file.path
+    }
+
+    func tell(_ session: String, about pinned: [String]) {
+        guard !pinned.isEmpty, let agent = agents[session] else { return }
+        let cli = Flavor.name
+        let pages = pinned.map { "`\($0)`" }.joined(separator: ", ")
+        ClaudeSessions.post("Bridge: The user pinned notes on \(pages). Read them with `\(cli) --pins <page>`: each note's `element` is the selector it sits on, `picture` shows it with the note's number. When you have handled one, `\(cli) --done <page> <id>` takes its pin off the page.", to: agent)
     }
 
     func lastPage(of session: String) -> BridgeEntry? {

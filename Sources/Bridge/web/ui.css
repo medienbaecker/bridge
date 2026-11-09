@@ -28,6 +28,29 @@ html[data-bridge-freeze] :is(.bridge-composer, .bridge-composer *, .bridge-pin, 
   font: 600 11px/22px -apple-system, system-ui, sans-serif;
   text-align: center;
 }
+.bridge-pin[data-lost] { opacity: 0.5; }
+.bridge-note {
+  position: fixed;
+  position-area: bottom span-right;
+  position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+  margin: 24px 0 8px 0;
+  inset: auto;
+  max-width: 320px;
+  box-sizing: border-box;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: Canvas;
+  color: CanvasText;
+  color-scheme: light dark;
+  font: 13px/1.45 -apple-system, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-wrap: anywhere;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18), 0 0 0 1px color-mix(in srgb, CanvasText 12%, transparent);
+  z-index: 2147483001;
+}
+.bridge-note:popover-open { display: block; }
+.bridge-lost { margin-bottom: 4px; font-size: 11px; color: color-mix(in srgb, CanvasText 55%, transparent); }
 .bridge-pin[data-open] { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35), 0 0 0 2px Canvas, 0 0 0 4px color-mix(in srgb, AccentColor 45%, transparent); }
 
 .bridge-composer {

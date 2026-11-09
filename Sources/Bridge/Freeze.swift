@@ -51,6 +51,7 @@ final class Freeze: NSObject {
     var veiled: [NSWindow] = []
     var taking: [String: Task<Picture?, Never>] = [:]
     var pictures: [String: Picture] = [:]
+    var placed: [String: (page: String, anchor: JSONValue)] = [:]
     var captures = 0
     var onFinish: (Freeze, Outcome) -> Void = { _, _ in }
 
@@ -358,6 +359,25 @@ final class Freeze: NSObject {
         let what = [string("role"), string("label").map { "\"\($0)\"" }].compactMap { $0 }.joined(separator: " ")
         let place = string("url") ?? string("window")
         return [what.isEmpty ? nil : what, string("app"), place].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    // MARK: Pins on Bridge's own pages
+
+    static func onElement(_ anchor: JSONValue) -> Bool {
+        if case .object(let o) = anchor { return o["tag"] != nil }
+        return false
+    }
+
+    func place(_ anchor: JSONValue) async -> (page: String, anchor: JSONValue)? {
+        let (spot, box) = area(of: anchor)
+        let at = global(box.map { CGPoint(x: $0.midX, y: $0.midY) } ?? spot)
+        guard let info = window(at: at), info[kCGWindowOwnerPID as String] as? Int32 == getpid(),
+              let (_, view, inWindow) = Self.view(at: at, in: info[kCGWindowNumber as String] as? Int ?? 0),
+              let web = sequence(first: view, next: \.superview).first(where: { $0 is WKWebView }),
+              let target = page.model.pages.values.first(where: { $0.webView === web && !$0.preview && !Paths.inDrafts($0.location) }) else { return nil }
+        let css = Self.css(inWindow, in: target.webView)
+        guard let found = try? await target.run("return __bridge.anchor(x, y)", ["x": css.x, "y": css.y], in: Page.world), Self.onElement(found) else { return nil }
+        return (target.location, found)
     }
 
     // MARK: Pictures
