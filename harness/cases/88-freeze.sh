@@ -81,9 +81,8 @@ on_screen "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', b
 check "started from another app, nothing is picked and Return does nothing" "$(bridge --state | jq -r '[.freeze != null, .freeze.picked] | map(tostring) | join(",")') $(on_screen "return document.querySelectorAll('[data-picked]').length")" "true,null 0"
 on=$(bridge --state | jq -r '.selected + " " + .projects.scope')
 bridge --do freeze-send 0 >/dev/null; settle 0.5
-draft=$(jq -r '[.bridges[] | select(.location | contains("/drafts/"))][0].location' "$XDG_STATE_HOME/bridge-dev/list.json")
-for i in $(seq 1 30); do read=$(cat "$(sidecar "$draft")" 2>/dev/null); [ "$(printf '%s' "$read" | jq -r .status)" = sent ] && break; settle 0.1; done
-check "clicking the agent sends it straight away: the pin on the page to the page, the box to a draft" "$(inbox "$agent" | grep -c 'pinned notes on') $(inbox "$agent" | grep -c 'numbered note; read them') $(printf '%s' "$read" | jq -r .status)" "1 1 sent"
+for i in $(seq 1 30); do [ "$(inbox "$agent" | grep -c 'sent you notes')" = 1 ] && break; settle 0.1; done
+check "clicking the agent sends it straight away: the pin on the page to the page, the box in the message, and no draft" "$(inbox "$agent" | grep -c 'pinned notes to elements') $(inbox "$agent" | grep -c '^2\. "Consectetur adipiscing elit" on ') $(jq '[.bridges[] | select(.location | contains("/drafts/"))] | length' "$XDG_STATE_HOME/bridge-dev/list.json")" "1 1 0"
 check "and Bridge stays on the page you were on" "$(bridge --state | jq -r '.selected + " " + .projects.scope')" "$on"
 pixels() { sips -g pixelWidth -g pixelHeight "$1" 2>/dev/null | awk '/pixel/ { printf "%s ", $2 }'; }
 first=$(bridge --pins "$CASE_DIR/pages/cards.html" | jq -r '.[0].picture')
@@ -92,11 +91,10 @@ check "a pin's picture is the window under it, at most 1000 by 600, not the scre
 under=$(printf '%s' "$state" | jq -r --argjson c "$composer" --argjson p "$pictured" '.backingScale as $k | [($c[0] - $p[0] + 4), ($c[1] - $p[1] + 4), ($c[2] - $p[0] - 4), ($c[3] - $p[1] - 4)] | map(. * $k | round) | join(" ")')
 pin=$(printf '%s' "$state" | jq -r --arg c "$centre" --argjson p "$pictured" '.backingScale as $k | ($c | split(" ") | map(tonumber)) as [$x, $y] | [($x - $p[0] - 12), ($y - $p[1] - 30), ($x - $p[0] + 12), ($y - $p[1])] | map(. * $k | round) | join(" ")')
 check "Bridge's own glass is not in it: where the composer stood is the plain page, beside the drawn pin" "$(python3 "$ROOT/harness/measure.py" "$first" region $under | awk '{print $2}') $(python3 "$ROOT/harness/measure.py" "$first" region $pin | awk '{print ($2 > 3) ? "inked" : $2}')" "1 inked"
-box=$(printf '%s' "$read" | jq -r '.comments[0].picture')
+box=$(inbox "$agent" | grep -o '/[^ ]*\.2\.png$')
 want=$(printf '%s' "$state" | jq -r --arg c "$corner" '(($c | split(" ")[0] | tonumber) - 40 + 80) * .backingScale | round')
 check "a box's picture is the box with 40 points around it" "$(sips -g pixelWidth "$box" 2>/dev/null | awk -v w="$want" '/pixelWidth/ { d = $2 - w; print (d * d <= 4) ? "yes" : $2 }')" "yes"
-check "--pins gives each note its picture, numbered as on the glass" "$(bridge --pins "$CASE_DIR/pages/cards.html" | jq -c 'map(.picture | test("\\.1\\.png$"))') $(bridge --pins "$draft" | jq -c 'map(.picture | test("\\.2\\.png$"))') $(ls "$first" "$box" | wc -l | tr -d ' ')" "[true] [true] 2"
-check_json "opened, the draft shows one picture per note, each with its text, and no pins of its own" "$(bridge --js "$draft" "@bridge return [[...document.querySelectorAll('#notes li')].map((li) => li.querySelector('img').naturalWidth > 0).join(), [...document.querySelectorAll('#notes li')].map((li) => li.textContent).join('|'), document.querySelectorAll('.bridge-pin').length]")" 'map(tostring) | join(",")' "true,Consectetur adipiscing elit,0"
+check "each note has its picture, numbered as on the glass" "$(bridge --pins "$CASE_DIR/pages/cards.html" | jq -c 'map(.picture | test("\\.1\\.png$"))') $(ls "$first" "$box" | wc -l | tr -d ' ')" "[true] 2"
 
 before=$(listed)
 bar=$(printf '%s' "$state" | jq -r '.freeze.screenFrame as $s | "\(.windowFrame.x - $s[0] + .windowFrame.width - 140) \(($s[1] + $s[3]) - (.windowFrame.y + .windowFrame.height) + 26)"')
@@ -130,12 +128,12 @@ bridge --do select "$CASE_DIR/pages/other.html" >/dev/null; settle 0.3
 bridge --do freeze front >/dev/null; settle 1
 check "started from Bridge, the agent of the selected page lights up in its own place" "$(bridge --state | jq -r '.freeze.picked') $(on_screen "return [...document.querySelectorAll('.bridge-agents button')].map((b) => (b.hasAttribute('data-picked') ? '*' : '') + (b.querySelector('b') || b).textContent).join(' | ')")" "$other \"Freeze review | *Lorem draft | Draft\""
 check_json "drawn in blue, unlike the others, each with its own colour dot" "$(on_screen "const picked = document.querySelector('.bridge-agents-list [data-picked]'); const other = document.querySelector('.bridge-agents-list button:not([data-picked])'); const dots = [...document.querySelectorAll('.bridge-agents-list i')].map((i) => getComputedStyle(i).backgroundColor); return getComputedStyle(picked).backgroundColor !== getComputedStyle(other).backgroundColor && dots.length === 2 && dots.every((d) => d !== 'rgba(0, 0, 0, 0)')")" '.' "true"
-sent=$(inbox "$agent" | grep -c 'numbered note')
+sent=$(inbox "$agent" | grep -c 'sent you notes')
 on_screen "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))" >/dev/null; settle 0.5
-check "with no notes, Return does nothing" "$(bridge --state | jq '.freeze != null') $(inbox "$agent" | grep -c 'numbered note')" "true $sent"
+check "with no notes, Return does nothing" "$(bridge --state | jq '.freeze != null') $(inbox "$agent" | grep -c 'sent you notes')" "true $sent"
 bridge --do freeze-mark "300 300" >/dev/null; settle 0.3; bridge --do freeze-note "Ut enim ad minim" >/dev/null; settle 0.5
 on_screen "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))" >/dev/null; settle 1
-check "Return sends it to the picked agent" "$(bridge --state | jq '.freeze == null') $(inbox "$other" 3 | grep -c 'numbered note') $(inbox "$agent" | grep -c 'numbered note')" "true 1 $sent"
+check "Return sends it to the picked agent" "$(bridge --state | jq '.freeze == null') $(inbox "$other" 3 | grep -c 'sent you notes') $(inbox "$agent" | grep -c 'sent you notes')" "true 1 $sent"
 
 end_session "$agent"
 end_session "$other"
@@ -146,6 +144,7 @@ bridge --do freeze-note "Sed do eiusmod" >/dev/null; settle 0.5
 check_json "with no agent running, the bar says so and offers only Draft, picked" "$(on_screen "return document.querySelector('.bridge-agents').innerText.replace(/\\n/g, ' ') + ' ' + [...document.querySelectorAll('.bridge-agents [data-picked]')].map((b) => b.innerText).join()")" '.' "No agent running Draft Draft"
 on_screen "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))" >/dev/null; wait_ready; settle 0.5
 check_json "and Return opens the draft" "$(bridge --state)" '.title' "Sed do eiusmod"
+check_json "the draft shows the note's picture with its text, and no pins of its own" "$(bridge --js "$(bridge --state | jq -r .selected)" "@bridge return [[...document.querySelectorAll('#notes li')].map((li) => li.querySelector('img').naturalWidth > 0).join(), [...document.querySelectorAll('#notes li')].map((li) => li.textContent).join('|'), document.querySelectorAll('.bridge-pin').length]")" 'map(tostring) | join(",")' "true,Sed do eiusmod,0"
 bridge --do point >/dev/null; settle 1
 check_json "the Point button starts the freeze" "$(bridge --state)" '.freeze != null' "true"
 bridge --do resize "800 500" >/dev/null; settle 0.5

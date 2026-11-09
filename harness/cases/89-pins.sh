@@ -24,12 +24,10 @@ note "$outside" "Lorem ipsum in Safari"
 bridge --do freeze-send 0 >/dev/null
 for i in $(seq 1 40); do [ "$(bridge --pins "$page" | jq length)" = 2 ] && break; settle 0.1; done
 settle 0.5
-check "the two pins on the page land on it, the one elsewhere becomes a draft" "$(bridge --pins "$page" | jq -c 'map(.text[0:10])') $(drafts)" '["Überschrif","Donaudampf"] 1'
+check "the two pins on the page land on it, and nothing becomes a draft" "$(bridge --pins "$page" | jq -c 'map(.text[0:10])') $(drafts)" '["Überschrif","Donaudampf"] 0'
 check_json "--pins names the element each one sits on, with its picture" "$(bridge --pins "$page")" 'map([.element, (.picture | test("\\.[12]\\.png$"))] | map(tostring) | join(" ")) | join(",")' "h2 true,#send true"
-check "the agent is told about the page and the draft" "$(inbox "$agent" | grep -c 'pinned notes on `'"$page"'`') $(inbox "$agent" | grep -c 'numbered note')" "1 1"
+check "one message tells the agent about the page and carries the note from elsewhere" "$(inbox "$agent" | grep -c 'sent you notes') $(inbox "$agent" | grep -c 'On `'"$page"'` they pinned notes to elements') $(inbox "$agent" | grep -c '^3\. "Lorem ipsum in Safari" on .*\.3\.png$')" "1 1 1"
 check "the page shows each pin on its element" "$(on 1 h2) $(on 2 '#send')" "true true"
-row=$(bridge --state | jq -r '[.sidebar[].bridges[] | select(.location | contains("/drafts/"))][0].subtitle')
-check "the draft waits as a message to the agent's project" "$row" "Sent to pages"
 
 press 2
 check_json "clicking a pin shows its note beside it" "$(js "@bridge const n = document.querySelector('.bridge-note:popover-open'); return n ? n.textContent : 'closed'")" '.[0:9]' "Donaudamp"

@@ -289,9 +289,9 @@ final class Model {
         return file
     }
 
-    func land(_ capture: Freeze) -> (draft: String?, pages: [String]) {
+    func land(_ capture: Freeze, keep: Bool) -> (draft: String?, pages: [String], outside: [(n: Int, note: Comment)]) {
         let file = newFile()
-        var outside: [Comment] = []
+        var outside: [(n: Int, note: Comment)] = []
         var widths: [String: CGFloat] = [:]
         var pinned: [String: [Comment]] = [:]
         var order: [String] = []
@@ -301,15 +301,16 @@ final class Model {
                 note.picture = path.path
                 widths[note.id] = width
             }
-            guard let (location, anchor) = capture.placed[note.id] else { outside.append(note); continue }
+            guard let (location, anchor) = capture.placed[note.id] else { outside.append((index + 1, note)); continue }
             note.anchor = anchor
             if pinned[location] == nil { order.append(location) }
             pinned[location, default: []].append(note)
         }
         for location in order { page(for: location).pin(pinned[location]!) }
-        let draft = outside.isEmpty ? nil : draft(file, notes: outside, widths: widths)
-        if draft != nil { changed() }
-        return (draft, order)
+        guard keep, !outside.isEmpty else { return (nil, order, outside) }
+        let draft = draft(file, notes: outside.map(\.note), widths: widths)
+        changed()
+        return (draft, order, outside)
     }
 
     func newFile() -> URL {
@@ -344,11 +345,19 @@ final class Model {
         return file.path
     }
 
-    func tell(_ session: String, about pinned: [String]) {
-        guard !pinned.isEmpty, let agent = agents[session] else { return }
+    func tell(_ session: String, pages: [String], outside: [(n: Int, note: Comment)]) {
+        guard let agent = agents[session] else { return }
         let cli = Flavor.name
-        let pages = pinned.map { "`\($0)`" }.joined(separator: ", ")
-        ClaudeSessions.post("Bridge: The user pinned notes on \(pages). Read them with `\(cli) --pins <page>`: each note's `element` is the selector it sits on, `picture` shows it with the note's number. When you have handled one, `\(cli) --done <page> <id>` takes its pin off the page.", to: agent)
+        var text = "Bridge: The user pointed at their screen and sent you notes."
+        if !pages.isEmpty {
+            text += " On " + pages.map { "`\($0)`" }.joined(separator: ", ") + " they pinned notes to elements: read them with `\(cli) --pins <page>` (`element` is the selector a pin sits on, `picture` shows it with the note's number), and when you have handled one, `\(cli) --done <page> <id>` takes its pin off the page."
+        }
+        if !outside.isEmpty {
+            text += (pages.isEmpty ? "" : " Elsewhere on their screen:") + outside.map { n, note in
+                "\n\(n). \"\(note.text)\" on \(note.target)" + (note.picture.map { ". Picture, with the number drawn on it: \($0)" } ?? "")
+            }.joined()
+        }
+        ClaudeSessions.post(text, to: agent)
     }
 
     func lastPage(of session: String) -> BridgeEntry? {

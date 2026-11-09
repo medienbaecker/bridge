@@ -254,20 +254,21 @@ then `bridge --cross <file>`.
 To point at something, on your page or anywhere else on their screen, the
 user clicks a spot or drags a box over their screen and types a note on
 each. A note on a Bridge page pins to the element under it, and stays on
-that element when you rewrite the page; notes anywhere else come to you as
-a draft. You are told which pages and which draft. Read the notes with:
+that element when you rewrite the page. Notes anywhere else arrive in the
+message itself: each one's number, text, what was under it on screen, and
+a picture. For pinned notes:
 
 ```sh
-bridge --pins <page or draft>          # each note's text, element, target and picture
-bridge --done <page or draft> <id>     # handled: --pins leaves it out and its pin leaves the page (--reopen brings it back)
+bridge --pins <page>          # each pinned note's text, element, target and picture
+bridge --done <page> <id>     # handled: its pin leaves the page and --pins leaves it out (--reopen brings it back)
 ```
 
-`element` is the selector a pin sits on. `target` names what was under the
+`element` is the selector a pin sits on. `target` names what was under a
 note on screen (`button "Theme" · Helium · http://…`). `picture` is an image
 of the window under the note (or the 1000×600 points around it in a large
 window; for a box, the box with a little around it), with the note's number
 drawn on it. Read it. Answer in the terminal or with a page of your own, and
-mark each note done once it is handled.
+mark each pinned note done once it is handled.
 
 ## Revising a page
 

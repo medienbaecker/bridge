@@ -18,7 +18,7 @@ bridge --shot <file> <out.png> [--width N] [--site <url>]   the page rendered of
          [--scale N]                    painted again at N pixels per CSS pixel (1 to 8, default 2): sharp detail
 bridge --reload <file>                 reload the page and its frames from scratch, e.g. after the site's CSS changed
 bridge --waiters                       agent processes waiting for an answer, with age and memory, JSON
-bridge --pins   <file>                 the open notes the user made by pointing at their screen, on a draft or pinned to a page: text, element, target, picture
+bridge --pins   <file>                 the open notes the user made by pointing at their screen, pinned to a page (or on a draft they kept): text, element, target, picture
 bridge --done / --reopen <file> <id>   mark a note handled, so --pins leaves it out and its pin leaves the page, or bring it back
 ```
 
