@@ -87,6 +87,7 @@ html[data-bridge-freeze] :is(.bridge-composer, .bridge-composer *, .bridge-pin, 
   min-height: 58px;
   outline: none;
 }
+.bridge-composer textarea::placeholder { color: color-mix(in srgb, CanvasText 70%, transparent); opacity: 1; }
 .bridge-composer .bridge-bar {
   display: flex;
   gap: 6px;
