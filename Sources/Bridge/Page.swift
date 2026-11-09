@@ -392,7 +392,11 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
             }
             replyHandler(nil, nil)
         case "mark":
-            if freezing, let freeze = Freeze.current, let id = body["id"] as? String { freeze.take(id, anchor: JSONValue(any: body["anchor"] ?? NSNull())) }
+            if freezing, let freeze = Freeze.current, let id = body["id"] as? String {
+                let anchor = JSONValue(any: body["anchor"] ?? NSNull())
+                freeze.take(id, anchor: anchor)
+                Task { await freeze.clicked(anchor) }
+            }
             replyHandler(nil, nil)
         case "pin":
             guard freezing, let freeze = Freeze.current else { replyHandler(nil, "not freezing"); return }
@@ -404,7 +408,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
                 let id = addComment(anchor: anchor, target: target, text: body["text"] as? String ?? "")
                 freeze.pictures[id] = picture
                 freeze.placed[id] = await freeze.place(anchor)
-                await freeze.landed(id, found: found)
+                freeze.landed(id, found: found)
                 replyHandler(["notes": notesJSON()], nil)
             })
         case "note":
@@ -421,7 +425,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
                     moveComment(id, anchor: anchor, target: target)
                     freeze.pictures[id] = picture
                     freeze.placed[id] = await freeze.place(anchor)
-                    await freeze.landed(id, found: found)
+                    freeze.landed(id, found: found)
                     replyHandler(notesJSON(), nil)
                 })
                 return

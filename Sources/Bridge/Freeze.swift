@@ -57,6 +57,7 @@ final class Freeze: NSObject {
 
     var picked: String?
     var places: [String: String] = [:]
+    var settled = false
 
     init(screen: NSScreen, windows: [[String: Any]], recipients: [Model.Recipient], picked: String?, page: Page) {
         self.screen = screen
@@ -121,6 +122,7 @@ final class Freeze: NSObject {
         let list = freeze.recipients.map { ["session": $0.session, "name": $0.name.isEmpty ? $0.page : $0.name, "project": $0.project.isEmpty ? "No project" : $0.project, "busy": $0.busy, "picked": $0.session == freeze.picked, "colour": Self.css(Model.colour(of: $0.session))] as [String: Any] }
         _ = try? await page.run("__bridge.agents(list); __bridge.cursor(pin)", ["list": list, "pin": pin], in: Page.world)
         await freeze.setCursor()
+        await freeze.opened(from: previous)
     }
 
     static func onScreen() -> [[String: Any]] {
@@ -364,23 +366,41 @@ final class Freeze: NSObject {
 
     // MARK: Guessing the agent
 
-    func landed(_ id: String, found: [String: JSONValue]) async {
-        let url = found["url"]?.stringValue
-        let key = Place.key(url: url, app: found["app"]?.stringValue ?? "")
-        places[id] = placed[id] == nil && !key.isEmpty ? key : nil
-        guard picked == nil, let session = guess(id, url: url, window: found["window"]?.stringValue) else { return }
+    func opened(from app: NSRunningApplication?) async {
+        guard let pid = app?.processIdentifier,
+              let info = windows.first(where: { $0[kCGWindowOwnerPID as String] as? Int32 == pid && $0[kCGWindowLayer as String] as? Int ?? 0 == 0 }) else { return }
+        let frame = local(Self.frame(of: info))
+        await suggest(await element(at: CGPoint(x: frame.midX, y: frame.midY), picture: nil), page: nil)
+    }
+
+    func clicked(_ anchor: JSONValue) async {
+        guard !settled else { return }
+        settled = true
+        let (spot, box) = area(of: anchor)
+        let found = await element(at: box.map { CGPoint(x: $0.midX, y: $0.midY) } ?? spot, picture: nil)
+        await suggest(found, page: await place(anchor)?.page)
+    }
+
+    func suggest(_ found: [String: JSONValue], page location: String?) async {
+        guard let session = guess(found, page: location), session != picked else { return }
         picked = session
         _ = try? await page.run("__bridge.pick(session)", ["session": session], in: Page.world)
     }
 
-    func guess(_ id: String, url: String?, window: String?) -> String? {
-        if let location = placed[id]?.page {
+    func guess(_ found: [String: JSONValue], page location: String?) -> String? {
+        if let location {
             let session = page.model.listing.entry(location)?.session
             return recipients.contains { $0.session == session } ? session : nil
         }
-        let remembered = (Model.remembered("places") as? [String: String])?[places[id] ?? ""]
-        guard let project = Place.project(url: url, window: window, among: recipients.map(\.project).filter { !$0.isEmpty }) ?? remembered else { return nil }
+        let url = found["url"]?.stringValue
+        let remembered = (Model.remembered("places") as? [String: String])?[Place.key(url: url, app: found["app"]?.stringValue ?? "")]
+        guard let project = Place.project(url: url, window: found["window"]?.stringValue, among: recipients.map(\.project).filter { !$0.isEmpty }) ?? remembered else { return nil }
         return recipients.last { $0.project == project }?.session
+    }
+
+    func landed(_ id: String, found: [String: JSONValue]) {
+        let key = Place.key(url: found["url"]?.stringValue, app: found["app"]?.stringValue ?? "")
+        places[id] = placed[id] == nil && !key.isEmpty ? key : nil
     }
 
     func remember(_ notes: [Comment], sentTo session: String) {

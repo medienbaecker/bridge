@@ -40,8 +40,9 @@ printf '<!doctype html><title>Plan for beta</title><p>Lorem ipsum</p>' > "$CASE_
 (cd "$CASE_DIR/beta" && BRIDGE_SESSION="$beta" bridge plan.html); wait_ready; settle 0.3
 bridge --do select "$CASE_DIR/beta/plan.html" >/dev/null; wait_ready; settle 0.3
 bridge --do freeze >/dev/null; settle 1
-note "$(toolbar)" "Lorem"
-check "a window whose title names a project picks its agent, before what was sent last" "$(picked) $(chips)" "$beta alpha | *beta"
+bridge --do freeze-mark "$(toolbar)" >/dev/null; settle 0.5
+check "a window whose title names a project picks its agent as soon as you click, before what was sent last" "$(picked) $(chips)" "$beta alpha | *beta"
+bridge --do freeze-note "Lorem" >/dev/null; settle 0.5
 bridge --do freeze-cancel >/dev/null; settle 0.3
 
 finish
