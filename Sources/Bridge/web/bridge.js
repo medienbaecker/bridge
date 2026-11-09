@@ -862,12 +862,67 @@ function __bridgeInit(options) {
       pin.setAttribute('popover', 'manual');
       pin.dataset.id = id;
       pin.style.anchorName = `--bridge-pin-${id}`;
-      pin.addEventListener('click', () => notes.toggle(id));
+      pin.anchor = anchor;
+      const composer = document.createElement('div');
+      composer.className = 'bridge-composer';
+      composer.setAttribute('popover', 'auto');
+      composer.dataset.id = id;
+      composer.style.positionAnchor = `--bridge-pin-${id}`;
+      composer.addEventListener('beforetoggle', (e) => { if (e.newState === 'open') notes.render(id); });
+      composer.addEventListener('toggle', (e) => {
+        pin.toggleAttribute('data-open', e.newState === 'open');
+        if (e.newState === 'open') {
+          notes.fit(composer);
+          const box = composer.querySelector('textarea');
+          box.focus();
+          box.setSelectionRange(box.value.length, box.value.length);
+          return;
+        }
+        post('glass');
+        if (!composer.isConnected) return;
+        notes.drafts[id] = composer.querySelector('textarea').value;
+        if (id === notes.pending?.id && !notes.drafts[id]) notes.cancelPending();
+      });
+      pin.popoverTargetElement = composer;
+      notes.draggable(pin, id);
       place(pin, anchor);
-      root.appendChild(pin);
+      root.append(pin, composer);
       pin.showPopover();
       notes.pins.set(id, pin);
       return pin;
+    };
+
+    notes.draggable = function (pin, id) {
+      let from = null;
+      pin.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        from = { x: e.clientX, y: e.clientY, moved: false };
+        pin.setPointerCapture(e.pointerId);
+      });
+      pin.addEventListener('pointermove', (e) => {
+        if (!from || (!from.moved && Math.hypot(e.clientX - from.x, e.clientY - from.y) < 4)) return;
+        from.moved = true;
+        const anchor = { ...pin.anchor, x: pin.anchor.x + (e.clientX - from.x) / innerWidth, y: pin.anchor.y + (e.clientY - from.y) / innerHeight };
+        place(pin, anchor);
+        const box = notes.boxes.get(id);
+        if (box) place(box, anchor);
+        from.anchor = anchor;
+      });
+      pin.addEventListener('pointerup', async () => {
+        const moved = from?.moved && from.anchor;
+        from = moved ? { dropped: true } : null;
+        if (!moved) return;
+        pin.anchor = moved;
+        const composer = notes.composer(id);
+        if (composer.matches(':popover-open')) notes.fit(composer);
+        if (notes.pending?.id === id) { notes.pending.anchor = moved; post('mark', { id, anchor: moved }); return; }
+        notes.set(await post('note', { id, action: 'move', anchor: moved }));
+      });
+      pin.addEventListener('click', (e) => {
+        if (!from?.dropped) return;
+        from = null;
+        e.preventDefault();
+      });
     };
 
     notes.drop = function (id) {
@@ -892,44 +947,27 @@ function __bridgeInit(options) {
 
     notes.composer = (id) => document.querySelector(`.bridge-composer[data-id="${CSS.escape(id)}"]`);
 
-    notes.toggle = function (id) {
-      const existing = notes.composer(id);
-      if (existing && existing.matches(':popover-open')) { existing.hidePopover(); return; }
-      notes.open(id);
+    notes.open = function (id) {
+      const composer = notes.composer(id);
+      if (!composer.matches(':popover-open')) composer.showPopover();
     };
 
-    notes.open = function (id) {
-      let composer = notes.composer(id);
-      if (!composer) {
-        composer = document.createElement('div');
-        composer.className = 'bridge-composer';
-        composer.setAttribute('popover', 'auto');
-        composer.dataset.id = id;
-        composer.style.positionAnchor = `--bridge-pin-${id}`;
-        composer.addEventListener('toggle', (e) => {
-          notes.pins.get(id)?.toggleAttribute('data-open', e.newState === 'open');
-          if (e.newState !== 'open') post('glass');
-          if (e.newState === 'open' || !composer.isConnected) return;
-          notes.drafts[id] = composer.querySelector('textarea').value;
-          if (id === notes.pending?.id && !notes.drafts[id]) notes.cancelPending();
-        });
-        root.appendChild(composer);
-      }
+    notes.render = function (id) {
+      const composer = notes.composer(id);
       const note = notes.list.find((x) => x.id === id);
       composer.innerHTML = '<textarea placeholder="What about this?" rows="2"></textarea><div class="bridge-bar">'
         + (note ? '<span><button data-act="delete">Delete</button> <button data-act="cancel">Cancel</button></span>' : '<button data-act="cancel">Cancel</button>')
-        + '<button data-act="save" class="bridge-primary">Save <kbd>⌘⏎</kbd></button></div>';
+        + '<button data-act="save" class="bridge-primary">Save <kbd>⏎</kbd></button></div>';
       const box = composer.querySelector('textarea');
       box.value = id in notes.drafts ? notes.drafts[id] : note?.text || '';
-      box.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && e.metaKey) { e.preventDefault(); notes.act(id, 'save'); }
+      box.addEventListener('keydown', async (e) => {
         if (e.key === 'Escape') { e.preventDefault(); composer.hidePopover(); }
+        if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
+        e.preventDefault();
+        if (!(await notes.act(id, 'save')) || !e.metaKey) return;
+        bar.querySelector('button[data-picked]')?.click();
       });
       composer.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => notes.act(id, b.dataset.act)));
-      composer.showPopover();
-      notes.fit(composer);
-      box.focus();
-      box.setSelectionRange(box.value.length, box.value.length);
     };
 
     notes.fit = function (composer) {
@@ -945,16 +983,16 @@ function __bridgeInit(options) {
     notes.act = async function (id, action) {
       const composer = notes.composer(id);
       const text = composer.querySelector('textarea').value.trim();
-      if (action === 'cancel') { delete notes.drafts[id]; composer.hidePopover(); notes.cancelPending(); return; }
-      if (action === 'save' && !text) return;
+      if (action === 'cancel') { delete notes.drafts[id]; composer.hidePopover(); notes.cancelPending(); return false; }
+      if (action === 'save' && !text) return false;
       const pending = notes.pending?.id === id ? notes.pending : null;
       const list = pending ? (await post('pin', { anchor: pending.anchor, mark: id, text })).notes
         : await post('note', { id, action: action === 'save' ? 'edit' : 'delete', text });
       delete notes.drafts[id];
       composer.hidePopover();
-      composer.remove();
       if (pending) { notes.drop(id); notes.pending = null; }
       notes.set(list);
+      return true;
     };
 
     notes.cancelPending = function () {

@@ -369,7 +369,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         item("Open in New Window", "window", "o", [.command, .option])
         bridge.addItem(.separator())
         item("Point", "point", "p", [.command, .shift])
-        item("Send", "send", "\r", [.command, .shift])
+        item("Send", "send", "\r")
         bridge.addItem(.separator())
         item("Hide Crossed", "crossed", "c", [.command, .option])
         item("Cross", "cross", "e")

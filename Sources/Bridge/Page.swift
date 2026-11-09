@@ -407,7 +407,23 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
             })
         case "note":
             let id = body["id"] as? String ?? ""
-            if body["action"] as? String == "edit" { editComment(id, text: body["text"] as? String ?? "") } else { deleteComment(id) }
+            switch body["action"] as? String {
+            case "move":
+                guard freezing, let freeze = Freeze.current else { replyHandler(nil, "not freezing"); return }
+                let anchor = JSONValue(any: body["anchor"] ?? NSNull())
+                freeze.take(id, anchor: anchor)
+                let taking = freeze.taking.removeValue(forKey: id)
+                freeze.describing.append(Task {
+                    let picture = await taking?.value
+                    moveComment(id, anchor: anchor, target: await freeze.describe(anchor, picture: picture))
+                    freeze.pictures[id] = picture
+                    freeze.placed[id] = await freeze.place(anchor)
+                    replyHandler(notesJSON(), nil)
+                })
+                return
+            case "edit": editComment(id, text: body["text"] as? String ?? "")
+            default: deleteComment(id)
+            }
             replyHandler(notesJSON(), nil)
         case "error":
             if let text = body["text"] as? String, !errors.contains(text), errors.count < 10 { errors.append(text) }
@@ -663,6 +679,13 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
     func editComment(_ id: String, text: String) {
         guard let i = sidecar.comments.firstIndex(where: { $0.id == id }) else { return }
         sidecar.comments[i].text = text
+        save(); model.onChange()
+    }
+
+    func moveComment(_ id: String, anchor: JSONValue, target: String) {
+        guard let i = sidecar.comments.firstIndex(where: { $0.id == id }) else { return }
+        sidecar.comments[i].anchor = anchor
+        sidecar.comments[i].target = target
         save(); model.onChange()
     }
 

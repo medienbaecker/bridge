@@ -409,7 +409,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         case "remove":
             item.title = page.map { targets($0).allSatisfy(Paths.owned) } ?? false ? "Move to Trash" : "Remove from List"
             return entry != nil
-        case "send": return toolbarItems.first { $0.itemIdentifier.rawValue == command }.map(validateToolbarItem) ?? false
+        case "send": return Freeze.current == nil && toolbarItems.first { $0.itemIdentifier.rawValue == command }.map(validateToolbarItem) ?? false
         case "reveal": return page.map { $0.kind != .url } ?? false
         case "zoom-in", "zoom-out", "zoom-reset": return shownPage != nil
         case "window": return page != nil
@@ -453,7 +453,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
             freeze.page.call("""
                 const box = document.querySelector('.bridge-composer:popover-open textarea');
                 box.value = text;
-                box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true }));
+                box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
                 """, ["text": argument ?? ""])
             return true
         case "freeze-send":

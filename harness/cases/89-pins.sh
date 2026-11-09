@@ -61,4 +61,28 @@ check_json "and shows the page" "$(bridge --state)" '.selected' "$page"
 kept=$(bridge --pins "$page" | jq -r '.[0].picture')
 bridge --do remove >/dev/null; settle 0.5
 check "removing the page takes its pins' pictures along" "$(ls "$kept" 2>/dev/null | wc -l | tr -d ' ')" "0"
+printf '<!doctype html><title>Lorem</title><style>body{margin:0;font:16px/1.5 system-ui} h2{margin:16px}</style><h2>Lorem ipsum</h2>' > "$CASE_DIR/pages/drag.html"
+(cd "$CASE_DIR/pages" && BRIDGE_SESSION="$agent" bridge drag.html); wait_ready; settle 0.3
+screen="$XDG_STATE_HOME/bridge-dev/freeze/screen.html"
+glass() { bridge --js "$screen" "@bridge $1"; }
+drag() { glass "const pin = [...document.querySelectorAll('.bridge-pin')].pop(); const r = pin.getBoundingClientRect(); const x = r.left + r.width / 2, y = r.top + r.height / 2; const at = (dx) => ({ bubbles: true, clientX: x + dx, clientY: y, button: 0, buttons: 1, pointerId: 1 }); pin.dispatchEvent(new PointerEvent('pointerdown', at(0))); for (const dx of [10, 30, 60]) pin.dispatchEvent(new PointerEvent('pointermove', at(dx))); pin.dispatchEvent(new PointerEvent('pointerup', at(60))); pin.click()" >/dev/null; settle 0.8; }
+pin_x() { glass "return Math.round([...document.querySelectorAll('.bridge-pin')].pop().getBoundingClientRect().left)" | jq -r .; }
+bridge --do select "$CASE_DIR/pages/drag.html" >/dev/null; wait_ready; settle 0.3
+bridge --do freeze front >/dev/null; settle 1
+bridge --do freeze-mark "$(freeze_at "$(bridge --js "$CASE_DIR/pages/drag.html" "const r = document.querySelector('h2').getBoundingClientRect(); return (r.left + 20) + ' ' + (r.top + r.height / 2)" | jq -r .)")" >/dev/null; settle 0.3
+glass "document.querySelector('.bridge-composer:popover-open textarea').value = 'Halb geschrieben'" >/dev/null
+before=$(pin_x); drag
+check "dragging a new pin moves it and keeps its note open with what you typed" "$(( $(pin_x) - before )) $(glass "const c = document.querySelector('.bridge-composer:popover-open'); return c ? c.querySelector('textarea').value : 'closed'" | jq -r .)" "60 Halb geschrieben"
+glass "document.querySelector('.bridge-composer:popover-open textarea').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true }))" >/dev/null; settle 0.3
+check_json "⇧↩ does not save" "$(bridge --state)" '.freeze.notes | length' "0"
+glass "document.querySelector('.bridge-composer:popover-open textarea').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))" >/dev/null; settle 0.8
+moved=$(bridge --state | jq -r '.freeze.notes[0].anchor.x')
+check "↩ saves it where it was dropped" "$(bridge --state | jq -r '[(.freeze.notes | length), .freeze.notes[0].text] | join(" ")') $(glass "return document.querySelectorAll('.bridge-composer:popover-open').length" | jq -r .)" "1 Halb geschrieben 0"
+before=$(pin_x); drag
+check "dragging a saved pin moves it and its record, and does not open its note" "$(( $(pin_x) - before )) $(bridge --state | jq -r --argjson m "$moved" '.freeze.notes[0].anchor.x > $m') $(glass "return document.querySelectorAll('.bridge-composer:popover-open').length" | jq -r .)" "60 true 0"
+glass "document.querySelector('.bridge-pin').click()" >/dev/null; settle 0.5
+glass "document.querySelector('.bridge-composer:popover-open textarea').value = 'Halb geschrieben, jetzt fertig'; document.querySelector('.bridge-composer:popover-open textarea').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true }))" >/dev/null
+for i in $(seq 1 40); do [ "$(bridge --state | jq '.freeze == null')" = true ] && break; settle 0.1; done
+settle 0.5
+check "⌘↩ saves and sends to the picked agent at once" "$(bridge --state | jq '.freeze == null') $(bridge --pins "$CASE_DIR/pages/drag.html" | jq -r '.[0].text')" "true Halb geschrieben, jetzt fertig"
 finish
