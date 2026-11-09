@@ -71,8 +71,14 @@ bridge --do select "$CASE_DIR/pages/drag.html" >/dev/null; wait_ready; settle 0.
 bridge --do freeze front >/dev/null; settle 1
 bridge --do freeze-mark "$(freeze_at "$(bridge --js "$CASE_DIR/pages/drag.html" "const r = document.querySelector('h2').getBoundingClientRect(); return (r.left + 20) + ' ' + (r.top + r.height / 2)" | jq -r .)")" >/dev/null; settle 0.3
 glass "document.querySelector('.bridge-composer:popover-open textarea').value = 'Halb geschrieben'" >/dev/null
+glass "const pin = [...document.querySelectorAll('.bridge-pin')].pop(); const r = pin.getBoundingClientRect(); const at = (dx) => ({ bubbles: true, clientX: r.left + 11 + dx, clientY: r.top + 11, button: 0, buttons: 1, pointerId: 1 }); pin.dispatchEvent(new PointerEvent('pointerdown', at(0))); pin.dispatchEvent(new PointerEvent('pointermove', at(40)))" >/dev/null; settle 0.5
+during=$(glass "const r = document.querySelector('.bridge-composer:popover-open').getBoundingClientRect(); return [r.left, r.top, r.width, r.height].map(Math.round)" | jq -c .)
+check "while a pin is dragged, macOS's glass stays under its note" "$(bridge --state | jq -c '.freeze.glass | map(round)')" "$during"
+glass "const pin = [...document.querySelectorAll('.bridge-pin')].pop(); const r = pin.getBoundingClientRect(); const at = { bubbles: true, clientX: r.left + 11, clientY: r.top + 11, button: 0, pointerId: 1 }; pin.dispatchEvent(new PointerEvent('pointermove', at)); pin.dispatchEvent(new PointerEvent('pointerup', at)); pin.click()" >/dev/null; settle 0.8
 before=$(pin_x); drag
 check "dragging a new pin moves it and keeps its note open with what you typed" "$(( $(pin_x) - before )) $(glass "const c = document.querySelector('.bridge-composer:popover-open'); return c ? c.querySelector('textarea').value : 'closed'" | jq -r .)" "60 Halb geschrieben"
+box=$(glass "const r = document.querySelector('.bridge-composer:popover-open').getBoundingClientRect(); return [r.left, r.top, r.width, r.height].map(Math.round)" | jq -c .)
+check "and macOS's glass moves with the note, exactly under it" "$(bridge --state | jq -c '.freeze.glass | map(round)')" "$box"
 glass "document.querySelector('.bridge-composer:popover-open textarea').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true }))" >/dev/null; settle 0.3
 check_json "⇧↩ does not save" "$(bridge --state)" '.freeze.notes | length' "0"
 glass "document.querySelector('.bridge-composer:popover-open textarea').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))" >/dev/null; settle 0.8

@@ -907,14 +907,14 @@ function __bridgeInit(options) {
         const box = notes.boxes.get(id);
         if (box) place(box, anchor);
         from.anchor = anchor;
+        notes.follow(id);
       });
       pin.addEventListener('pointerup', async () => {
         const moved = from?.moved && from.anchor;
         from = moved ? { dropped: true } : null;
         if (!moved) return;
         pin.anchor = moved;
-        const composer = notes.composer(id);
-        if (composer.matches(':popover-open')) notes.fit(composer);
+        notes.follow(id);
         if (notes.pending?.id === id) { notes.pending.anchor = moved; post('mark', { id, anchor: moved }); return; }
         notes.set(await post('note', { id, action: 'move', anchor: moved }));
       });
@@ -922,6 +922,13 @@ function __bridgeInit(options) {
         if (!from?.dropped) return;
         from = null;
         e.preventDefault();
+      });
+    };
+
+    notes.follow = function (id) {
+      requestAnimationFrame(() => {
+        const composer = notes.composer(id);
+        if (composer?.matches(':popover-open')) notes.fit(composer);
       });
     };
 
