@@ -26,7 +26,7 @@ wait_ready
 check_json "a self-signed local host loads over https" "$(bridge --js "$url" "return [location.protocol, document.title].join(' ')")" '.' "https: Sicher"
 
 bad="https://$other:$port/"
-(cd "$CASE_DIR" && bridge "$bad")
+(cd "$CASE_DIR" && bridge "$bad"); bridge --do select "$bad" >/dev/null
 sleep 2
 check "the same certificate on an out-of-scope host is refused and never becomes ready" "$(bridge --js "$bad" "return location.href" | jq -r .) $(bridge --state | jq -r '.ready')" "about:blank false"
 finish

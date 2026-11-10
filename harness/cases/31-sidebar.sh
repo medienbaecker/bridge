@@ -70,6 +70,7 @@ check_json "the projects column sits in the window's sidebar material (glass on 
 check_json "the inactive pill draws its time in secondary, not tertiary" "$g" '(.emphasized | not) and .timeColor == "secondaryLabelColor"' "true"
 bridge --do scrollers legacy >/dev/null; settle 0.4
 for i in $(seq 4 40); do printf '<!doctype html><title>Page %s</title><p>Page %s</p>' $i $i > "$CASE_DIR/pages/p$i.html"; (cd "$CASE_DIR/pages" && bridge p$i.html >/dev/null); done
+bridge --do select "$CASE_DIR/pages/p40.html" >/dev/null
 wait_ready; settle 0.6
 i=$(pill_insets forty-legacy)
 check "forty rows, legacy scrollers: symmetric with the scroller showing ($i)" "$(symmetric "$i")" "true"

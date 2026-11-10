@@ -15,6 +15,7 @@ check_json "Waiting and All head the projects column, then the projects, newest 
 check_json "counts: three waiting, three in all, one and two in the projects" "$state" '[.projects.rows[].count] | join(",")' "3,3,1,2"
 bridge --do project "$(printf '%s' "$state" | jq -r '.projects.rows[3].key')" >/dev/null; settle 0.3
 check_json "selecting a project shows only its bridges, newest first" "$(bridge --state)" '[.bridgesColumn[] | split("/") | last] | join(",")' "k2.html,k1.html"
+bridge --do select "$CASE_DIR/Sampleproject/k2.html" >/dev/null; settle 0.3
 bridge --js "$CASE_DIR/Sampleproject/k2.html" "document.querySelector('#a').click(); return 1" >/dev/null; settle 0.3; bridge --do send >/dev/null; settle 0.3
 bridge --do project waiting >/dev/null; settle 0.3
 check_json "Waiting excludes the sent one" "$(bridge --state)" '[.bridgesColumn[] | split("/") | last] | join(",")' "i1.html,k1.html"
@@ -34,7 +35,7 @@ mk drafts "Draft 1" d1; (cd "$CASE_DIR/drafts" && bridge d1.html); wait_ready; s
 check_json "a bridge presented into a project All shows stays in All and heads it" "$(bridge --state)" '(.projects.scope == "all") and (.bridgesColumn[0] | endswith("d1.html"))' "true"
 bridge --do project "project:$(cd "$CASE_DIR/inbox" && pwd -P)" >/dev/null; settle 0.3
 mk drafts "Draft 2" d2; (cd "$CASE_DIR/drafts" && bridge d2.html); wait_ready; settle 0.4
-check_json "presented into a project the column does not show, the column moves to it" "$(bridge --state)" '(.projects.scope | endswith("/drafts")) and (.bridgesColumn[0] | endswith("d2.html"))' "true"
+check_json "presented while the window is open, the column and the selection stay where you are" "$(bridge --state)" '(.projects.scope | endswith("/inbox")) and (.selected | endswith("i1.html"))' "true"
 # At the narrowest sidebar, the longest project name is whole: its ink ends inside the column.
 bridge --do sidebarwidth 180 >/dev/null; settle 0.5
 r=$(shot narrow) || true

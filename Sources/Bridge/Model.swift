@@ -42,6 +42,7 @@ final class Model {
     var showCrossed: Bool = Model.remembered("showCrossed") as? Bool ?? true { didSet { Self.remember(showCrossed, "showCrossed") } }
     var pages: [String: Page] = [:]
     var onChange: () -> Void = {}
+    var watched: () -> Bool = { false }
     var waiters: [Waiter] = []
     var agents: [String: ClaudeSessions.Live] = [:]
 
@@ -212,7 +213,7 @@ final class Model {
             page.presented(Presentation(session: session, cwd: cwd, ground: ground))
             if siteChanged { page.load() }
         }
-        if let first = locations.first {
+        if let first = locations.first, selected == nil || !watched() {
             selected = first
             if !shown().contains(where: { $0.location == first }) { scope = .project(project) }
         }

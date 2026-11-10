@@ -17,7 +17,7 @@ JSON
 printf '%s' '{"answers":{"name":"Bare"}}' > "$CASE_DIR/pages/bare.html.bridge.json"
 printf '%s' '{"status":"open","version":1,"answers":{"name":"Lost' > "$CASE_DIR/pages/broken.html.bridge.json"
 repo
-open_it() { (cd "$CASE_DIR/pages" && bridge "$1"); wait_ready; settle 1.5; }
+open_it() { (cd "$CASE_DIR/pages" && bridge "$1"); bridge --do select "$CASE_DIR/pages/$1" >/dev/null; wait_ready; settle 1.5; }
 
 # The editor map repairs its own script on load ([NaN] -> [D2]) and saves it:
 # the page's doing, so its script is not part of what opening must leave alone.

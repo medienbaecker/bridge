@@ -35,7 +35,7 @@ check_json "a rewrite patches the draft" "$(js "$t" "return document.querySelect
 
 # Markdown
 m="$pages/plan.md"
-(cd "$pages" && bridge plan.md); wait_ready
+(cd "$pages" && bridge plan.md); bridge --do select "$m" >/dev/null; wait_ready
 check_json "markdown title is the first heading" "$(bridge --state)" '.title' "Move the archive to static pages"
 check_json "markdown rendered, tables too" "$(js "$m" "return [...document.querySelectorAll('h2')].map(h => h.textContent).join('|') + ' ' + document.querySelectorAll('table td').length")" '.' "1. Export|2. Redirects 6"
 check_json "its Copy button yields the markdown as written, not the rendering" "$(js "$m" "return document.querySelector('[data-copy=\"#markdown-source\"]')?.textContent === 'Copy' && document.querySelector('#markdown-source').content.textContent.startsWith('# Move the archive to static pages')")" '.' "true"

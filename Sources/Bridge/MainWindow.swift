@@ -130,6 +130,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         sidebar.windowPreview = { [weak self] location in self?.windowPreview(location) }
         sidebar.hasSnapshot = { [weak self] location in self?.snapshots[location] != nil }
         model.onChange = { [weak self] in self?.refresh() }
+        model.watched = { [weak self] in self?.window?.isVisible == true && self?.window?.isMiniaturized == false && !NSApp.isHidden }
     }
 
     required init?(coder: NSCoder) { fatalError() }
