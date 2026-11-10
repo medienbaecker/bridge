@@ -1,7 +1,7 @@
 import AppKit
 import ApplicationServices
 import BridgeCore
-import ScreenCaptureKit
+@preconcurrency import ScreenCaptureKit
 import Vision
 import WebKit
 
@@ -53,6 +53,8 @@ final class Freeze: NSObject {
     var pictures: [String: Picture] = [:]
     var placed: [String: (page: String, anchor: JSONValue)] = [:]
     var captures = 0
+    var glassLeftOut = false
+    var content: Task<Result<SCShareableContent, Error>, Never>?
     var onFinish: (Freeze, Outcome) -> Void = { _, _ in }
 
     var picked: String?
@@ -117,6 +119,7 @@ final class Freeze: NSObject {
             for window in freeze.veiled { window.alphaValue = 0 }
         }
         freeze.panel.orderFrontRegardless()
+        freeze.content = Task { await Result { try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true) } }
         if !Env.test { freeze.panel.makeKeyAndOrderFront(nil) }
         freeze.panel.makeFirstResponder(page.webView)
         let list = freeze.recipients.map { ["session": $0.session, "name": $0.name.isEmpty ? $0.page : $0.name, "project": $0.project.isEmpty ? "No project" : $0.project, "busy": $0.busy, "picked": $0.session == freeze.picked, "colour": Self.css(Model.colour(of: $0.session))] as [String: Any] }
@@ -149,7 +152,24 @@ final class Freeze: NSObject {
     }
 
     func window(at point: CGPoint) -> [String: Any]? {
-        windows.first { info in (info[kCGWindowLayer as String] as? Int ?? 0) < 1000 && (info[kCGWindowAlpha as String] as? Double ?? 1) > 0 && Self.frame(of: info).contains(point) }
+        let tops = Self.displayTops()
+        return windows.first { info in
+            (info[kCGWindowLayer as String] as? Int ?? 0) < 1000 && (info[kCGWindowAlpha as String] as? Double ?? 1) > 0 && Self.frame(of: info).contains(point)
+                && !WindowRules.menuBarStrip(title: info[kCGWindowName as String] as? String, frame: Self.frame(of: info), displayTops: tops)
+        }
+    }
+
+    static func main(_ info: [String: Any], displayTops tops: [CGFloat]) -> Bool {
+        WindowRules.main(layer: info[kCGWindowLayer as String] as? Int ?? 0, alpha: info[kCGWindowAlpha as String] as? Double ?? 1,
+                         sharing: info[kCGWindowSharingState as String] as? Int ?? 1, title: info[kCGWindowName as String] as? String,
+                         frame: frame(of: info), displayTops: tops)
+    }
+
+    static func displayTops() -> [CGFloat] {
+        var ids = [CGDirectDisplayID](repeating: 0, count: 16)
+        var count: UInt32 = 0
+        guard CGGetActiveDisplayList(16, &ids, &count) == .success else { return [] }
+        return ids.prefix(Int(count)).map { CGDisplayBounds($0).minY }
     }
 
     static func frame(of window: [String: Any]) -> CGRect {
@@ -368,7 +388,8 @@ final class Freeze: NSObject {
 
     func opened(from app: NSRunningApplication?) async {
         guard let pid = app?.processIdentifier,
-              let info = windows.first(where: { $0[kCGWindowOwnerPID as String] as? Int32 == pid && $0[kCGWindowLayer as String] as? Int ?? 0 == 0 }) else { return }
+              case let tops = Self.displayTops(),
+              let info = windows.first(where: { $0[kCGWindowOwnerPID as String] as? Int32 == pid && Self.main($0, displayTops: tops) }) else { return }
         let frame = local(Self.frame(of: info))
         await suggest(await element(at: CGPoint(x: frame.midX, y: frame.midY), picture: nil), page: nil)
     }
@@ -451,7 +472,8 @@ final class Freeze: NSObject {
 
     func shoot(_ frame: CGRect) async -> Picture? {
         let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
-        guard let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true) else {
+        guard let fetched = await Self.within(5, { await self.content?.value }) else { return nil }
+        guard case .success(let content) = fetched else {
             if Self.current === self { cancel() }
             let alert = NSAlert()
             alert.messageText = "Bridge can't see the screen"
@@ -460,7 +482,9 @@ final class Freeze: NSObject {
             return nil
         }
         guard let display = content.displays.first(where: { $0.displayID == number }) else { return nil }
-        let filter = SCContentFilter(display: display, excludingWindows: content.windows.filter { $0.windowID == CGWindowID(panel.windowNumber) })
+        let glass = content.windows.filter { $0.windowID == CGWindowID(panel.windowNumber) }
+        glassLeftOut = !glass.isEmpty
+        let filter = SCContentFilter(display: display, excludingWindows: glass)
         let scale = CGFloat(filter.pointPixelScale)
         let config = SCStreamConfiguration()
         config.sourceRect = frame
@@ -468,8 +492,22 @@ final class Freeze: NSObject {
         config.height = Int(frame.height * scale)
         config.showsCursor = false
         config.captureResolution = .best
-        guard let image = try? await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config) else { return nil }
+        guard let image = await Self.within(5, { try? await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config) }) else { return nil }
         return Picture(image: image, frame: frame)
+    }
+
+    final class Once<T: Sendable> {
+        var continuation: CheckedContinuation<T?, Never>?
+        func finish(_ value: T?) { continuation?.resume(returning: value); continuation = nil }
+    }
+
+    static func within<T: Sendable>(_ seconds: Double, _ work: @escaping () async -> T?) async -> T? {
+        let once = Once<T>()
+        return await withCheckedContinuation { continuation in
+            once.continuation = continuation
+            Task { once.finish(await work()) }
+            Task { try? await Task.sleep(for: .seconds(seconds)); once.finish(nil) }
+        }
     }
 
     // MARK: Sending

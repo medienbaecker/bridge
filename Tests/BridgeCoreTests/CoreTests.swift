@@ -391,3 +391,18 @@ private let kitOfShapes = ".options { } .draft { } .bars { } .bar { }"
     #expect(Place.key(url: "file:///Users/x/a.html", app: "Safari") == "Safari")
     #expect(Place.key(url: nil, app: "Figma") == "Figma")
 }
+
+@Test func windowRulesSkipHelpers() {
+    let tops: [CGFloat] = [0, -1080]
+    #expect(WindowRules.menuBarStrip(title: "", frame: CGRect(x: 0, y: 0, width: 1512, height: 33), displayTops: tops))
+    #expect(WindowRules.menuBarStrip(title: nil, frame: CGRect(x: 0, y: -1080, width: 1920, height: 24), displayTops: tops))
+    #expect(!WindowRules.menuBarStrip(title: "Inbox", frame: CGRect(x: 0, y: 0, width: 1512, height: 33), displayTops: tops))
+    #expect(!WindowRules.menuBarStrip(title: "", frame: CGRect(x: 0, y: 40, width: 300, height: 33), displayTops: tops))
+    let window = CGRect(x: 100, y: 60, width: 900, height: 700)
+    #expect(WindowRules.main(layer: 0, alpha: 1, sharing: 1, title: "kirby-foo", frame: window, displayTops: tops))
+    #expect(!WindowRules.main(layer: 3, alpha: 1, sharing: 1, title: "Palette", frame: window, displayTops: tops))
+    #expect(!WindowRules.main(layer: 0, alpha: 0, sharing: 1, title: "", frame: window, displayTops: tops))
+    #expect(!WindowRules.main(layer: 0, alpha: 1, sharing: 0, title: "Passwords", frame: window, displayTops: tops))
+    #expect(!WindowRules.main(layer: 0, alpha: 1, sharing: 1, title: "", frame: CGRect(x: 0, y: 0, width: 500, height: 500).offsetBy(dx: -600, dy: 0).insetBy(dx: 220, dy: 220), displayTops: tops))
+    #expect(!WindowRules.main(layer: 0, alpha: 1, sharing: 1, title: "", frame: CGRect(x: 0, y: 0, width: 1512, height: 33), displayTops: tops))
+}

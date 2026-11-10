@@ -75,6 +75,7 @@ on_screen "document.querySelector('.bridge-pin').click()" >/dev/null; settle 0.3
 check_json "a note you already wrote opens with Delete, Cancel and Save" "$(on_screen "return [...document.querySelectorAll('.bridge-composer:popover-open button')].map((b) => b.dataset.act).join()")" '.' "delete,cancel,save"
 on_screen "document.querySelector('.bridge-composer:popover-open [data-act=cancel]').click()" >/dev/null; settle 0.3
 check_json "a box goes on the screenshot with its size" "$(bridge --state)" '.freeze.notes | [length, (.[1].anchor.w > 0)] | map(tostring) | join(",")' "2,true"
+check_json "pictures leave the glass out" "$(bridge --state)" '.freeze.glassLeftOut' "true"
 
 state=$(bridge --state)
 check_json "the bar names the agents by their Claude Code title and project, in the order they started, then Draft" "$(on_screen "return [...document.querySelectorAll('.bridge-agents button')].map((b) => b.innerText.replace(/\\n/g, ' ')).join(' | ')")" '.' "1 Freeze review pages | 2 Lorem draft pages | Draft"
