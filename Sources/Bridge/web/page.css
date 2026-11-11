@@ -9,6 +9,7 @@
   --bridge-line: color-mix(in srgb, CanvasText 14%, transparent);
   --bridge-panel: color-mix(in srgb, CanvasText 4%, transparent);
   --bridge-radius: 8px;
+  --bridge-measure: 880px;
 }
 
 html {
@@ -22,8 +23,9 @@ html {
 body {
   margin: 0;
   padding: 28px 32px 48px;
-  max-width: 880px;
 }
+
+:where(h1, h2, h3, h4, h5, h6, p, ul, ol, dl, blockquote, figcaption, .draft, textarea) { max-width: var(--bridge-measure); }
 
 :where(h1, h2, h3, h4, h5, h6, p, ul, ol, dl, figure, blockquote, pre, hr, fieldset) { margin: 0; }
 :where(body, main, section, article, form, .card, [data-record][data-value], .evidence, .draft, details, .bridge-md, blockquote, li, .compare > *) > :where(:not(script, style, template)) ~ :not(script, style, template) { margin-top: var(--bridge-flow); }
