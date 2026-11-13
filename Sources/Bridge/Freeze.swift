@@ -499,13 +499,17 @@ final class Freeze: NSObject {
     func shoot(_ frame: CGRect) async -> Picture? {
         let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
         guard let fetched = await Self.within(5, { await self.content?.value }) else { return nil }
-        guard case .success(let content) = fetched else {
+        guard case .success(var content) = fetched else {
             if Self.current === self { cancel() }
             let alert = NSAlert()
             alert.messageText = "Bridge can't see the screen"
             alert.informativeText = "Allow Bridge in System Settings, Privacy & Security, Screen & System Audio Recording, then try again."
             if !Env.test { alert.runModal() }
             return nil
+        }
+        if !content.windows.contains(where: { $0.windowID == CGWindowID(panel.windowNumber) }),
+           let again = await Self.within(5, { try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true) }) {
+            content = again
         }
         guard let display = content.displays.first(where: { $0.displayID == number }) else { return nil }
         let glass = content.windows.filter { $0.windowID == CGWindowID(panel.windowNumber) }
@@ -560,6 +564,7 @@ final class Freeze: NSObject {
                 for window in self.veiled { window.alphaValue = 1 }
                 for task in self.describing { await task.value }
                 self.onFinish(self, outcome)
+                self.page.call("__bridge.reset()")
             }
         })
         if outcome != .draft { previous?.activate() }

@@ -48,6 +48,7 @@ aside=$(printf '%s' "$centre" | awk '{ print $1 + 200, $2 }')
 bridge --do freeze-mark "$aside" >/dev/null; settle 0.3; bridge --do freeze-note "Sit amet" >/dev/null; settle 0.5
 bridge --do freeze-cancel >/dev/null; settle 0.3
 check "Esc makes nothing" "$(listed)" "$before"
+check_json "and leaves no pin behind for the next time" "$(on_screen "return document.querySelectorAll('.bridge-pin').length")" '.' "0"
 bridge --do freeze >/dev/null
 for i in $(seq 1 60); do entrance=$(on_screen "const a = document.querySelector('.bridge-agents').getAnimations().find((a) => a.effect.getTiming().duration === 220); return a ? a.playState + ' ' + a.effect.getKeyframes()[0].translate : ''" | jq -r .); case "$entrance" in *100%) break;; esac; done
 check "a later freeze slides the bar up again" "$entrance" "running 0px 100%"
