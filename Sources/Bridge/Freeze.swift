@@ -174,24 +174,26 @@ final class Freeze: NSObject {
     }
 
     func window(at point: CGPoint) -> [String: Any]? {
-        let tops = Self.displayTops()
+        let displays = Self.displays()
         return windows.first { info in
-            (info[kCGWindowLayer as String] as? Int ?? 0) < 1000 && (info[kCGWindowAlpha as String] as? Double ?? 1) > 0 && Self.frame(of: info).contains(point)
-                && !WindowRules.menuBarStrip(title: info[kCGWindowName as String] as? String, frame: Self.frame(of: info), displayTops: tops)
+            let layer = info[kCGWindowLayer as String] as? Int ?? 0, frame = Self.frame(of: info)
+            return layer < 1000 && (info[kCGWindowAlpha as String] as? Double ?? 1) > 0 && frame.contains(point)
+                && !WindowRules.menuBarStrip(title: info[kCGWindowName as String] as? String, frame: frame, displays: displays)
+                && !WindowRules.overlay(layer: layer, frame: frame, displays: displays)
         }
     }
 
-    static func main(_ info: [String: Any], displayTops tops: [CGFloat]) -> Bool {
+    static func main(_ info: [String: Any], displays: [CGRect]) -> Bool {
         WindowRules.main(layer: info[kCGWindowLayer as String] as? Int ?? 0, alpha: info[kCGWindowAlpha as String] as? Double ?? 1,
                          sharing: info[kCGWindowSharingState as String] as? Int ?? 1, title: info[kCGWindowName as String] as? String,
-                         frame: frame(of: info), displayTops: tops)
+                         frame: frame(of: info), displays: displays)
     }
 
-    static func displayTops() -> [CGFloat] {
+    static func displays() -> [CGRect] {
         var ids = [CGDirectDisplayID](repeating: 0, count: 16)
         var count: UInt32 = 0
         guard CGGetActiveDisplayList(16, &ids, &count) == .success else { return [] }
-        return ids.prefix(Int(count)).map { CGDisplayBounds($0).minY }
+        return ids.prefix(Int(count)).map { CGDisplayBounds($0) }
     }
 
     static func frame(of window: [String: Any]) -> CGRect {
@@ -410,8 +412,8 @@ final class Freeze: NSObject {
 
     func opened(from app: NSRunningApplication?) async {
         guard let pid = app?.processIdentifier,
-              case let tops = Self.displayTops(),
-              let info = windows.first(where: { $0[kCGWindowOwnerPID as String] as? Int32 == pid && Self.main($0, displayTops: tops) }) else { return }
+              case let displays = Self.displays(),
+              let info = windows.first(where: { $0[kCGWindowOwnerPID as String] as? Int32 == pid && Self.main($0, displays: displays) }) else { return }
         let frame = local(Self.frame(of: info))
         await suggest(await element(at: CGPoint(x: frame.midX, y: frame.midY), picture: nil), page: nil)
     }

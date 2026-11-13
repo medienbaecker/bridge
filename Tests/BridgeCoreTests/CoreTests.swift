@@ -394,16 +394,19 @@ private let kitOfShapes = ".options { } .draft { } .bars { } .bar { }"
 }
 
 @Test func windowRulesSkipHelpers() {
-    let tops: [CGFloat] = [0, -1080]
-    #expect(WindowRules.menuBarStrip(title: "", frame: CGRect(x: 0, y: 0, width: 1512, height: 33), displayTops: tops))
-    #expect(WindowRules.menuBarStrip(title: nil, frame: CGRect(x: 0, y: -1080, width: 1920, height: 24), displayTops: tops))
-    #expect(!WindowRules.menuBarStrip(title: "Inbox", frame: CGRect(x: 0, y: 0, width: 1512, height: 33), displayTops: tops))
-    #expect(!WindowRules.menuBarStrip(title: "", frame: CGRect(x: 0, y: 40, width: 300, height: 33), displayTops: tops))
+    let displays = [CGRect(x: 0, y: 0, width: 1512, height: 982), CGRect(x: 0, y: -1080, width: 1920, height: 1080)]
+    #expect(WindowRules.menuBarStrip(title: "", frame: CGRect(x: 0, y: 0, width: 1512, height: 33), displays: displays))
+    #expect(WindowRules.menuBarStrip(title: nil, frame: CGRect(x: 0, y: -1080, width: 1920, height: 24), displays: displays))
+    #expect(!WindowRules.menuBarStrip(title: "Inbox", frame: CGRect(x: 0, y: 0, width: 1512, height: 33), displays: displays))
+    #expect(!WindowRules.menuBarStrip(title: "", frame: CGRect(x: 0, y: 40, width: 300, height: 33), displays: displays))
     let window = CGRect(x: 100, y: 60, width: 900, height: 700)
-    #expect(WindowRules.main(layer: 0, alpha: 1, sharing: 1, title: "kirby-foo", frame: window, displayTops: tops))
-    #expect(!WindowRules.main(layer: 3, alpha: 1, sharing: 1, title: "Palette", frame: window, displayTops: tops))
-    #expect(!WindowRules.main(layer: 0, alpha: 0, sharing: 1, title: "", frame: window, displayTops: tops))
-    #expect(!WindowRules.main(layer: 0, alpha: 1, sharing: 0, title: "Passwords", frame: window, displayTops: tops))
-    #expect(!WindowRules.main(layer: 0, alpha: 1, sharing: 1, title: "", frame: CGRect(x: 0, y: 0, width: 500, height: 500).offsetBy(dx: -600, dy: 0).insetBy(dx: 220, dy: 220), displayTops: tops))
-    #expect(!WindowRules.main(layer: 0, alpha: 1, sharing: 1, title: "", frame: CGRect(x: 0, y: 0, width: 1512, height: 33), displayTops: tops))
+    #expect(WindowRules.main(layer: 0, alpha: 1, sharing: 1, title: "kirby-foo", frame: window, displays: displays))
+    #expect(!WindowRules.main(layer: 3, alpha: 1, sharing: 1, title: "Palette", frame: window, displays: displays))
+    #expect(!WindowRules.main(layer: 0, alpha: 0, sharing: 1, title: "", frame: window, displays: displays))
+    #expect(!WindowRules.main(layer: 0, alpha: 1, sharing: 0, title: "Passwords", frame: window, displays: displays))
+    #expect(!WindowRules.main(layer: 0, alpha: 1, sharing: 1, title: "", frame: CGRect(x: 0, y: 0, width: 500, height: 500).offsetBy(dx: -600, dy: 0).insetBy(dx: 220, dy: 220), displays: displays))
+    #expect(!WindowRules.main(layer: 0, alpha: 1, sharing: 1, title: "", frame: CGRect(x: 0, y: 0, width: 1512, height: 33), displays: displays))
+    #expect(WindowRules.overlay(layer: 23, frame: CGRect(x: 0, y: 0, width: 1512, height: 982), displays: displays))
+    #expect(!WindowRules.overlay(layer: 23, frame: CGRect(x: 1100, y: 40, width: 380, height: 90), displays: displays))
+    #expect(!WindowRules.overlay(layer: 0, frame: CGRect(x: 0, y: 0, width: 1512, height: 982), displays: displays))
 }
