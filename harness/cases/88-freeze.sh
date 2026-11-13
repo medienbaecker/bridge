@@ -44,7 +44,8 @@ centre=$(printf '%s' "$state" | jq -r '.freeze.screenFrame as $s | "\(.windowFra
 corner=$(printf '%s' "$centre" | awk '{ print $1 - 60, $2 - 60 }')
 listed() { jq '.bridges | length' "$XDG_STATE_HOME/bridge-dev/list.json"; }
 before=$(listed)
-bridge --do freeze-mark "$centre" >/dev/null; settle 0.3; bridge --do freeze-note "Sit amet" >/dev/null; settle 0.5
+aside=$(printf '%s' "$centre" | awk '{ print $1 + 200, $2 }')
+bridge --do freeze-mark "$aside" >/dev/null; settle 0.3; bridge --do freeze-note "Sit amet" >/dev/null; settle 0.5
 bridge --do freeze-cancel >/dev/null; settle 0.3
 check "Esc makes nothing" "$(listed)" "$before"
 bridge --do freeze >/dev/null
@@ -96,6 +97,8 @@ room=$(printf '%s' "$state" | jq -c --arg c "$centre" '.freeze.screenFrame as $s
 check "what changed on screen after the freeze is not in the picture" "$(python3 "$ROOT/harness/measure.py" "$first" 40 | awk '$3 > 240 && $4 < 30 && $5 < 30' | wc -l | tr -d ' ')" "0"
 check "a pin's picture is the window under it, at most 1000 by 600, not the screen" "$(printf '%s' "$pictured" | jq -c 'map(round)') $(pixels "$first")" "$room $(printf '%s' "$state" | jq -r --argjson r "$room" '"\($r[2] * .backingScale | round) \($r[3] * .backingScale | round) "')"
 under=$(printf '%s' "$state" | jq -r --argjson c "$composer" --argjson p "$pictured" '.backingScale as $k | [($c[0] - $p[0] + 4), ($c[1] - $p[1] + 4), ($c[2] - $p[0] - 4), ($c[3] - $p[1] - 4)] | map(. * $k | round) | join(" ")')
+old=$(printf '%s' "$state" | jq -r --arg c "$aside" --argjson p "$pictured" '.backingScale as $k | ($c | split(" ") | map(tonumber)) as [$x, $y] | [($x - $p[0] - 12), ($y - $p[1] - 30), ($x - $p[0] + 12), ($y - $p[1])] | map(. * $k | round) | join(" ")')
+check "the last session's pin is not frozen into the screen" "$(python3 "$ROOT/harness/measure.py" "$first" region $old | awk '{print $2}')" "1"
 pin=$(printf '%s' "$state" | jq -r --arg c "$centre" --argjson p "$pictured" '.backingScale as $k | ($c | split(" ") | map(tonumber)) as [$x, $y] | [($x - $p[0] - 12), ($y - $p[1] - 30), ($x - $p[0] + 12), ($y - $p[1])] | map(. * $k | round) | join(" ")')
 check "Bridge's own glass is not in it: where the composer stood is the plain page, beside the drawn pin" "$(python3 "$ROOT/harness/measure.py" "$first" region $under | awk '{print $2}') $(python3 "$ROOT/harness/measure.py" "$first" region $pin | awk '{print ($2 > 3) ? "inked" : $2}')" "1 inked"
 box=$(inbox "$agent" | grep -o '/[^ ]*\.2\.png$')
