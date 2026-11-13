@@ -12,6 +12,16 @@ final class FreezePanel: NSPanel {
         guard event.type == .scrollWheel, let freeze = Freeze.current, freeze.panel === self else { return super.sendEvent(event) }
         freeze.scroll(event)
     }
+
+    override func resignKey() {
+        super.resignKey()
+        guard !Env.test, let freeze = Freeze.current, freeze.panel === self else { return }
+        Task {
+            try? await Task.sleep(for: .milliseconds(100))
+            guard Freeze.current === freeze, !isKeyWindow, NSWorkspace.shared.frontmostApplication == freeze.previous ?? .current else { return }
+            makeKey()
+        }
+    }
 }
 
 final class Freeze: NSObject {
