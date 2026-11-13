@@ -15,7 +15,8 @@ below show how each kit part is written, not what a page should look like.
 - `data-record="key"` on an element makes it a question.
 - Clickable options: elements with `data-record` **and** `data-value`. Clicking
   records the value and marks the chosen one (`data-selected`). Siblings with
-  the same key are one question.
+  the same key are one question. Put `data-multiple` on their wrapper to let
+  the user pick several: each click toggles, and the record is a list.
 - Form controls: `<input>`, `<select>`, `<textarea>` with `data-record` record
   their value (`type=range`/`number` as numbers, checkbox as boolean,
   `select multiple` as an array). Radio and checkbox groups: put `data-record`

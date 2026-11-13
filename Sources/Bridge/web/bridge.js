@@ -152,7 +152,7 @@ function __bridgeInit(options) {
       for (const el of els) {
         if (el.classList.contains('color')) color.set(el, String(value));
         else if (el.dataset.value !== undefined) {
-          const on = el.dataset.value === String(value);
+          const on = Array.isArray(value) ? value.includes(el.dataset.value) : el.dataset.value === String(value);
           el.toggleAttribute('data-selected', on);
           el.setAttribute('aria-pressed', on);
         } else if (el.matches('input[type=checkbox]')) el.checked = value === true;
@@ -186,8 +186,9 @@ function __bridgeInit(options) {
       hint.className = 'bridge-previous';
       let text = Array.isArray(value) ? value.join(', ') : String(value);
       if (last.dataset.value !== undefined) {
-        const chosen = [...els].find((e) => e.dataset.value === String(value));
-        if (chosen) text = (chosen.querySelector('strong, b, h3') || chosen).textContent.trim().split('\n')[0];
+        const picked = [value].flat().map(String);
+        const chosen = [...els].filter((e) => picked.includes(e.dataset.value));
+        if (chosen.length) text = chosen.map((e) => (e.querySelector('strong, b, h3') || e).textContent.trim().split('\n')[0]).join(', ');
       }
       hint.textContent = text;
       host.insertAdjacentElement('afterend', hint);
@@ -264,7 +265,12 @@ function __bridgeInit(options) {
     if (option) {
       if (!state.readOnly) {
         const key = option.dataset.record;
-        if (option.hasAttribute('data-selected') && key in state.answers && !option.matches('[data-send]')) { select(null, key); clear(key); }
+        if (option.closest('[data-multiple]')) {
+          option.toggleAttribute('data-selected');
+          option.setAttribute('aria-pressed', option.hasAttribute('data-selected'));
+          const picked = [...document.querySelectorAll(`[data-record="${CSS.escape(key)}"][data-value][data-selected]`)].map((el) => el.dataset.value);
+          if (picked.length) record(key, picked); else clear(key);
+        } else if (option.hasAttribute('data-selected') && key in state.answers && !option.matches('[data-send]')) { select(null, key); clear(key); }
         else { select(option); record(key, option.dataset.value); }
       }
       if (option.matches('[data-send]')) { e.preventDefault(); send(); }

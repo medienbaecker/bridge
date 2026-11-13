@@ -20,6 +20,7 @@ cat > "$page" <<'HTML'
 <select data-record="size" id="size"><option value="s">S</option><option value="m">M</option></select>
 <div data-record="tags" id="tags"><label><input type="checkbox" value="a" checked> a</label><label><input type="checkbox" value="b"> b</label></div>
 <div class="options"><div data-record="verdict" data-value="send" id="send-card">Send it</div><div data-record="verdict" data-value="rework">Rework</div></div>
+<div class="options" data-multiple><div data-record="ideas" data-value="chips" id="chips"><strong>Topic chips</strong> Lorem ipsum.</div><div data-record="ideas" data-value="paw" id="paw"><strong>Paw</strong> Dolor sit.</div><div data-record="ideas" data-value="faces" id="faces"><strong>Faces</strong> Amet.</div></div>
 </body></html>
 HTML
 repo
@@ -49,4 +50,10 @@ check_json "the checkbox records a boolean" "$record" '.answers.money' "true"
 check_json "range and number record numbers" "$record" '"\(.answers.rate | type) \(.answers.rate) \(.answers.days | type) \(.answers.days)"' "number 7 number 4"
 check_json "text, textarea and select record their strings" "$record" '"\(.answers.name)|\(.answers.note)|\(.answers.size)"' "Alex|a note|m"
 check_json "a checkbox group records the checked values as a list" "$record" '.answers.tags | join(",")' "a,b"
+js "document.getElementById('faces').click()"; js "document.getElementById('chips').click()"; js "document.getElementById('paw').click()"; js "document.getElementById('paw').click()"; settle 0.6
+check "cards under data-multiple each toggle, and record every picked one in page order" "$(bridge --read "$page" | jq -r '.answers.ideas | join(",")') $(bridge --js "$page" "return [...document.querySelectorAll('[data-record=ideas]')].map((e) => e.getAttribute('aria-pressed')).join()" | jq -r .)" "chips,faces true,false,true"
+touch "$page"; js "location.reload()"; wait_ready; settle 0.8
+check "and after a reload the picked ones are still marked" "$(bridge --js "$page" "return [...document.querySelectorAll('[data-record=ideas]')].map((e) => e.hasAttribute('data-selected')).join()" | jq -r .)" "true,false,true"
+js "document.getElementById('chips').click()"; js "document.getElementById('faces').click()"; settle 0.6
+check_json "unpicking the last one clears the answer" "$(bridge --read "$page")" '.answers | has("ideas")' "false"
 finish
