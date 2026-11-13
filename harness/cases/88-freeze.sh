@@ -26,7 +26,7 @@ check_json "pressing the shortcut fast never leaves a second frozen screen behin
 [ "$(bridge --state | jq '.freeze != null')" = true ] || { bridge --do freeze >/dev/null; settle 0.5; }
 state=$(bridge --state)
 check_json "the freeze covers the test screen, never the user's" "$state" '.freeze.screen' "Test Screen"
-check_json "the glass is up at once, nothing captured before the first note" "$state" '[.freezePanels, .freeze.captures] | map(tostring) | join(",")' "1,0"
+check_json "the glass is up at once and captures the screen once" "$state" '[.freezePanels, .freeze.captures] | map(tostring) | join(",")' "1,1"
 check_json "the screen is in point mode, a pin under the pointer" "$(on_screen "return [document.documentElement.hasAttribute('data-bridge-freeze'), getComputedStyle(document.body).cursor.startsWith('url(')]")" 'map(tostring) | join(",")' "true,true"
 check_json "the cursor Bridge sets is the pin above the bar, the arrow on it" "$(on_screen "return [__bridge.pinsAt(innerWidth / 2, innerHeight / 2), __bridge.pinsAt(innerWidth / 2, innerHeight - 10)]")" 'map(tostring) | join(",")' "true,false"
 check_json "the hover outline is drawn under the page, so pins and note boxes cover it" "$(bridge --state)" '.freeze.outlineUnderPage' "true"
@@ -51,6 +51,9 @@ bridge --do freeze >/dev/null
 for i in $(seq 1 60); do entrance=$(on_screen "const a = document.querySelector('.bridge-agents').getAnimations().find((a) => a.effect.getTiming().duration === 220); return a ? a.playState + ' ' + a.effect.getKeyframes()[0].translate : ''" | jq -r .); case "$entrance" in *100%) break;; esac; done
 check "a later freeze slides the bar up again" "$entrance" "running 0px 100%"
 settle 1
+for i in $(seq 1 30); do [ "$(bridge --state | jq '.freeze.frozen')" = true ] && break; settle 0.1; done
+check_json "once the capture lands the screen is frozen" "$(bridge --state)" '.freeze.frozen' "true"
+bridge --js "$CASE_DIR/pages/cards.html" "@bridge document.body.style.background = 'rgb(255, 0, 0)'" >/dev/null; settle 0.3
 bridge --do freeze-hover "$centre" >/dev/null
 for i in $(seq 1 20); do [ "$(bridge --state | jq '.freeze.highlight != null')" = true ] && break; settle 0.1; done
 cards=$(bridge --js "$CASE_DIR/pages/cards.html" "@bridge const r = document.querySelector('#cards').getBoundingClientRect(); return [r.top, innerHeight]")
@@ -76,6 +79,8 @@ check_json "a note you already wrote opens with Delete, Cancel and Save" "$(on_s
 on_screen "document.querySelector('.bridge-composer:popover-open [data-act=cancel]').click()" >/dev/null; settle 0.3
 check_json "a box goes on the screenshot with its size" "$(bridge --state)" '.freeze.notes | [length, (.[1].anchor.w > 0)] | map(tostring) | join(",")' "2,true"
 check_json "pictures leave the glass out" "$(bridge --state)" '.freeze.glassLeftOut' "true"
+check_json "and are cut from the one capture, not taken per note" "$(bridge --state)" '.freeze.captures' "1"
+bridge --js "$CASE_DIR/pages/cards.html" "@bridge document.body.style.background = ''" >/dev/null
 
 state=$(bridge --state)
 check_json "the bar names the agents by their Claude Code title and project, in the order they started, then Draft" "$(on_screen "return [...document.querySelectorAll('.bridge-agents button')].map((b) => b.innerText.replace(/\\n/g, ' ')).join(' | ')")" '.' "1 Freeze review pages | 2 Lorem draft pages | Draft"
@@ -88,6 +93,7 @@ check "and Bridge stays on the page you were on" "$(bridge --state | jq -r '.sel
 pixels() { sips -g pixelWidth -g pixelHeight "$1" 2>/dev/null | awk '/pixel/ { printf "%s ", $2 }'; }
 first=$(bridge --pins "$CASE_DIR/pages/cards.html" | jq -r '.[0].picture')
 room=$(printf '%s' "$state" | jq -c --arg c "$centre" '.freeze.screenFrame as $s | ($c | split(" ") | map(tonumber)) as [$x, $y] | .windowFrame as $w | ([$w.x - $s[0], 0] | max) as $left | ([$s[1] + $s[3] - $w.y - $w.height, 0] | max) as $top | ([$w.x - $s[0] + $w.width, $s[2]] | min) as $right | ([$s[1] + $s[3] - $w.y, $s[3]] | min) as $bottom | ([$right - $left, 1000] | min) as $width | ([$bottom - $top, 600] | min) as $height | [([([$x - $width / 2, $left] | max), $right - $width] | min), ([([$y - $height / 2, $top] | max), $bottom - $height] | min), $width, $height] | map(round)')
+check "what changed on screen after the freeze is not in the picture" "$(python3 "$ROOT/harness/measure.py" "$first" 40 | awk '$3 > 240 && $4 < 30 && $5 < 30' | wc -l | tr -d ' ')" "0"
 check "a pin's picture is the window under it, at most 1000 by 600, not the screen" "$(printf '%s' "$pictured" | jq -c 'map(round)') $(pixels "$first")" "$room $(printf '%s' "$state" | jq -r --argjson r "$room" '"\($r[2] * .backingScale | round) \($r[3] * .backingScale | round) "')"
 under=$(printf '%s' "$state" | jq -r --argjson c "$composer" --argjson p "$pictured" '.backingScale as $k | [($c[0] - $p[0] + 4), ($c[1] - $p[1] + 4), ($c[2] - $p[0] - 4), ($c[3] - $p[1] - 4)] | map(. * $k | round) | join(" ")')
 pin=$(printf '%s' "$state" | jq -r --arg c "$centre" --argjson p "$pictured" '.backingScale as $k | ($c | split(" ") | map(tonumber)) as [$x, $y] | [($x - $p[0] - 12), ($y - $p[1] - 30), ($x - $p[0] + 12), ($y - $p[1])] | map(. * $k | round) | join(" ")')
@@ -146,9 +152,9 @@ check_json "with no agent running, the bar says so and offers only Draft, picked
 on_screen "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))" >/dev/null; wait_ready; settle 0.5
 check_json "and Return opens the draft" "$(bridge --state)" '.title' "Sed do eiusmod"
 check_json "the draft shows the note's picture with its text, and no pins of its own" "$(bridge --js "$(bridge --state | jq -r .selected)" "@bridge return [[...document.querySelectorAll('#notes li')].map((li) => li.querySelector('img').naturalWidth > 0).join(), [...document.querySelectorAll('#notes li')].map((li) => li.textContent).join('|'), document.querySelectorAll('.bridge-pin').length]")" 'map(tostring) | join(",")' "true,Sed do eiusmod,0"
+bridge --do resize "800 500" >/dev/null; settle 0.5
 bridge --do point >/dev/null; settle 1
 check_json "the Point button starts the freeze" "$(bridge --state)" '.freeze != null' "true"
-bridge --do resize "800 500" >/dev/null; settle 0.5
 small=$(bridge --state)
 bridge --do freeze-mark "$(printf '%s' "$small" | jq -r '.freeze.screenFrame as $s | "\(.windowFrame.x - $s[0] + 400) \(($s[1] + $s[3]) - (.windowFrame.y + .windowFrame.height) + 250)"')" >/dev/null; settle 0.3
 bridge --do freeze-note "Lorem" >/dev/null; settle 0.5

@@ -36,9 +36,10 @@ final class Freeze: NSObject {
     }
 
     let screen: NSScreen
-    var windows: [[String: Any]]
+    let windows: [[String: Any]]
     let page: Page
     let panel: FreezePanel
+    let backdrop = NSView()
     let overlay = FreezeView()
     let glass = NSGlassEffectView()
     let recipients: [Model.Recipient]
@@ -49,6 +50,7 @@ final class Freeze: NSObject {
     var awake: Set<pid_t> = []
     var describing: [Task<Void, Never>] = []
     var veiled: [NSWindow] = []
+    var still: Task<Picture?, Never>?
     var taking: [String: Task<Picture?, Never>] = [:]
     var pictures: [String: Picture] = [:]
     var placed: [String: (page: String, anchor: JSONValue)] = [:]
@@ -80,6 +82,10 @@ final class Freeze: NSObject {
         panel.backgroundColor = .clear
         panel.isOpaque = false
         let content = NSView(frame: CGRect(origin: .zero, size: screen.frame.size))
+        backdrop.frame = content.bounds
+        backdrop.wantsLayer = true
+        backdrop.layer?.contentsGravity = .resize
+        content.addSubview(backdrop)
         overlay.freeze = self
         overlay.frame = content.bounds
         content.addSubview(overlay)
@@ -120,6 +126,12 @@ final class Freeze: NSObject {
         }
         freeze.panel.orderFrontRegardless()
         freeze.content = Task { await Result { try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true) } }
+        freeze.captures += 1
+        freeze.still = Task { await freeze.shoot(CGRect(origin: .zero, size: screen.frame.size)) }
+        Task {
+            guard let picture = await freeze.still?.value, current === freeze else { return }
+            freeze.backdrop.layer?.contents = picture.image
+        }
         if !Env.test { freeze.panel.makeKeyAndOrderFront(nil) }
         freeze.panel.makeFirstResponder(page.webView)
         let list = freeze.recipients.map { ["session": $0.session, "name": $0.name.isEmpty ? $0.page : $0.name, "project": $0.project.isEmpty ? "No project" : $0.project, "busy": $0.busy, "picked": $0.session == freeze.picked, "colour": Self.css(Model.colour(of: $0.session))] as [String: Any] }
@@ -453,10 +465,14 @@ final class Freeze: NSObject {
     // MARK: Pictures
 
     func take(_ id: String, anchor: JSONValue) {
-        windows = Self.onScreen()
         let frame = region(for: anchor)
-        captures += 1
-        taking[id] = Task { await shoot(frame) }
+        taking[id] = Task { await still?.value.flatMap { Self.crop($0, to: frame) } }
+    }
+
+    static func crop(_ picture: Picture, to frame: CGRect) -> Picture? {
+        let scale = CGFloat(picture.image.width) / picture.frame.width
+        let pixels = CGRect(x: frame.minX * scale, y: frame.minY * scale, width: frame.width * scale, height: frame.height * scale).integral
+        return picture.image.cropping(to: pixels).map { Picture(image: $0, frame: frame) }
     }
 
     func region(for anchor: JSONValue) -> CGRect {

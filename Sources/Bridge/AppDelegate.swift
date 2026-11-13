@@ -240,7 +240,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                                      "highlight": freeze.highlight.map { .array([$0.minX, $0.minY, $0.width, $0.height].map { .number(Double($0)) }) } ?? .null,
                                      "screen": .string(freeze.screen.localizedName), "screenFrame": .array([freeze.screen.frame.minX, freeze.screen.frame.minY, freeze.screen.frame.width, freeze.screen.frame.height].map { .number(Double($0)) }),
                                      "glass": glass, "veiled": .number(Double(freeze.veiled.count)), "mainVisible": .bool((window.window?.alphaValue ?? 0) > 0 && window.window?.isVisible == true), "outlineUnderPage": .bool(freeze.overlay.superview?.subviews.firstIndex(of: freeze.overlay) ?? 0 < freeze.overlay.superview?.subviews.firstIndex(of: freeze.page.webView) ?? 0),
-                                     "picked": freeze.picked.map { .string($0) } ?? .null, "captures": .number(Double(freeze.captures)), "glassLeftOut": .bool(freeze.glassLeftOut),
+                                     "picked": freeze.picked.map { .string($0) } ?? .null, "captures": .number(Double(freeze.captures)), "frozen": .bool(freeze.backdrop.layer?.contents != nil), "glassLeftOut": .bool(freeze.glassLeftOut),
                                      "pictures": .array(freeze.notes.map { note in freeze.pictures[note.id].map { p in .array([p.frame.minX, p.frame.minY, p.frame.width, p.frame.height].map { .number(Double($0)) }) } ?? .null })])
         }
         out["webViews"] = .number(Double(window.content.container.subviews.count))
