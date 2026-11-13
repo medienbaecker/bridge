@@ -332,6 +332,7 @@ private let kitOfShapes = ".options { } .draft { } .bars { } .bar { }"
     <style>.card { padding: 4px }</style>
     <pre><code class="language-html">&lt;div class="shot card"&gt;&lt;p style="color: #333"&gt;x&lt;/p&gt;&lt;/div&gt;</code></pre>
     <p>Write <code>&lt;span class="whatever"&gt;</code> in the template.</p>
+    <p>Give the button class="primary" and the list class="bullets".</p>
     <div class="faint">y</div>
     """
     let texts = Lint(kitCSS: ".card { } .muted { }").run(html: page).map(\.text)

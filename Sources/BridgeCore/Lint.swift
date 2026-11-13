@@ -32,10 +32,10 @@ public struct Lint {
 
         // Classes set from script count too: pages that build elements in JS collide on those.
         var seen: Set<String> = []
-        let uses = Self.ranges(#"(?i)\sclass\s*=\s*"([^"]*)""#, in: html)
+        let uses = Self.ranges(#"(?i)<[a-z][\w-]*\s[^<>]*?\bclass\s*=\s*"([^"]*)""#, in: html)
             + Self.ranges(#"className\s*=\s*['"]([^'"]*)['"]"#, in: html)
             + Self.ranges(#"classList\.(?:add|toggle)\(\s*['"]([^'"]*)['"]"#, in: html)
-        for m in uses where !Self.escaped(html, at: m.whole.lowerBound) {
+        for m in uses {
             for c in String(html[m.inner]).split(separator: " ").map(String.init) where !seen.contains(c) {
                 seen.insert(c)
                 // A script's template pieces (`th${used[n] ? ' used' : ''}`) are not class names.
