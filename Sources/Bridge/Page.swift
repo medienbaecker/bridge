@@ -94,11 +94,11 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
     }
 
     func watch() {
-        let dir = URL(fileURLWithPath: location).deletingLastPathComponent()
-        let folders = Set(media.keys.map(Self.existingFolder)).subtracting([dir.path])
-        let files = [location, sidecarURL.path, Paths.dataFile(for: location).path] + media.keys.sorted() + folders.sorted()
-        guard files != watcher?.files else { return }
-        watcher = Watcher(directory: dir, files: files) { [weak self] in self?.fileChanged() }
+        let inPlace = media.keys.filter { Self.existingFolder(of: $0) == ($0 as NSString).deletingLastPathComponent }
+        let files = [location, sidecarURL.path, Paths.dataFile(for: location).path] + inPlace.sorted()
+        let folders = Set(media.keys.map(Self.existingFolder)).subtracting(inPlace.map { ($0 as NSString).deletingLastPathComponent }).sorted()
+        guard files != watcher?.files || folders != watcher?.folders else { return }
+        watcher = Watcher(files: files, folders: folders) { [weak self] in self?.fileChanged() }
     }
 
     static func existingFolder(of path: String) -> String {

@@ -135,8 +135,7 @@ final class Model {
         }
         for location in open.subtracting(updateWatchers.keys) {
             fingerprints[location] = Self.fingerprint(location)
-            let directory = URL(fileURLWithPath: location).deletingLastPathComponent()
-            updateWatchers[location] = Watcher(directory: directory, files: [location, Paths.dataFile(for: location).path]) { [weak self] in
+            updateWatchers[location] = Watcher(files: [location, Paths.dataFile(for: location).path]) { [weak self] in
                 self?.fileUpdated(location)
             }
         }
