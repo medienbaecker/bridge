@@ -17,6 +17,7 @@ printf '<!doctype html><title>Dolor</title><p>Dolor sit amet</p>' > "$CASE_DIR/p
 bridge --do select "$CASE_DIR/pages/cards.html" >/dev/null; wait_ready; settle 0.3
 screen="$XDG_STATE_HOME/bridge-dev/freeze/screen.html"
 on_screen() { bridge --js "$screen" "@bridge $1"; }
+leave() { bridge --do freeze-cancel >/dev/null; settle 0.3; bridge --js "$XDG_STATE_HOME/bridge-dev/freeze/screen.html" "@bridge document.querySelector('.bridge-discard [data-act=discard]')?.click()" >/dev/null; settle 0.3; }
 
 bridge --do freeze >/dev/null
 settle 0.3
@@ -46,7 +47,7 @@ listed() { jq '.bridges | length' "$XDG_STATE_HOME/bridge-dev/list.json"; }
 before=$(listed)
 aside=$(printf '%s' "$centre" | awk '{ print $1 + 200, $2 }')
 bridge --do freeze-mark "$aside" >/dev/null; settle 0.3; bridge --do freeze-note "Sit amet" >/dev/null; settle 0.5
-bridge --do freeze-cancel >/dev/null; settle 0.3
+leave
 check "Esc makes nothing" "$(listed)" "$before"
 check_json "and leaves no pin behind for the next time" "$(on_screen "return document.querySelectorAll('.bridge-pin').length")" '.' "0"
 bridge --do freeze >/dev/null
@@ -118,7 +119,7 @@ on_screen "document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles
 on_screen "document.querySelector('.bridge-composer:popover-open')?.hidePopover(); document.body.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 600, clientY: 600 }))" >/dev/null; settle 0.3
 check_json "a click elsewhere closes an empty composer, dropping its pin, and places nothing" "$(on_screen "return [document.querySelectorAll('.bridge-pin').length, !!document.querySelector('.bridge-composer:popover-open')]")" 'map(tostring) | join(",")' "1,false"
 check_json "and its glass goes with it" "$(bridge --state)" '.freeze.glass' "null"
-bridge --do freeze-cancel >/dev/null; settle 0.3
+leave
 bridge --do freeze >/dev/null; settle 1
 bridge --do freeze-mark "100 100" >/dev/null; settle 0.3; bridge --do freeze-note "Lorem" >/dev/null
 bridge --do freeze >/dev/null; settle 0.3
@@ -126,14 +127,14 @@ check "the shortcut again closes it, without making anything" "$(bridge --state 
 bridge --do freeze >/dev/null; settle 1
 bridge --do freeze-send 0 >/dev/null; settle 0.3
 open=$(bridge --state | jq '.freeze != null')
-bridge --do freeze-cancel >/dev/null; settle 0.3
+leave
 check "with no notes, an agent can't be picked and nothing is made" "$open $(listed)" "true $before"
 
 bridge --do freeze >/dev/null; settle 1
 bridge --do freeze-mark "2 300" >/dev/null; settle 0.3
 check_json "by the left edge the composer stays inside the screen" "$(on_screen "const r = document.querySelector('.bridge-composer:popover-open').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth")" '.' "true"
 bridge --do freeze-note "Lorem" >/dev/null; settle 0.3
-bridge --do freeze-cancel >/dev/null; settle 0.3
+leave
 
 bridge --do select "$CASE_DIR/pages/other.html" >/dev/null; settle 0.3
 bridge --do freeze front >/dev/null; settle 1
@@ -163,5 +164,5 @@ small=$(bridge --state)
 bridge --do freeze-mark "$(printf '%s' "$small" | jq -r '.freeze.screenFrame as $s | "\(.windowFrame.x - $s[0] + 400) \(($s[1] + $s[3]) - (.windowFrame.y + .windowFrame.height) + 250)"')" >/dev/null; settle 0.3
 bridge --do freeze-note "Lorem" >/dev/null; settle 0.5
 check "a pin on a smaller window pictures that whole window" "$(bridge --state | jq -c '.freeze.pictures[0] | map(round)')" "$(printf '%s' "$small" | jq -c '.freeze.screenFrame as $s | [.windowFrame.x - $s[0], ($s[1] + $s[3]) - (.windowFrame.y + .windowFrame.height), .windowFrame.width, .windowFrame.height] | map(round)')"
-bridge --do freeze-cancel >/dev/null; settle 0.3
+leave
 finish

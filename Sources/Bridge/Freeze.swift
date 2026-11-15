@@ -139,7 +139,13 @@ final class Freeze: NSObject {
         freeze.panel.orderFrontRegardless()
         freeze.content = Task { await Result { try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true) } }
         freeze.captures += 1
-        freeze.still = Task { await freeze.shoot(CGRect(origin: .zero, size: screen.frame.size)) }
+        freeze.still = Task {
+            let pinned = page.model.pages.values.filter { !$0.pinsJSON().isEmpty && $0.webView.window?.isVisible == true }
+            await Self.hidePins(on: pinned)
+            let picture = await freeze.shoot(CGRect(origin: .zero, size: screen.frame.size))
+            for page in pinned { page.call("document.documentElement.removeAttribute('data-bridge-capturing')") }
+            return picture
+        }
         Task {
             guard let picture = await freeze.still?.value, current === freeze else { return }
             freeze.backdrop.layer?.contents = picture.image
@@ -150,6 +156,14 @@ final class Freeze: NSObject {
         _ = try? await page.run("__bridge.agents(list); __bridge.cursor(pin)", ["list": list, "pin": pin], in: Page.world)
         await freeze.setCursor()
         await freeze.opened(from: previous)
+    }
+
+    static func hidePins(on pages: [Page]) async {
+        for page in pages {
+            _ = await within(0.3) {
+                try? await page.run("document.documentElement.setAttribute('data-bridge-capturing', ''); await new Promise((painted) => requestAnimationFrame(() => requestAnimationFrame(painted)))", [:], in: Page.world)
+            }
+        }
     }
 
     static func onScreen() -> [[String: Any]] {
@@ -491,11 +505,16 @@ final class Freeze: NSObject {
         return picture.image.cropping(to: pixels).map { Picture(image: $0, frame: frame) }
     }
 
+    static let leastHeight: CGFloat = 240
+
     func region(for anchor: JSONValue) -> CGRect {
         let (spot, box) = area(of: anchor)
         let bounds = CGRect(origin: .zero, size: screen.frame.size)
         if let box { return box.insetBy(dx: -40, dy: -40).intersection(bounds) }
-        let room = window(at: global(spot)).map { local(Self.frame(of: $0)).intersection(bounds) } ?? bounds
+        var room = window(at: global(spot)).map { local(Self.frame(of: $0)).intersection(bounds) } ?? bounds
+        if room.height < Self.leastHeight {
+            room = CGRect(x: room.minX, y: min(room.minY, bounds.maxY - Self.leastHeight), width: room.width, height: Self.leastHeight).intersection(bounds)
+        }
         let width = min(room.width, 1000), height = min(room.height, 600)
         let x = min(max(spot.x - width / 2, room.minX), room.maxX - width)
         let y = min(max(spot.y - height / 2, room.minY), room.maxY - height)
@@ -594,7 +613,7 @@ final class Freeze: NSObject {
         NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
         NSImage(cgImage: image, size: frame.size).draw(in: CGRect(origin: .zero, size: frame.size), from: .zero, operation: .copy, fraction: 1, respectFlipped: true, hints: nil)
         let (spot, box) = area(of: note.anchor)
-        FreezeView.draw(number: index + 1, at: CGPoint(x: spot.x - frame.minX, y: spot.y - frame.minY), box: box?.offsetBy(dx: -frame.minX, dy: -frame.minY))
+        FreezeView.draw(number: index + 1, at: CGPoint(x: spot.x - frame.minX, y: spot.y - frame.minY), box: box?.offsetBy(dx: -frame.minX, dy: -frame.minY), in: frame.size)
         NSGraphicsContext.restoreGraphicsState()
         return rep.representation(using: .png, properties: [:]).map { ($0, frame.width) }
     }
@@ -616,39 +635,44 @@ final class FreezeView: NSView {
         path.stroke()
     }
 
-    static func draw(number: Int, at spot: CGPoint, box: CGRect?) {
-        if let box {
-            let area = NSBezierPath(roundedRect: box, xRadius: 4, yRadius: 4)
-            Freeze.colour.setStroke()
-            area.lineWidth = 2
-            area.stroke()
+    static let radius: CGFloat = 9
+
+    static func badge(for spot: CGPoint, box: CGRect?, in size: CGSize) -> CGPoint {
+        guard let box else {
+            let away: CGFloat = 14
+            return CGPoint(x: spot.x + (spot.x + away + radius + 2 <= size.width ? away : -away), y: spot.y + (spot.y - away - radius - 2 >= 0 ? -away : away))
         }
-        let drop = NSBezierPath()
-        drop.move(to: CGPoint(x: -11, y: 11))
-        drop.line(to: CGPoint(x: -11, y: 0))
-        drop.appendArc(withCenter: .zero, radius: 11, startAngle: 180, endAngle: 450)
-        drop.close()
-        let place = NSAffineTransform()
-        place.translateX(by: spot.x, yBy: spot.y - 11 * 2.squareRoot())
-        place.rotate(byDegrees: -45)
-        drop.transform(using: place as AffineTransform)
+        let above = box.minY - radius - 4, below = box.maxY + radius + 4
+        if above - radius - 2 >= 0 { return CGPoint(x: box.minX + radius, y: above) }
+        if below + radius + 2 <= size.height { return CGPoint(x: box.minX + radius, y: below) }
+        return CGPoint(x: box.minX + radius + 4, y: box.minY + radius + 4)
+    }
+
+    static func draw(number: Int, at spot: CGPoint, box: CGRect?, in size: CGSize) {
+        let target = box.map { NSBezierPath(roundedRect: $0, xRadius: 4, yRadius: 4) } ?? NSBezierPath(ovalIn: CGRect(x: spot.x - 5, y: spot.y - 5, width: 10, height: 10))
+        target.lineWidth = 4
+        NSColor.white.setStroke()
+        target.stroke()
+        target.lineWidth = 2
+        Freeze.colour.setStroke()
+        target.stroke()
+
+        let centre = badge(for: spot, box: box, in: size)
+        let badge = NSBezierPath(ovalIn: CGRect(x: centre.x - radius, y: centre.y - radius, width: radius * 2, height: radius * 2))
         NSGraphicsContext.saveGraphicsState()
         let shadow = NSShadow()
         shadow.shadowColor = NSColor.black.withAlphaComponent(0.16)
         shadow.shadowBlurRadius = 2
         shadow.shadowOffset = NSSize(width: 0, height: -1)
         shadow.set()
-        let ring = drop.copy() as! NSBezierPath
-        ring.lineWidth = 4
-        ring.lineJoinStyle = .round
+        badge.lineWidth = 4
         NSColor.white.setStroke()
-        ring.stroke()
+        badge.stroke()
         NSGraphicsContext.restoreGraphicsState()
         Freeze.colour.setFill()
-        drop.fill()
-        let centre = CGPoint(x: spot.x, y: spot.y - 11 * 2.squareRoot())
+        badge.fill()
         let text = NSAttributedString(string: "\(number)", attributes: [.font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: NSColor.white])
-        let size = text.size()
-        text.draw(at: CGPoint(x: centre.x - size.width / 2, y: centre.y - size.height / 2))
+        let extent = text.size()
+        text.draw(at: CGPoint(x: centre.x - extent.width / 2, y: centre.y - extent.height / 2))
     }
 }
