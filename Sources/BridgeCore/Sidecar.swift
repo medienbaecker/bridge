@@ -211,6 +211,7 @@ public struct Sidecar: Codable, Equatable, Sendable {
         var text = collectedAt != nil ? "Bridge: The user wrote more on \(file) since you read it (version \(version)): \(answers)."
             : Paths.inDrafts(file) ? "Bridge: The user wrote you a bridge, \(file)" + (self.answers.isEmpty ? "" : ": \(answers)") + ". It is their own request, not an answer to a page of yours." + (self.answers["files"] == nil ? "" : " `files` lists what they attached.")
             : "Bridge: The user answered \(file) (version \(version)): \(answers)."
+        if !history.isEmpty, !Paths.inDrafts(file) { text += " What they answered on earlier versions is under `history` in --read." }
         if !withdrawn.isEmpty { text += " They withdrew their answer to \(withdrawn.joined(separator: ", "))." }
         let left = defaults.count
         if left > 0 { text += " \(left) control\(left == 1 ? " was" : "s were") left at the page's default (`defaults` in --read)." }
