@@ -29,7 +29,7 @@ repo
 # checked box in the group, the range's and the select's values, before the user touches
 # anything. A click on the already-checked radio fires nothing, and need not.
 first=$(bridge --read "$page")
-check_json "a control showing a value at ready has it recorded as the page's default" "$first" '"\(.defaults.hours) \(.defaults.rate) \(.defaults.days) \(.defaults.size) \(.defaults.money) \(.defaults.tags | join(","))"' "mid 5 3 s false a"
+check_json "a control showing a value at ready has it recorded as the page's default" "$first" '"\(.defaults.hours) \(.defaults.rate) \(.defaults.days) \(.defaults.size) \(.defaults.money) \(.defaults.tags | join(","))"' "mid 5 3 s null a"
 check_json "an empty text or textarea records nothing yet" "$first" '[(.answers, .defaults) | has("name"), has("note"), has("verdict")] | join(",")' "false,false,false,false,false,false"
 js() { bridge --js "$page" "$1" >/dev/null; }
 js "document.getElementById('h-mid').click()"; settle 0.4

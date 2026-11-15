@@ -8,8 +8,8 @@ A Mantine page is two files next to each other:
   no reload. Rewriting the `.jsx` rebuilds and reloads.
 
 `bridge page.jsx` builds it (about 50 ms) and opens it. A build error is
-shown in the window as a build failure with the compiler's message; fix the
-file and it builds again.
+shown in the window as a build failure with the compiler's message, and the
+command prints it on stderr and exits 1; fix the file and it builds again.
 
 Put everything you might reword into the data file. Put a `title` in it; it
 becomes the window title.
@@ -88,13 +88,14 @@ that is not in this table has not been verified, so do not reach for it.
 | `Chip.Group` | `data-record` on a wrapping `<Group>`, not on `Chip.Group` (it renders no element) | array when `multiple`, else value |
 | `Select` | `useRecord` (`value`/`onChange`) | the chosen value |
 | `Slider` | `useRecord` | number |
-| `Card`, any element as an option | `data-record` + `data-value` | chosen value; the chosen one gets `data-selected` |
+| `Card`, any element as an option | `data-record` + `data-value` | chosen value; the chosen one gets `data-selected`. Bridge adds `tabindex="0"` and `role="button"`, so it works from the keyboard |
 | `Button` as an option with `data-send` | `data-record` + `data-value` | chosen value, and sends |
 
 Layout and evidence, no recording: `Title`, `Text` (`c="dimmed"` for muted),
 `Stack`, `Group`, `SimpleGrid`, `Card` (`withBorder`), `Table`
 (`Table.Thead`/`Table.Tr`/`Table.Th`/`Table.Td`), `Badge`, `Code` (`block`),
-`Divider`, `Image` (absolute path in `src`).
+`Divider`, `Image` (absolute path in `src`). A `Table` too wide for the page
+scrolls sideways in its own box.
 
 Use `defaultValue`, not `value`, on `data-record` inputs unless you also manage
 their state: when the user reopens a page, Bridge puts their earlier answers

@@ -44,12 +44,17 @@ block over 40 words, option cards that are only text, and a `.md` plan, review
 or set of questions in prose. Warnings (exit 0): a drawing that is mostly words;
 colours of the page's own with no dark variant, or a colour in a `style`
 attribute, which no dark variant can reach; a `pre`
-whose lines are columns spaced by hand, or `language-*` on text that is not
-that language. A page that loads a stylesheet from elsewhere is not checked
+whose lines are columns spaced by hand. Classes are read whether they are
+written `class="x"`, `class='x'` or `class=x`, and from the page's scripts
+(`classList.add`, `className =`); script quoted inside a `pre` is not. A page that loads a stylesheet from elsewhere is not checked
 for unknown classes, since that sheet may define anything. Presenting runs
 the same lint first: a page with errors is not presented (exit 1) and the
 window stays where it is; warnings do not stop it. The
 checks run once more on the live DOM after it opens and print there too.
+
+A `.jsx` page that does not build is still presented, as a build failure in
+the window, but the command prints the compiler's message
+(`bridge: page.jsx did not build: <message> (page.jsx:12)`) and exits 1.
 
 What the page's scripts throw while it loads (an uncaught error, an unhandled
 rejection, a throw inside `bridge.ready`) prints there too, as
@@ -98,7 +103,9 @@ when the app is not up. Use it to check a report against their actual window.
 Claude Code keeps a record of every live session and gives each one an inbox
 socket. When the user sends or closes a page, the Bridge app posts the
 hand-over to the inbox of the session holding it, which wakes that session if
-it is idle. A session that has ended gets it when it is resumed. Reading the
+it is idle. After a new version the hand-over carries only what they answered
+on that version and says that the earlier answers are under `history` in
+`--read`. A session that has ended gets it when it is resumed. Reading the
 answer yourself first (`--read`) means nothing is posted.
 
 ## The write hook
