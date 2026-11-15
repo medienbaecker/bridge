@@ -18,7 +18,7 @@ bridge --quit >/dev/null 2>&1; sleep 0.5
 (cd "$p" && bridge other.html 2>/dev/null); wait_ready; settle 0.3
 bridge --do project all >/dev/null; settle 0.2
 bridge --do select "$page" >/dev/null; wait_ready; settle 0.5
-check_json "the page says the file is gone, under the title" "$(bridge --state)" '.missing and (.subtitle | startswith("This page'"'"'s file is gone: "))' "true"
+check_json "the page says the file is gone, in the strip above it" "$(bridge --state)" '.missing and (.bannerStrip.text | startswith("This page'"'"'s file is gone: "))' "true"
 check "the record is untouched: what the user answered still reads, at the same version" "$(shasum "$(sidecar "$page")" | cut -d' ' -f1) $(bridge --read "$page" | jq -r '"\(.version) \(.answers.layout)"')" "$before 1 grid"
 
 printf '<!doctype html><title>Plan</title><p>first content</p>' > "$p/a.html"

@@ -20,6 +20,7 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         let insets = NSEdgeInsets(top: view.safeAreaInsets.top + 6, left: view.safeAreaInsets.left, bottom: 0, right: 0)
         if scroll.contentInsets.left != insets.left || scroll.contentInsets.top != insets.top { scroll.contentInsets = insets }
         if outlineWidth.constant != -insets.left { outlineWidth.constant = -insets.left }
+        revealSelection()
     }
     var roots: [Node] = []
     var onSelect: (String?) -> Void = { _ in }
@@ -79,6 +80,7 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         empty.font = .systemFont(ofSize: 13)
         empty.textColor = .secondaryLabelColor
         empty.alignment = .center
+        empty.maximumNumberOfLines = 2
         empty.isHidden = true
         empty.translatesAutoresizingMaskIntoConstraints = false
         host.addSubview(empty)
@@ -104,7 +106,12 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         defer { reloading = false }
         let keep = selectedLocations
         roots = model.shown().map { Node(.bridge($0)) }
-        empty.stringValue = model.scope == .waiting ? "Nothing waiting" : "No bridges"
+        let hidden = model.showCrossed ? 0 : model.listing.bridges.filter { entry in
+            guard entry.crossed else { return false }
+            if case .project(let project) = model.scope { return entry.project == project }
+            return model.scope == .all
+        }.count
+        empty.stringValue = model.scope == .waiting ? "Nothing waiting" : hidden > 0 ? "No bridges\n\(hidden) crossed hidden" : "No bridges"
         empty.isHidden = !roots.isEmpty
         outline.reloadData()
         var rows = IndexSet()
@@ -113,6 +120,27 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
             if let node = node(for: loc) { let row = outline.row(forItem: node); if row >= 0 { rows.insert(row) } }
         }
         if rows.isEmpty { outline.deselectAll(nil) } else { outline.selectRowIndexes(rows, byExtendingSelection: false) }
+        revealSelection()
+    }
+
+    private var revealed: String?
+
+    func revealSelection() {
+        guard let selected = model.selected else { revealed = nil; return }
+        let row = row(for: selected)
+        guard selected != revealed, row >= 0, outline.enclosingScrollView.map({ $0.contentView.bounds.height > 0 }) == true else { return }
+        revealed = selected
+        outline.scrollRowToVisible(row)
+    }
+
+    var selectionVisible: Bool {
+        guard let selected = model.selected, let scroll = outline.enclosingScrollView else { return false }
+        let row = row(for: selected)
+        guard row >= 0 else { return false }
+        var visible = scroll.contentView.bounds
+        visible.origin.y += scroll.contentInsets.top
+        visible.size.height -= scroll.contentInsets.top
+        return visible.insetBy(dx: 0, dy: -1).contains(outline.rect(ofRow: row))
     }
 
     func row(for location: String) -> Int {
@@ -273,9 +301,9 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
     /// Only in the lists that cross projects: in a project's own list it would be
     /// the same word on every row.
     func subtitle(for entry: BridgeEntry) -> String? {
-        if Paths.inDrafts(entry.location), !entry.session.isEmpty, !entry.crossed { return "Sent to \(entry.projectName)" }
+        if Paths.inDrafts(entry.location), !entry.session.isEmpty, !entry.crossed { return "Sent to \(model.name(ofProject: entry.project))" }
         guard model.scope == .waiting || model.scope == .all else { return nil }
-        var parts = [entry.projectName].filter { !$0.isEmpty }
+        var parts = [model.name(ofProject: entry.project)].filter { !$0.isEmpty }
         if let why = model.unheard(entry) { parts.append(why) }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
@@ -307,6 +335,7 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
             "clip": .number(Double(clip)), "table": .number(Double(outline.bounds.width)),
             "columnX": .number(Double(scroll.convert(scroll.bounds, to: nil).minX + inset)),
             "scroller": .string(scroll.scrollerStyle == .legacy ? "legacy" : "overlay"),
+            "selectionVisible": .bool(selectionVisible),
         ]
         if let row = outline.selectedRowIndexes.first, let rv = outline.rowView(atRow: row, makeIfNecessary: false) as? BridgeRowView {
             // No pill geometry here: the source list draws its own selection, so a computed
@@ -333,7 +362,7 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
         out["vibrant"] = .bool(vibrant)
         out["rows"] = .array((0..<outline.numberOfRows).compactMap { r in
             guard let cell = outline.view(atColumn: 0, row: r, makeIfNecessary: false) as? BridgeCell else { return nil }
-            return .object(["title": .string(cell.title.stringValue), "dim": .bool(cell.dim), "struck": .bool(cell.struck), "unread": .bool(cell.unread), "dot": .string(cell.unread ? Freeze.css(cell.dot.color) : "")])
+            return .object(["title": .string(cell.title.stringValue), "truncates": .bool((cell.title.attributedStringValue.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle)?.lineBreakMode == .byTruncatingTail), "dim": .bool(cell.dim), "struck": .bool(cell.struck), "unread": .bool(cell.unread), "dot": .string(cell.unread ? Freeze.css(cell.dot.color) : "")])
         })
         return out
     }
@@ -530,7 +559,9 @@ final class BridgeCell: NSTableCellView {
         let colour: NSColor = backgroundStyle == .emphasized
             ? (dim ? NSColor.alternateSelectedControlTextColor.withAlphaComponent(0.7) : .alternateSelectedControlTextColor)
             : (dim ? .secondaryLabelColor : .labelColor)
-        var attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: colour]
+        let style = NSMutableParagraphStyle()
+        style.lineBreakMode = .byTruncatingTail
+        var attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: colour, .paragraphStyle: style]
         if struck { attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
         title.attributedStringValue = NSAttributedString(string: text, attributes: attributes)
         // On the emphasized pill a secondary grey would disappear into the accent.

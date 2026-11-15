@@ -235,7 +235,8 @@ final class Model {
         changed()
     }
 
-    func trash(_ location: String) {
+    @discardableResult
+    func trash(_ location: String) -> [(from: URL, to: URL)] {
         remove(location)
         let pictures = Sidecar.peek(Paths.sidecar(for: location)).comments.compactMap(\.picture).filter(Paths.inDrafts).map { URL(fileURLWithPath: $0) }
         guard Paths.owned(location) else { return discard(pictures) }
@@ -245,13 +246,31 @@ final class Model {
         if Paths.inDrafts(location) {
             items += ((try? FileManager.default.contentsOfDirectory(at: Paths.drafts, includingPropertiesForKeys: nil)) ?? []).filter { $0.lastPathComponent.hasPrefix(stem + ".") && $0 != file }
         }
-        discard(items)
+        return discard(items)
     }
 
-    func discard(_ items: [URL]) {
+    func discard(_ items: [URL]) -> [(from: URL, to: URL)] {
+        var moved: [(from: URL, to: URL)] = []
         for item in items where FileManager.default.fileExists(atPath: item.path) {
-            if Env.test { try? FileManager.default.removeItem(at: item) } else { try? FileManager.default.trashItem(at: item, resultingItemURL: nil) }
+            var trashed: NSURL?
+            if Env.test {
+                let folder = Paths.stateDir.appendingPathComponent("trash").appendingPathComponent(UUID().uuidString)
+                try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                let to = folder.appendingPathComponent(item.lastPathComponent)
+                if (try? FileManager.default.moveItem(at: item, to: to)) != nil { trashed = to as NSURL }
+            } else {
+                try? FileManager.default.trashItem(at: item, resultingItemURL: &trashed)
+            }
+            if let trashed { moved.append((item, trashed as URL)) }
         }
+        return moved
+    }
+
+    func restore(_ entries: [BridgeEntry], files: [(from: URL, to: URL)]) {
+        for file in files { try? FileManager.default.moveItem(at: file.to, to: file.from) }
+        listing.bridges += entries.filter { listing.entry($0.location) == nil }
+        if let first = entries.first, shown().contains(where: { $0.location == first.location }) { selected = first.location }
+        changed()
     }
 
     func reset(_ location: String) {
@@ -271,7 +290,7 @@ final class Model {
         changed()
     }
 
-    static let untitled = "New bridge"
+    static let untitled = "New Bridge"
 
     func isDraft(_ entry: BridgeEntry) -> Bool { Paths.inDrafts(entry.location) && entry.session.isEmpty }
 
@@ -290,7 +309,7 @@ final class Model {
         return file
     }
 
-    func land(_ capture: Freeze, keep: Bool) -> (draft: String?, pages: [String], outside: [(n: Int, note: Comment)]) {
+    func land(_ capture: Freeze, to session: String?) -> (draft: String?, pages: [String], outside: [(n: Int, note: Comment)], told: Bool) {
         let file = newFile()
         var outside: [(n: Int, note: Comment)] = []
         var widths: [String: CGFloat] = [:]
@@ -308,10 +327,11 @@ final class Model {
             pinned[location, default: []].append(note)
         }
         for location in order { page(for: location).pin(pinned[location]!) }
-        guard keep, !outside.isEmpty else { return (nil, order, outside) }
+        if let session, tell(session, pages: order, outside: outside) { return (nil, order, outside, true) }
+        guard !outside.isEmpty else { return (nil, order, outside, false) }
         let draft = draft(file, notes: outside.map(\.note), widths: widths)
         changed()
-        return (draft, order, outside)
+        return (draft, order, outside, false)
     }
 
     func newFile() -> URL {
@@ -346,8 +366,8 @@ final class Model {
         return file.path
     }
 
-    func tell(_ session: String, pages: [String], outside: [(n: Int, note: Comment)]) {
-        guard let agent = agents[session] else { return }
+    func tell(_ session: String, pages: [String], outside: [(n: Int, note: Comment)]) -> Bool {
+        guard let agent = agents[session] else { return false }
         let cli = Flavor.name
         var text = "Bridge: The user pointed at their screen and sent you notes."
         if !pages.isEmpty {
@@ -358,7 +378,7 @@ final class Model {
                 "\n\(n). \"\(note.text)\" on \(note.target)" + (note.picture.map { ". Picture, with the number drawn on it: \($0)" } ?? "")
             }.joined()
         }
-        ClaudeSessions.post(text, to: agent)
+        return ClaudeSessions.post(text, to: agent)
     }
 
     func lastPage(of session: String) -> BridgeEntry? {
@@ -370,14 +390,17 @@ final class Model {
         let name: String
         let page: String
         let project: String
+        let projectName: String
         let busy: Bool
-        var label: String { [page, project, busy ? "busy" : "idle"].filter { !$0.isEmpty }.joined(separator: " · ") }
+        var label: String { [page, projectName, busy ? "busy" : "idle"].filter { !$0.isEmpty }.joined(separator: " · ") }
     }
 
     func agentsByStart() -> [Recipient] {
-        agents.values.sorted { ($0.started, $0.session) < ($1.started, $1.session) }.map { agent in
+        let sorted = agents.values.sorted { ($0.started, $0.session) < ($1.started, $1.session) }
+        let roots = sorted.map { $0.cwd.isEmpty ? "" : Ground.projectRoot(for: $0.cwd) }
+        return zip(sorted, roots).map { agent, root in
             Recipient(session: agent.session, name: ClaudeSessions.title(of: agent), page: lastPage(of: agent.session)?.title ?? "No page yet",
-                      project: agent.cwd.isEmpty ? "" : (Ground.projectRoot(for: agent.cwd) as NSString).lastPathComponent, busy: agent.life == .working)
+                      project: (root as NSString).lastPathComponent, projectName: root.isEmpty ? "" : name(ofProject: root, among: roots), busy: agent.life == .working)
         }
     }
 

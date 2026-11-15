@@ -25,8 +25,8 @@ printf '{"pid":%s,"sessionId":"%s","status":"idle","messagingSocketPath":"/tmp/n
 settle 2.5
 check "or its process is, whatever the file says" "$(sub)" "pages · session ended"
 
-check_json "the window says nothing while the repo is where it was" "$(bridge --state)" '.subtitle' ""
+check_json "the window says nothing while the repo is where it was" "$(bridge --state)" '.bannerStrip' "null"
 for i in 1 2; do (cd "$CASE_DIR/pages" && echo "$i" > "f$i" && git add -A && git -c user.name=t -c user.email=t@t commit -qm "c$i"); done
 bridge --do select "$page" >/dev/null; settle 0.3
-check_json "two commits later it says so under the title" "$(bridge --state)" '.subtitle' "2 commits since this was asked"
+check_json "two commits later the strip above the page says so" "$(bridge --state)" '.bannerStrip.text' "2 commits since this was asked"
 finish

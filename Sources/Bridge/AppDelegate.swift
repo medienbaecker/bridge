@@ -4,7 +4,7 @@ import KeyboardShortcuts
 import UserNotifications
 import WebKit
 
-final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate, NSMenuItemValidation {
     let model = Model()
     var server: Server?
     var window: MainWindow!
@@ -169,7 +169,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             }
         case .command(let name, let argument):
             guard Env.test else { reply(.error("test mode only")); return }
-            reply(window.perform(command: name, argument: argument) ? .ok(state()) : .error("unknown command \(name)"))
+            let done = name == "menu" ? choose(menu: argument ?? "") : name == "settings-login" ? settingsWindow.login.performClick(nil) == () : window.perform(command: name, argument: argument)
+            reply(done ? .ok(state()) : .error("unknown command \(name)"))
         case .shot(let path, let screen):
             Task { @MainActor in
                 do {
@@ -261,6 +262,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         out["updateReady"] = .bool(updateReady)
         out["updateText"] = updateText.map { .string($0) } ?? .null
         out["banner"] = window.bannerText.map { .string($0) } ?? .null
+        let strip = window.content.banner
+        out["bannerStrip"] = strip.isHidden ? .null : .object([
+            "text": .string(window.content.bannerLabel.stringValue), "height": .number(Double(strip.frame.height)), "width": .number(Double(strip.frame.width)),
+            "top": .number(Double((window.window?.frame.height ?? 0) - strip.convert(strip.bounds, to: nil).maxY)),
+            "pageInset": .number(Double(window.content.shown?.webView.obscuredContentInsets.top ?? 0)),
+        ])
+        out["menu"] = menuState()
+        out["undo"] = .string(window.window?.undoManager?.canUndo == true ? window.window?.undoManager?.undoMenuItemTitle ?? "" : "")
+        out["redo"] = .string(window.window?.undoManager?.canRedo == true ? window.window?.undoManager?.redoMenuItemTitle ?? "" : "")
+        out["pageFocused"] = .bool((window.window?.firstResponder as? NSView)?.isDescendant(of: window.content.container) == true)
+        out["listHeaderFits"] = .bool(window.listHeader.fits)
         out["rowMenu"] = .array(window.rowMenuTitles.map { .string($0) })
         out["rowMenuTargets"] = .array(window.rowMenuTargets.map { .string($0) })
         out["sidebarGeometry"] = .object(window.sidebar.geometry())
@@ -281,7 +293,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         out["documentTitleX"] = .number(Double(window.docTitleView.convert(window.docTitleView.bounds, to: nil).minX))
         out["bridgesColumn"] = .array(model.shown().map { .string($0.location) })
         out["pageWindows"] = .array(window.windows.sorted { $0.key < $1.key }.map { location, w in
-            .object(["location": .string(location), "title": .string(w.window?.title ?? ""), "visible": .bool(w.window?.isVisible ?? false),
+            let send = w.window?.toolbar?.items.first { $0.itemIdentifier == MainWindow.send }
+            return .object(["location": .string(location), "title": .string(w.window?.title ?? ""), "visible": .bool(w.window?.isVisible ?? false),
+                     "subtitle": .string(w.window?.subtitle ?? ""), "tabbing": .bool(w.window?.tabbingMode != .disallowed),
+                     "sendEnabled": .bool(send?.isEnabled ?? false), "sendToolTip": .string(send?.toolTip ?? ""),
                      "showsPage": .bool(w.content.shown === w.page), "topLeft": .array([.number(Double(w.window?.frame.minX ?? 0)), .number(Double(w.window?.frame.maxY ?? 0))])])
         })
         out["contentShowsPage"] = .bool(window.content.shown != nil)
@@ -290,7 +305,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             .object(["id": .string($0.itemIdentifier.rawValue), "label": .string($0.label), "enabled": .bool($0.isEnabled), "hidden": .bool($0.isHidden),
                      "symbol": .string($0.image?.accessibilityDescription ?? "")])
         })
-        out["subtitle"] = .string(window.window?.subtitle ?? "")
         out["sidebar"] = .array(model.listing.projects.map { project in
             .object([
                 "project": .string((project as NSString).lastPathComponent),
@@ -324,16 +338,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         if let open = Freeze.current { return open.cancel() }
         let page = (NSApp.keyWindow?.windowController as? PageWindow)?.page ?? model.selectedPage
         let picked = fromBridge ? page.flatMap { model.listing.entry($0.location)?.session } : nil
+        let recipients = model.agentsByStart()
         Task {
-            await Freeze.start(recipients: model.agentsByStart(), picked: picked, page: freezePage) { [weak self] freeze, outcome in
+            await Freeze.start(recipients: recipients, picked: picked, page: freezePage) { [weak self] freeze, outcome in
                 guard let self, outcome != .cancel else { return }
-                let session: String? = if case .send(let s) = outcome, model.agents[s] != nil { s } else { nil }
-                let (draft, pages, outside) = model.land(freeze, keep: session == nil)
-                if let session {
-                    freeze.remember(outside.map(\.note), sentTo: session)
-                    return model.tell(session, pages: pages, outside: outside)
-                }
+                let session: String? = if case .send(let s) = outcome { s } else { nil }
+                let (draft, pages, outside, told) = model.land(freeze, to: session)
+                if told, let session { return freeze.remember(outside.map(\.note), sentTo: session) }
                 guard let location = draft ?? pages.first else { return }
+                if let draft, let session {
+                    let name = [recipients.first { $0.session == session }?.name, model.lastPage(of: session)?.title].compactMap { $0 }.first { !$0.isEmpty }
+                    model.page(for: draft).undelivered = "\(name ?? "The agent") had ended, so your notes are kept here as a draft."
+                }
                 model.scope = .project(draft == nil ? model.listing.entry(location)?.project ?? Paths.drafts.path : Paths.drafts.path)
                 model.selected = location
                 model.changed()
@@ -346,9 +362,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     func buildMenu() {
         let main = NSMenu()
         let appMenu = NSMenu()
+        appMenu.addItem(withTitle: "About Bridge", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Settings…", action: #selector(showSettings), keyEquivalent: ",").target = self
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Hide Bridge", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        appMenu.addItem(withTitle: "Hide Others", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h").keyEquivalentModifierMask = [.command, .option]
+        appMenu.addItem(withTitle: "Show All", action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: "")
+        appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Quit Bridge", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         main.addItem(withTitle: "Bridge", action: nil, keyEquivalent: "").submenu = appMenu
 
@@ -361,6 +382,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         main.addItem(withTitle: "Edit", action: nil, keyEquivalent: "").submenu = edit
+
+        let view = NSMenu(title: "View")
+        view.addItem(withTitle: "Show Sidebar", action: #selector(NSSplitViewController.toggleSidebar(_:)), keyEquivalent: "s").keyEquivalentModifierMask = [.command, .control]
+        view.addItem(withTitle: "Enter Full Screen", action: #selector(NSWindow.toggleFullScreen(_:)), keyEquivalent: "f").keyEquivalentModifierMask = [.command, .control]
+        main.addItem(withTitle: "View", action: nil, keyEquivalent: "").submenu = view
 
         let bridge = NSMenu(title: "Bridge")
         func item(_ title: String, _ command: String, _ key: String, _ mods: NSEvent.ModifierFlags = .command) {
@@ -391,8 +417,71 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         let windowMenu = NSMenu(title: "Window")
         windowMenu.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
         windowMenu.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        windowMenu.addItem(withTitle: "Zoom", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
+        windowMenu.addItem(.separator())
+        windowMenu.addItem(withTitle: "Bring All to Front", action: #selector(NSApplication.arrangeInFront(_:)), keyEquivalent: "")
         main.addItem(withTitle: "Window", action: nil, keyEquivalent: "").submenu = windowMenu
         NSApp.mainMenu = main
         NSApp.windowsMenu = windowMenu
+    }
+
+    @objc func menuCommand(_ sender: NSMenuItem) {
+        perform(menu: sender.representedObject as? String ?? "")
+    }
+
+    func perform(menu command: String) {
+        switch command {
+        case "point": freeze()
+        case "new", "crossed":
+            if command == "new" || window.window?.isVisible != true { window.showWindow(nil) }
+            _ = window.perform(command: command, argument: nil)
+        default: break
+        }
+    }
+
+    func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        switch item.representedObject as? String {
+        case nil, "new", "point": return true
+        case "crossed":
+            item.title = window.crossedTitle
+            return true
+        default: return false
+        }
+    }
+
+    // MARK: Harness
+
+    func menuItems(in menu: NSMenu? = NSApp.mainMenu) -> [NSMenuItem] {
+        (menu?.items ?? []).flatMap { $0.submenu.map { menuItems(in: $0) } ?? ($0.isSeparatorItem || $0.isHidden || $0.isAlternate ? [] : [$0]) }
+    }
+
+    func target(of item: NSMenuItem) -> NSObject? {
+        guard let action = item.action else { return nil }
+        if let target = item.target as? NSObject { return target }
+        let front = NSApp.orderedWindows.first { $0.isVisible && $0.canBecomeMain }
+        var chain: [NSObject] = []
+        var responder = front?.firstResponder
+        while let next = responder { chain.append(next); responder = next.nextResponder }
+        if let front, !chain.contains(front) { chain.append(front) }
+        chain += [front?.delegate as? NSObject, NSApp, self].compactMap { $0 }
+        return chain.first { $0.responds(to: action) }
+    }
+
+    func enabled(_ item: NSMenuItem) -> Bool {
+        guard let target = target(of: item) else { return false }
+        return (target as? NSMenuItemValidation)?.validateMenuItem(item) ?? (target as? NSUserInterfaceValidations)?.validateUserInterfaceItem(item) ?? true
+    }
+
+    func choose(menu command: String) -> Bool {
+        guard let item = menuItems().first(where: { $0.representedObject as? String == command || $0.title == command }), enabled(item), let action = item.action else { return false }
+        return NSApp.sendAction(action, to: target(of: item), from: item)
+    }
+
+    func menuState() -> JSONValue {
+        .array(menuItems().map { item in
+            let on = enabled(item)
+            return .object(["menu": .string(item.menu?.title ?? ""), "title": .string(item.title), "command": .string(item.representedObject as? String ?? ""),
+                            "enabled": .bool(on), "target": .string(target(of: item).map { String(describing: type(of: $0)) } ?? "")])
+        })
     }
 }

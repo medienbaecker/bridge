@@ -6,7 +6,7 @@ final class PageWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
     let content = ContentController()
     var onClose: () -> Void = {}
 
-    init(page: Page, near main: NSWindow?) {
+    init(page: Page) {
         self.page = page
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 760, height: 720),
@@ -14,14 +14,13 @@ final class PageWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
             backing: .buffered, defer: false)
         window.toolbarStyle = .unified
         window.isReleasedWhenClosed = false
-        window.tabbingIdentifier = "Bridge.page"
+        window.tabbingMode = .disallowed
         window.minSize = NSSize(width: 480, height: 300)
         super.init(window: window)
         window.delegate = self
         shouldCascadeWindows = false
         window.contentViewController = content
         window.setContentSize(NSSize(width: 760, height: 720))
-        window.cascadeTopLeft(from: (NSApp.keyWindow ?? main).map { NSPoint(x: $0.frame.minX, y: $0.frame.maxY) } ?? .zero)
 
         let toolbar = NSToolbar(identifier: "Bridge.page")
         toolbar.delegate = self
@@ -62,10 +61,7 @@ final class PageWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
 
     func validateToolbarItem(_ item: NSToolbarItem) -> Bool {
         switch item.itemIdentifier {
-        case MainWindow.send:
-            MainWindow.styleSend(item, page.sendLabel)
-            item.toolTip = page.sendToolTip
-            return page.viewingVersion == nil
+        case MainWindow.send: return MainWindow.validateSend(item, for: page)
         default: return true
         }
     }
@@ -76,12 +72,12 @@ final class PageWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         switch item.representedObject as? String {
-        case "send": return page.viewingVersion == nil && !(page.isDraft && page.sidecar.blank)
+        case "send": return MainWindow.canSend(page)
         case "reveal": return page.kind != .url
         case "point", "zoom-in", "zoom-out", "zoom-reset": return true
         case "previous": return (page.viewingVersion ?? page.sidecar.version) > 1
         case "next": return page.viewingVersion != nil
-        default: return item.representedObject == nil
+        default: return (NSApp.delegate as? AppDelegate)?.validateMenuItem(item) ?? false
         }
     }
 
@@ -95,7 +91,7 @@ final class PageWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         case "reveal": if page.kind != .url { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: page.location)]) }
         case "previous": page.showVersion((page.viewingVersion ?? page.sidecar.version) - 1)
         case "next": page.showVersion((page.viewingVersion ?? page.sidecar.version) + 1)
-        default: return
+        default: (NSApp.delegate as? AppDelegate)?.perform(menu: command); return
         }
         refresh()
     }
