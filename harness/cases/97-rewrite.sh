@@ -23,23 +23,23 @@ repo
 claude_session "$BRIDGE_SESSION"
 (cd "$CASE_DIR/pages" && bridge form.html 2>/dev/null); wait_ready; settle 0.6
 js() { bridge --js "$page" "$1"; }
-read() { bridge --read "$page"; }
+answers() { bridge --read "$page"; }
 pick() { js "const el = document.getElementById('$1'); el.value = '$2'; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); return 1" >/dev/null; settle 0.3; }
 click() { js "document.getElementById('$1').click(); return 1" >/dev/null; settle 0.3; }
 shown() { js "const v = (id) => document.getElementById(id); return [v('name').value, v('font').value, v('agree').checked, v('news').checked, v('radius').value, v('right').checked, v('mon').checked, v('note').value, !!document.querySelector('[data-selected]')].join('|')" | jq -r .; }
 marks() { js "return document.querySelectorAll('.bridge-answered-dot, [data-answered]').length"; }
 tags() { js "return [...document.querySelectorAll('[data-default-tag]')].map(t => t.textContent.trim()).join(',') + '|' + [...document.querySelectorAll('bridge-default')].map(t => t.previousElementSibling.id).join(',')" | jq -r .; }
 
-check_json "an untouched unchecked box proposes nothing; a checked one and a select do" "$(read)" '.defaults | tojson' '{"font":"Inter","news":true,"radius":8}'
+check_json "an untouched unchecked box proposes nothing; a checked one and a select do" "$(answers)" '.defaults | tojson' '{"font":"Inter","news":true,"radius":8}'
 check "and only those carry the default tag" "$(tags)" "Newsletter|font,radius"
 
 click agree
-check_json "ticking a box is an answer" "$(read)" '.answers.agree' "true"
+check_json "ticking a box is an answer" "$(answers)" '.answers.agree' "true"
 click agree
-check_json "unticking it again takes the answer back" "$(read)" '.answers | has("agree")' "false"
+check_json "unticking it again takes the answer back" "$(answers)" '.answers | has("agree")' "false"
 click mon
 click mon
-check_json "a group with every box unticked again is no answer either" "$(read)" '.answers | has("days")' "false"
+check_json "a group with every box unticked again is no answer either" "$(answers)" '.answers | has("days")' "false"
 
 js "document.querySelector('[data-value=grid]').click(); return 1" >/dev/null
 pick name Alex
@@ -61,7 +61,7 @@ s=s.replace('</div>\n<label>Name', '  <div data-record="layout" data-value="maso
 open(p,'w').write(s)
 PY
 settle 0.8
-r=$(read)
+r=$(answers)
 check_json "the rewrite is version 2 with nothing answered" "$r" '"\(.version) \(.answers | length) \(.history[0].answers.name)"' "2 0 Alex"
 check "every control is back at the page's own value, the focused one too" "$(shown)" "|Inter|false|true|8|false|false||false"
 check_json "no control is marked as answered" "$(marks)" '.' "0"
