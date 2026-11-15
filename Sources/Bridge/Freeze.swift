@@ -136,6 +136,7 @@ final class Freeze: NSObject {
             freeze.veiled = NSApp.windows.filter { !($0 is FreezePanel) && $0.alphaValue > 0 }
             for window in freeze.veiled { window.alphaValue = 0 }
         }
+        freeze.panel.alphaValue = 0
         freeze.panel.orderFrontRegardless()
         freeze.content = Task { await Result { try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true) } }
         freeze.captures += 1
@@ -147,8 +148,10 @@ final class Freeze: NSObject {
             return picture
         }
         Task {
-            guard let picture = await freeze.still?.value, current === freeze else { return }
-            freeze.backdrop.layer?.contents = picture.image
+            let picture = await freeze.still?.value
+            guard current === freeze else { return }
+            freeze.backdrop.layer?.contents = picture?.image
+            freeze.panel.alphaValue = 1
         }
         if !Env.test { freeze.panel.makeKeyAndOrderFront(nil) }
         freeze.panel.makeFirstResponder(page.webView)
@@ -524,7 +527,7 @@ final class Freeze: NSObject {
     func shoot(_ frame: CGRect) async -> Picture? {
         let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
         guard let fetched = await Self.within(5, { await self.content?.value }) else { return nil }
-        guard case .success(var content) = fetched else {
+        guard case .success(let content) = fetched else {
             if Self.current === self { cancel() }
             let alert = NSAlert()
             alert.messageText = "Bridge can't see the screen"
@@ -532,22 +535,11 @@ final class Freeze: NSObject {
             if !Env.test { alert.runModal() }
             return nil
         }
-        if !content.windows.contains(where: { $0.windowID == CGWindowID(panel.windowNumber) }),
-           let again = await Self.within(5, { try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true) }) {
-            content = again
-        }
-        guard let display = content.displays.first(where: { $0.displayID == number }) else { return nil }
-        let glass = content.windows.filter { $0.windowID == CGWindowID(panel.windowNumber) }
-        glassLeftOut = !glass.isEmpty
-        let filter = SCContentFilter(display: display, excludingWindows: glass)
-        let scale = CGFloat(filter.pointPixelScale)
-        let config = SCStreamConfiguration()
-        config.sourceRect = frame
-        config.width = Int(frame.width * scale)
-        config.height = Int(frame.height * scale)
-        config.showsCursor = false
-        config.captureResolution = .best
-        guard let image = await Self.within(5, { try? await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config) }) else { return nil }
+        guard content.displays.contains(where: { $0.displayID == number }) else { return nil }
+        glassLeftOut = panel.alphaValue == 0
+        let primary = NSScreen.screens.first?.frame ?? screen.frame
+        let rect = CGRect(x: screen.frame.minX + frame.minX, y: primary.maxY - screen.frame.maxY + frame.minY, width: frame.width, height: frame.height)
+        guard let image = await Self.within(5, { try? await SCScreenshotManager.captureImage(in: rect) }) else { return nil }
         return Picture(image: image, frame: frame)
     }
 
