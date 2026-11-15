@@ -22,7 +22,7 @@ async function vendor() {
     logLevel: 'error',
   });
   for (const m of modules) {
-    const names = Object.keys(await import(m)).filter((n) => n !== 'default');
+    const names = Object.keys(await import(m)).filter((n) => n !== 'default' && /^[A-Za-z_$][\w$]*$/.test(n));
     const lines = [`const v = globalThis.__bridgeVendor['${m}'];`, 'export default v.default ?? v;']
       .concat(names.map((n) => `export const ${n} = v.${n};`));
     writeFileSync(resolve(dist, 'shims', key(m) + '.js'), lines.join('\n') + '\n');
