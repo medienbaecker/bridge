@@ -141,6 +141,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             reply(.ok(.object(["ready": .bool(page.ready), "unknownClasses": .array(page.unknownClasses.map { .string($0) }),
                                "collidingClasses": .array(page.collidingClasses.map { .string($0) }),
                                "errors": .array(page.errors.map { .string($0) }),
+                               "buildFailures": .array(page.buildFailures.map { .string($0) }),
                                "version": .number(Double(page.sidecar.version)),
                                "current": .bool(onDisk != nil && page.shapedContent == onDisk),
                                "bumpedByThis": .bool(onDisk != nil && page.bump?.content == onDisk),

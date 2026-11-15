@@ -72,18 +72,20 @@ function __bridgeInit(options) {
   function record(key, value, delay, fromScript) {
     if (state.readOnly) return;
     const proposed = state.proposed || {};
-    if (!fromScript && (key in proposed ? same(value, proposed[key]) : empty(value))) { clear(key); return; }
+    if (!fromScript && (key in proposed ? same(value, proposed[key]) : empty(value) || value === false)) { clear(key); return; }
     state.answers[key] = value;
     markAnswered(key, true);
     markDefaults();
     if (state.status === 'sent') setStatus('open');
     clearTimeout(state.timers[key]);
-    if (delay) state.timers[key] = setTimeout(() => post('record', { key, value }), 150);
+    delete state.timers[key];
+    if (delay) state.timers[key] = setTimeout(() => { delete state.timers[key]; post('record', { key, value }); }, 150);
     else post('record', { key, value });
   }
 
   function clear(key) {
     clearTimeout(state.timers[key]);
+    delete state.timers[key];
     if (state.readOnly || !(key in state.answers)) return;
     delete state.answers[key];
     markAnswered(key, false);
@@ -112,7 +114,7 @@ function __bridgeInit(options) {
         if (ours(el)) continue;
         const dial = el.closest('.dial');
         if (dial) dial.setAttribute('data-default', '');
-        else if (el.matches('input[type=radio], input[type=checkbox]')) { if (el.type === 'checkbox' || el.checked) { const label = labelOf(el); if (label) tag(label, true); else tag(el); } }
+        else if (el.matches('input[type=radio], input[type=checkbox]')) { if (el.checked) { const label = labelOf(el); if (label) tag(label, true); else tag(el); } }
         else if (el.matches('input, select, textarea, .color')) { el.setAttribute('data-default', ''); tag(el); }
         else {
           const radio = el.querySelector('input[type=radio]:checked');
@@ -142,10 +144,30 @@ function __bridgeInit(options) {
     }
   }
 
-  function applyAnswers(answers) {
-    for (const el of document.querySelectorAll('[data-record][data-value][data-selected]:not(.color)')) {
-      if (!(el.dataset.record in answers)) { el.removeAttribute('data-selected'); el.setAttribute('aria-pressed', 'false'); }
+  function resetControl(el, force) {
+    if (el.type === 'checkbox' || el.type === 'radio') el.checked = el.defaultChecked;
+    else if (el.matches('select')) for (const o of el.options) o.selected = o.defaultSelected;
+    else if (force || document.activeElement !== el) el.value = el.defaultValue;
+  }
+
+  function resetUnanswered(answers, force) {
+    const seen = new Set();
+    for (const el of document.querySelectorAll('[data-record]')) {
+      const key = el.dataset.record;
+      if (key in answers || ours(el)) continue;
+      if (!seen.has(key)) { seen.add(key); markAnswered(key, false); }
+      if (el.classList.contains('color')) color.set(el, el.getAttribute('value') || color.initial);
+      else if (el.dataset.value !== undefined) { if (el.hasAttribute('data-selected')) { el.removeAttribute('data-selected'); el.setAttribute('aria-pressed', 'false'); } }
+      else if (el.matches('input, select, textarea')) resetControl(el, force);
+      else if (!el.isContentEditable) {
+        for (const input of el.querySelectorAll('input, select, textarea')) resetControl(input, force);
+        swatches.mark(el);
+      }
     }
+  }
+
+  function applyAnswers(answers, force) {
+    resetUnanswered(answers, force);
     for (const [key, value] of Object.entries(answers)) {
       markAnswered(key, true);
       const els = document.querySelectorAll(`[data-record="${CSS.escape(key)}"]`);
@@ -181,7 +203,7 @@ function __bridgeInit(options) {
       const els = document.querySelectorAll(`[data-record="${CSS.escape(key)}"]`);
       if (!els.length) continue;
       const last = els[els.length - 1];
-      const host = last.closest('.dial') || (last.dataset.value !== undefined && last.parentElement.classList.contains('options') ? last.parentElement : last);
+      const host = last.closest('.dial') || (last.dataset.value !== undefined && last.parentElement.classList.contains('options') ? last.parentElement : last.closest('label') || last);
       const hint = document.createElement('span');
       hint.className = 'bridge-previous';
       let text = Array.isArray(value) ? value.join(', ') : String(value);
@@ -236,13 +258,16 @@ function __bridgeInit(options) {
   }
 
   function apply(payload) {
-    state.answers = payload.answers || {};
+    const rewritten = state.version !== undefined && payload.version !== state.version;
+    state.version = payload.version;
+    const unsaved = rewritten ? [] : Object.keys(state.timers).filter((key) => key in state.answers).map((key) => [key, state.answers[key]]);
+    state.answers = { ...payload.answers, ...Object.fromEntries(unsaved) };
     state.proposed = payload.proposed || {};
     state.readOnly = payload.readOnly;
     state.previous = payload.previous;
     setStatus(payload.status);
     root.toggleAttribute('data-bridge-readonly', payload.readOnly);
-    applyAnswers(state.answers);
+    applyAnswers(state.answers, rewritten);
     markDefaults();
     applyDials();
     applyPrevious(payload.previous);
@@ -429,7 +454,7 @@ function __bridgeInit(options) {
 
   // ---- colour: OKLCH dials, rendered by the browser, hex and gamut computed here
 
-  const color = {};
+  const color = { initial: 'oklch(0.7 0.12 250)' };
   color.toLinear = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
   color.toGamma = (c) => (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055);
   color.fromRgb = (r, g, b) => {
@@ -488,7 +513,7 @@ function __bridgeInit(options) {
       const lch = color.parse(e.target.value);
       if (lch) { color.set(host, color.string(lch)); color.commit(host); }
     });
-    color.set(host, host.getAttribute('value') || 'oklch(0.7 0.12 250)');
+    color.set(host, host.getAttribute('value') || color.initial);
   };
 
   color.set = function (host, text) {
@@ -524,9 +549,26 @@ function __bridgeInit(options) {
     if (host.dataset.drive) drive(host.dataset.drive, css, host.dataset.target, host.dataset.frameTarget);
   };
 
+  function fitTables() {
+    for (const table of document.querySelectorAll('table')) {
+      if (ours(table)) continue;
+      const wide = table.hasAttribute('data-bridge-wide');
+      const box = getComputedStyle(table.parentElement);
+      const room = table.parentElement.clientWidth - parseFloat(box.paddingLeft) - parseFloat(box.paddingRight);
+      const overflows = wide ? table.scrollWidth > table.clientWidth : table.offsetWidth > Math.ceil(room);
+      if (overflows !== wide) table.toggleAttribute('data-bridge-wide', overflows);
+    }
+  }
+  new ResizeObserver(fitTables).observe(root);
+
   function enhance() {
     for (const host of document.querySelectorAll('.color')) color.build(host);
     swatches.paint();
+    for (const option of document.querySelectorAll('[data-record][data-value]:not(.color, button, a[href], input, select, textarea, [tabindex])')) {
+      option.tabIndex = 0;
+      if (!option.hasAttribute('role')) option.setAttribute('role', 'button');
+    }
+    fitTables();
   }
   document.addEventListener('change', (e) => onInput(e, false));
 
@@ -1235,6 +1277,7 @@ function __bridgeInit(options) {
   document.addEventListener('bridge:error', () => post('error', { text: root.dataset.bridgeError }));
   document.addEventListener('bridge:rendered', async () => {
     if (!started) { ready(); return; }
+    enhance();
     const payload = await post('shape', shape());
     apply(payload);
   });
@@ -1289,7 +1332,7 @@ function __bridgeInit(options) {
       const key = el.dataset.record;
       if (key in out || ours(el)) continue;
       if (el.type === 'radio') { if (el.checked) out[key] = el.value; }
-      else if (el.type === 'checkbox') out[key] = el.checked;
+      else if (el.type === 'checkbox') { if (el.checked) out[key] = true; }
       else if (el.type === 'range' || el.type === 'number') { if (el.value !== '') out[key] = valueOf(el); }
       else if (el.value) out[key] = valueOf(el);
     }
@@ -1299,7 +1342,7 @@ function __bridgeInit(options) {
       const boxes = [...group.querySelectorAll('input[type=checkbox]')];
       const radio = group.querySelector('input[type=radio]:checked');
       if (radio) out[key] = radio.value;
-      else if (boxes.length) out[key] = boxes.length === 1 ? boxes[0].checked : boxes.filter((i) => i.checked).map((i) => i.value);
+      else if (boxes.some((i) => i.checked)) out[key] = boxes.length === 1 ? true : boxes.filter((i) => i.checked).map((i) => i.value);
     }
     return out;
   }

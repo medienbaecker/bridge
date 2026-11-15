@@ -28,6 +28,9 @@ below show how each kit part is written, not what a page should look like.
 - `data-copy="#selector"` on a button copies that element's text (or a
   textarea's value) and shows "Copied".
 - Two rewrites with the same keys and offered values are the same version.
+  A rewrite that changes them is a new version: the user's answers move to
+  `history` in `--read`, every control shows the page's own value again, and
+  a "Last time" hint under each control says what they answered before.
 
 ### Recording from a script: an editor
 
@@ -82,12 +85,12 @@ removed.
 <section id="layout">
 <h2>Layout</h2>
 <div class="options">
-  <div data-record="layout" data-value="grid" tabindex="0">
+  <div data-record="layout" data-value="grid">
     <img src="/Users/you/Projects/site/shots/grid.png" alt="">
     <strong>Grid</strong>
     Three columns at desktop. Titles wrap to two lines on 12 of 140 entries.
   </div>
-  <div data-record="layout" data-value="list" tabindex="0">
+  <div data-record="layout" data-value="list">
     <img src="/Users/you/Projects/site/shots/list.png" alt="">
     <strong>List</strong>
     One entry per row. Nothing wraps; the page is 4.5 screens tall.
@@ -104,7 +107,9 @@ removed.
 ```
 
 `.options.stack` stacks options in one column. Put `<strong>` first in an
-option: it becomes the option's name in "last time" hints.
+option: it becomes the option's name in "last time" hints. The kit makes
+every option card reachable by keyboard (`tabindex="0"`, `role="button"`,
+Enter or Space picks it), so do not add a `tabindex` yourself.
 
 Options can also be radios, which is the right shape when the page is a
 `<fieldset>` with a `<legend>` question, or when the options need a real
@@ -128,7 +133,8 @@ after the user has answered it (that changes what the page asks).
 
 Do not pre-check an option. A `checked` radio or checkbox looks like a choice
 even with the "default" tag the window gives it, and `--read` shows it under
-`defaults`, not `answers`, until they change it. A range or select starts at
+`defaults`, not `answers`, until they change it. An unchecked checkbox
+proposes nothing: it has no tag and is in neither list until they tick it. A range or select starts at
 today's value, so what they leave alone means "keep it". A second click on a
 chosen card or radio takes the answer back.
 
@@ -189,7 +195,8 @@ lorem ipsum dolor sit amet …</pre>
 <textarea data-record="changes" placeholder="What to change"></textarea>
 ```
 
-Never also print the draft in the chat.
+A `<button>` with `data-record` and `data-value` stays a button, and the
+chosen one is outlined in the accent. Never also print the draft in the chat.
 
 ### Screenshots: stacked and before/after
 
@@ -486,6 +493,11 @@ built from positioned pieces goes in a plain `div` of its own, never a
 `.card`: positioned children of the page or a card get the margin too and
 move down by it. To space a column of your own pieces, use `.stack` (a flex
 column with `gap`; set `--bridge-gap` on it, 12px by default).
+
+Long words wrap and, when the page names its language (`<html lang="de">`),
+hyphenate, so a German compound stays inside its card. A table too wide for
+the page scrolls sideways in its own box; the page itself never does. A
+`disabled` button or input is dimmed.
 
 The kit's look (type, spacing, tables, panels, bars) sits in a cascade layer,
 so any rule the page writes wins over it, whatever its specificity. The parts

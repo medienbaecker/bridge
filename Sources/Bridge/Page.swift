@@ -51,6 +51,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
     var watcher: Watcher?
     var media: [String: Date] = [:]
     var buildFailed = false
+    var buildFailures: [String] = []
     var frames: [WKFrameInfo] = []
     var frameLinks: [String: Links] = [:]
     var shape: String?
@@ -241,10 +242,12 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
                 switch await Builder.build(location) {
                 case .built(let index):
                     buildFailed = false
+                    buildFailures = []
                     note = nil
                     webView.loadFileURL(index, allowingReadAccessTo: URL(fileURLWithPath: "/"))
                 case .failed(let failures):
                     buildFailed = true
+                    buildFailures = failures.map { f in f.text + (f.line.map { " (\((f.file as NSString?)?.lastPathComponent ?? ""):\($0))" } ?? "") }
                     note = "Build failed: " + (failures.first?.text ?? "")
                     webView.loadHTMLString(Builder.failurePage(location, failures), baseURL: URL(fileURLWithPath: location))
                 }

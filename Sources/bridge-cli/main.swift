@@ -368,6 +368,7 @@ default:
     _ = check(send(.present(locations: locations, cwd: cwd, session: Session.current, ground: Ground.current(in: cwd), links: links, site: site), launching: true))
     // The agent that wrote the page sees this in its tool result; nothing else
     // would tell it that classes it made up style nothing.
+    var unbuilt = 0
     for loc in locations where Kind.of(loc) != .url {
         for _ in 0..<40 {
             // An older app does not know this request and answers with an error: nothing to wait for.
@@ -382,6 +383,10 @@ default:
             for e in v["errors"]?.arrayValue?.compactMap(\.stringValue) ?? [] {
                 FileHandle.standardError.write(Data("\(me): \(file) threw: \(e)\n".utf8))
             }
+            for f in v["buildFailures"]?.arrayValue?.compactMap(\.stringValue) ?? [] {
+                FileHandle.standardError.write(Data("\(me): \(file) did not build: \(f)\n".utf8))
+                unbuilt += 1
+            }
             if !both.isEmpty {
                 FileHandle.standardError.write(Data("\(me): classes on \(file) that the page and the kit both style, so the page gets both: \(both.joined(separator: ", ")): rename yours or reset what the kit sets\n".utf8))
             }
@@ -392,6 +397,7 @@ default:
             FileHandle.standardError.write(Data("\(me): \(src) in \((loc as NSString).lastPathComponent) refuses to be shown in a frame (\(why)), so it stays blank: present the URL on its own, or serve it through a proxy that drops that header\n".utf8))
         }
     }
+    if unbuilt > 0 { fail("the window shows the build failure: fix the file, and it builds again when you save it") }
 }
 
 func refusedFrames(_ sources: [String]) -> [(String, String)] {

@@ -30,6 +30,7 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 #root { padding: 28px 32px 48px; max-width: 880px; }
+table[data-bridge-wide] { display: block; overflow-x: auto; }
 [data-record][data-value] {
   cursor: default;
   transition: outline-color 80ms, box-shadow 80ms;
