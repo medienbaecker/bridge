@@ -549,9 +549,26 @@ function __bridgeInit(options) {
     if (host.dataset.drive) drive(host.dataset.drive, css, host.dataset.target, host.dataset.frameTarget);
   };
 
+  function fitTables() {
+    for (const table of document.querySelectorAll('table')) {
+      if (ours(table)) continue;
+      const wide = table.hasAttribute('data-bridge-wide');
+      const box = getComputedStyle(table.parentElement);
+      const room = table.parentElement.clientWidth - parseFloat(box.paddingLeft) - parseFloat(box.paddingRight);
+      const overflows = wide ? table.scrollWidth > table.clientWidth : table.offsetWidth > Math.ceil(room);
+      if (overflows !== wide) table.toggleAttribute('data-bridge-wide', overflows);
+    }
+  }
+  new ResizeObserver(fitTables).observe(root);
+
   function enhance() {
     for (const host of document.querySelectorAll('.color')) color.build(host);
     swatches.paint();
+    for (const option of document.querySelectorAll('[data-record][data-value]:not(.color, button, a[href], input, select, textarea, [tabindex])')) {
+      option.tabIndex = 0;
+      if (!option.hasAttribute('role')) option.setAttribute('role', 'button');
+    }
+    fitTables();
   }
   document.addEventListener('change', (e) => onInput(e, false));
 
@@ -1210,6 +1227,7 @@ function __bridgeInit(options) {
   document.addEventListener('bridge:error', () => post('error', { text: root.dataset.bridgeError }));
   document.addEventListener('bridge:rendered', async () => {
     if (!started) { ready(); return; }
+    enhance();
     const payload = await post('shape', shape());
     apply(payload);
   });
