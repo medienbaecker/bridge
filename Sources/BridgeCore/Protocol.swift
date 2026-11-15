@@ -123,7 +123,11 @@ public final class Server: @unchecked Sendable {
         Thread.detachNewThread { [self] in
             while true {
                 let conn = accept(fd, nil, nil)
-                if conn < 0 { break }
+                if conn < 0 {
+                    if errno == EBADF { break }
+                    usleep(50_000)
+                    continue
+                }
                 Thread.detachNewThread { self.serve(conn) }
             }
         }

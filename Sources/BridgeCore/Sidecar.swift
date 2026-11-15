@@ -182,6 +182,23 @@ public struct Sidecar: Codable, Equatable, Sendable {
         try s.save(url)
     }
 
+    public mutating func present(_ presentation: Presentation, page: String) {
+        presented = presentation
+        self.page = page
+        if status == "closed" { status = "open"; closedAt = nil }
+    }
+
+    public mutating func collect(by session: String) {
+        guard answered, changedSinceCollected else { return }
+        collectedAt = Date()
+        collectedBy = session
+    }
+
+    public mutating func mark(_ id: String, done: Bool) {
+        guard let i = comments.firstIndex(where: { $0.id == id }) else { return }
+        comments[i].state = done ? "done" : "open"
+    }
+
     public var openComments: [Comment] { comments.filter { $0.state != "done" } }
 
     public var answered: Bool { status == "sent" || status == "closed" }

@@ -106,20 +106,20 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         sidebar.onRowCommand = { [weak self] command, targets in
             guard let self else { return }
             switch command {
-            case "cross": for t in targets { model.cross(t, true) }
-            case "uncross": for t in targets { model.cross(t, false) }
-            case "remove": for t in targets { model.trash(t) }
+            case "cross": model.cross(targets, true)
+            case "uncross": model.cross(targets, false)
+            case "remove": model.trash(targets)
             case "reveal": if let t = targets.first { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: t)]) }
             case "window": for t in targets { openWindow(t) }
             default: break
             }
-            refresh()
         }
         sidebar.onSelect = { [weak self] loc in
             guard let self, model.selected != loc else { return }
             model.selected = loc
             if let loc { model.markRead(loc) }
             refresh()
+            model.selectedPage?.countCommits()
         }
         sidebar.onDragOut = { [weak self] locations, topLeft in
             for (i, location) in locations.enumerated() {
@@ -130,6 +130,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         sidebar.windowPreview = { [weak self] location in self?.windowPreview(location) }
         sidebar.hasSnapshot = { [weak self] location in self?.snapshots[location] != nil }
         model.onChange = { [weak self] in self?.refresh() }
+        model.inWindows = { [weak self] in Set((self?.windows ?? [:]).keys) }
         model.watched = { [weak self] in self?.window?.isVisible == true && self?.window?.isMiniaturized == false && !NSApp.isHidden }
     }
 
@@ -154,8 +155,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
 
     func takeSnapshots(_ locations: [String]) {
         for location in locations {
-            let web = model.page(for: location).webView
-            guard web.window != nil, web.bounds.width > 0 else { continue }
+            guard let web = model.pages[location]?.webView, web.window != nil, web.bounds.width > 0 else { continue }
             web.takeSnapshot(with: nil) { [weak self] image, _ in self?.snapshots[location] = image }
         }
     }
@@ -282,7 +282,10 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         return true
     }
 
+    var refreshes = 0
+
     func refresh() {
+        refreshes += 1
         projects.reload()
         sidebar.reload()
         for (location, pageWindow) in windows where model.listing.entry(location) == nil { pageWindow.close() }
@@ -503,9 +506,9 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
             guard let argument else { return false }
             page.attach([URL(fileURLWithPath: argument)])
         case "sendto": if !sendDraft(page.location, to: argument ?? "") { return false }
-        case "cross": for t in targets(page) { model.cross(t, true) }
-        case "uncross": for t in targets(page) { model.cross(t, false) }
-        case "remove": for t in targets(page) { model.trash(t) }
+        case "cross": model.cross(targets(page), true); return true
+        case "uncross": model.cross(targets(page), false); return true
+        case "remove": model.trash(targets(page)); return true
         case "select-add":
             guard let argument else { return false }
             let row = sidebar.row(for: argument)
@@ -556,11 +559,13 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         model.selected = location
         model.markRead(location)
         refresh()
+        model.selectedPage?.countCommits()
         windows[location]?.showWindow(nil)
         return true
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
+        model.selectedPage?.countCommits()
         if let loc = model.selected { model.markRead(loc) }
     }
 

@@ -95,13 +95,15 @@ final class PageWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         case "point": app?.freeze()
         case "send": app?.window.send(page, from: window)
         case "new", "crossed": _ = app?.window.perform(command: command, argument: nil); app?.window.showWindow(nil)
-        case "cross": page.model.cross(page.location, true)
-        case "uncross": page.model.cross(page.location, false)
-        case "remove": page.model.trash(page.location)
+        case "cross": page.model.cross([page.location], true)
+        case "uncross": page.model.cross([page.location], false)
+        case "remove": page.model.trash([page.location])
         default: guard page.perform(command) else { return }
         }
         refresh()
     }
+
+    func windowDidBecomeKey(_ notification: Notification) { page.countCommits() }
 
     func windowWillClose(_ notification: Notification) {
         content.show(page: nil)

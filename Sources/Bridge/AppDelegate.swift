@@ -146,21 +146,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                                "bumpedByThis": .bool(onDisk != nil && page.bump?.content == onDisk),
                                "why": page.bump.map { .string($0.why) } ?? .null])))
         case .cross(let loc):
-            model.cross(loc, true); reply(.ok(.null))
+            model.cross([loc], true); reply(.ok(.null))
         case .uncross(let loc):
-            model.cross(loc, false); reply(.ok(.null))
+            model.cross([loc], false); reply(.ok(.null))
         case .remove(let loc):
             model.remove(loc); reply(.ok(.null))
         case .reset(let loc):
             model.reset(loc); reply(.ok(.null))
         case .note(let loc, let id, let done):
-            let page = model.page(for: loc)
-            if let why = page.unreadable { reply(.error(why)); return }
-            page.setNote(id, done: done); reply(.ok(.null))
+            do { try model.setNote(id, done: done, on: loc); reply(.ok(.null)) } catch { reply(.error("\(error)")) }
         case .collect(let loc, let session):
-            let page = model.page(for: loc)
-            if let why = page.unreadable { reply(.error(why)); return }
-            page.collected(by: session); reply(.ok(.null))
+            do { try model.collect(loc, by: session); reply(.ok(.null)) } catch { reply(.error("\(error)")) }
         case .js(let loc, let code):
             guard Env.test, let page = loc.map({ $0 == Paths.freezePage.path ? freezePage : model.page(for: $0) }) ?? model.selectedPage else {
                 reply(.error("no page")); return
@@ -245,6 +241,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                                      "pictures": .array(freeze.notes.map { note in freeze.pictures[note.id].map { p in .array([p.frame.minX, p.frame.minY, p.frame.width, p.frame.height].map { .number(Double($0)) }) } ?? .null })])
         }
         out["webViews"] = .number(Double(window.content.container.subviews.count))
+        out["loadedPages"] = .array(model.pages.keys.sorted().map { .string($0) })
+        out["webProcesses"] = .array(model.pages.values.compactMap { $0.webView.value(forKey: "_webProcessIdentifier") as? Int }.filter { $0 > 0 }.sorted().map { .number(Double($0)) })
+        var limit = rlimit()
+        getrlimit(RLIMIT_NOFILE, &limit)
+        out["handleLimit"] = .number(Double(limit.rlim_cur))
+        out["handles"] = .number(Double((0..<Int32(limit.rlim_cur)).filter { fcntl($0, F_GETFD) != -1 }.count))
+        out["watcherCalls"] = .number(Double(Watcher.calls))
+        out["listSaves"] = .number(Double(model.saves))
+        out["refreshes"] = .number(Double(window.refreshes))
         if let w = window.window {
             out["windowVisible"] = .bool(w.isVisible)
             out["backingScale"] = .number(Double(w.backingScaleFactor))

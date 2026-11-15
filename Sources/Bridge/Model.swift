@@ -41,8 +41,12 @@ final class Model {
     private var held: [String]?
     var showCrossed: Bool = Model.remembered("showCrossed") as? Bool ?? true { didSet { Self.remember(showCrossed, "showCrossed") } }
     var pages: [String: Page] = [:]
+    var recent: [String] = []
+    var lastShown: [String: Page.Shown] = [:]
+    static let keptPages = 5
     var onChange: () -> Void = {}
     var watched: () -> Bool = { false }
+    var inWindows: () -> Set<String> = { [] }
     var waiters: [Waiter] = []
     var agents: [String: ClaudeSessions.Live] = [:]
 
@@ -107,7 +111,7 @@ final class Model {
             !entry.crossed && !isDraft(entry) && now.timeIntervalSince(entry.presentedAt) > endedAfter
                 && life(of: entry.session) == .gone
         }
-        for entry in ended { cross(entry.location, true) }
+        if !ended.isEmpty { cross(ended.map(\.location), true) }
         return ended.count
     }
 
@@ -117,10 +121,14 @@ final class Model {
         selected = shown.first?.location
     }
 
+    var saves = 0
+
     func changed() {
         try? listing.save()
+        saves += 1
         watchForUpdates()
         onChange()
+        closeUnused()
     }
 
     var updateWatchers: [String: Watcher] = [:]
@@ -134,8 +142,7 @@ final class Model {
         }
         for location in open.subtracting(updateWatchers.keys) {
             fingerprints[location] = Self.fingerprint(location)
-            let directory = URL(fileURLWithPath: location).deletingLastPathComponent()
-            updateWatchers[location] = Watcher(directory: directory, files: [location, Paths.dataFile(for: location).path]) { [weak self] in
+            updateWatchers[location] = Watcher(files: [location, Paths.dataFile(for: location).path]) { [weak self] in
                 self?.fileUpdated(location)
             }
         }
@@ -158,13 +165,32 @@ final class Model {
         page.collected(by: session)
     }
 
+    func deliver(_ location: String) {
+        if let page = pages[location] { return deliver(page) }
+        let url = Paths.sidecar(for: location)
+        guard let session = handOver(Sidecar.peek(url), of: location) else { return }
+        try? Sidecar.modify(url) { $0.collect(by: session) }
+    }
+
     func deliver(toNew sessions: Set<String>) {
-        for entry in listing.bridges where sessions.contains(entry.session) {
-            if let page = pages[entry.location] { deliver(page); continue }
-            let url = Paths.sidecar(for: entry.location)
-            guard let session = handOver(Sidecar.peek(url), of: entry.location) else { continue }
-            try? Sidecar.modify(url) { $0.collectedAt = Date(); $0.collectedBy = session }
+        for entry in listing.bridges where sessions.contains(entry.session) { deliver(entry.location) }
+    }
+
+    func collect(_ location: String, by session: String) throws {
+        if let page = pages[location] {
+            if let unreadable = page.unreadable { throw unreadable }
+            return page.collected(by: session)
         }
+        try Sidecar.modify(Paths.sidecar(for: location)) { $0.collect(by: session) }
+    }
+
+    func setNote(_ id: String, done: Bool, on location: String) throws {
+        if let page = pages[location] {
+            if let unreadable = page.unreadable { throw unreadable }
+            return page.setNote(id, done: done)
+        }
+        try Sidecar.modify(Paths.sidecar(for: location)) { $0.mark(id, done: done) }
+        onChange()
     }
 
     private func handOver(_ s: Sidecar, of location: String) -> String? {
@@ -191,18 +217,35 @@ final class Model {
     }
 
     func page(for location: String) -> Page {
+        recent.removeAll { $0 == location }
+        recent.insert(location, at: 0)
         if let p = pages[location] { return p }
         let p = Page(location: location, model: self)
         pages[location] = p
         p.load()
+        closeUnused()
         return p
+    }
+
+    func closeUnused() {
+        let held = inWindows().union([selected].compactMap { $0 })
+        let kept = recent.filter { !held.contains($0) && listing.entry($0)?.crossed != true }.prefix(Self.keptPages)
+        for location in pages.keys where !held.contains(location) && !kept.contains(location) { close(location) }
+        recent.removeAll { pages[$0] == nil }
+    }
+
+    func close(_ location: String) {
+        guard let page = pages[location] else { return }
+        lastShown[location] = page.shown
+        page.close()
+        pages[location] = nil
     }
 
     func present(_ locations: [String], cwd: String, session: String, ground: Ground?, links: String?, site: String?) {
         let inPages = cwd.hasPrefix(Paths.pages.path + "/") || cwd == Paths.pages.path
         let project = Ground.projectRoot(for: inPages ? agents[session]?.cwd ?? cwd : cwd)
         for loc in locations {
-            let siteChanged = pages[loc] != nil && listing.entry(loc)?.site != site
+            let siteChanged = listing.entry(loc)?.site != site
             if listing.entry(loc) != nil {
                 listing.update(loc) { e in
                     e.presentedAt = Date(); e.unread = true; e.crossed = false; e.session = session; e.project = project; e.links = links; e.site = site
@@ -213,9 +256,14 @@ final class Model {
                 entry.site = site
                 listing.bridges.append(entry)
             }
-            let page = page(for: loc)
-            page.presented(Presentation(session: session, cwd: cwd, ground: ground))
-            if siteChanged { page.load() }
+            let presentation = Presentation(session: session, cwd: cwd, ground: ground)
+            if let page = pages[loc] {
+                page.presented(presentation)
+                if siteChanged { page.load() }
+            } else {
+                try? Sidecar.modify(Paths.sidecar(for: loc)) { $0.present(presentation, page: loc) }
+                deliver(loc)
+            }
         }
         if let first = locations.first, selected == nil || !watched() {
             selected = first
@@ -224,23 +272,36 @@ final class Model {
         changed()
     }
 
-    func cross(_ location: String, _ crossed: Bool) {
-        if crossed { Notify.withdraw(listing.entry(location)) }
-        listing.update(location) { $0.crossed = crossed; if crossed { $0.unread = false } }
+    func cross(_ locations: [String], _ crossed: Bool) {
+        for location in locations {
+            if crossed { Notify.withdraw(listing.entry(location)) }
+            listing.update(location) { $0.crossed = crossed; if crossed { $0.unread = false } }
+        }
         changed()
     }
 
     func remove(_ location: String) {
-        Notify.withdraw(listing.entry(location))
-        listing.bridges.removeAll { $0.location == location }
-        pages[location]?.close()
-        pages[location] = nil
-        if selected == location { selected = nil; settleSelection() }
+        forget(location)
         changed()
     }
 
-    func trash(_ location: String) {
-        remove(location)
+    func forget(_ location: String) {
+        Notify.withdraw(listing.entry(location))
+        listing.bridges.removeAll { $0.location == location }
+        close(location)
+        lastShown[location] = nil
+        if selected == location { selected = nil; settleSelection() }
+    }
+
+    func trash(_ locations: [String]) {
+        for location in locations {
+            forget(location)
+            discardFiles(of: location)
+        }
+        changed()
+    }
+
+    func discardFiles(of location: String) {
         let pictures = Sidecar.peek(Paths.sidecar(for: location)).comments.compactMap(\.picture).filter(Paths.inDrafts).map { URL(fileURLWithPath: $0) }
         guard Paths.owned(location) else { return discard(pictures) }
         let file = URL(fileURLWithPath: location)

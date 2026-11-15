@@ -45,7 +45,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
     var lastContent: Data?
     var versionContent: Data?
     var lastWritten: Data?
-    var unreadable: String?
+    var unreadable: (any Error)?
     var lastData: Data?
     var watcher: Watcher?
     var media: [String: Date] = [:]
@@ -66,7 +66,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         self.kind = Kind.of(location)
         self.model = model
         self.sidecarURL = Paths.sidecar(for: location)
-        do { self.sidecar = try Sidecar.load(sidecarURL) } catch { self.sidecar = Sidecar(); self.unreadable = "\(error)" }
+        do { self.sidecar = try Sidecar.load(sidecarURL) } catch { self.sidecar = Sidecar(); self.unreadable = error }
         self.title = model.listing.entry(location)?.title ?? BridgeEntry.defaultTitle(location)
         let config = WKWebViewConfiguration()
         config.preferences.setValue(true, forKey: "developerExtrasEnabled")
@@ -91,14 +91,29 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         webView.uiDelegate = self
         webView.setValue(false, forKey: "drawsBackground")
         if kind != .url, !preview { watch() }
+        if !preview, let shown = model.lastShown[location] {
+            versionContent = shown.content
+            shape = shown.shape
+            changeSummary = shown.changeSummary
+            zoom = shown.zoom
+        }
     }
 
+    struct Shown {
+        let content: Data?
+        let shape: String?
+        let changeSummary: String?
+        let zoom: CGFloat
+    }
+
+    var shown: Shown { Shown(content: versionContent, shape: shape, changeSummary: changeSummary, zoom: zoom) }
+
     func watch() {
-        let dir = URL(fileURLWithPath: location).deletingLastPathComponent()
-        let folders = Set(media.keys.map(Self.existingFolder)).subtracting([dir.path])
-        let files = [location, sidecarURL.path, Paths.dataFile(for: location).path] + media.keys.sorted() + folders.sorted()
-        guard files != watcher?.files else { return }
-        watcher = Watcher(directory: dir, files: files) { [weak self] in self?.fileChanged() }
+        let inPlace = media.keys.filter { Self.existingFolder(of: $0) == ($0 as NSString).deletingLastPathComponent }
+        let files = [location, sidecarURL.path, Paths.dataFile(for: location).path] + inPlace.sorted()
+        let folders = Set(media.keys.map(Self.existingFolder)).subtracting(inPlace.map { ($0 as NSString).deletingLastPathComponent }).sorted()
+        guard files != watcher?.files || folders != watcher?.folders else { return }
+        watcher = Watcher(files: files, folders: folders) { [weak self] in self?.fileChanged() }
     }
 
     static func existingFolder(of path: String) -> String {
@@ -160,9 +175,24 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         return nil
     }
 
+    var commitsSince = 0
+
     var moved: String? {
-        let n = sidecar.presented?.ground?.commitsSince() ?? 0
-        return n > 0 ? "\(n) commit\(n == 1 ? "" : "s") since this was asked" : nil
+        commitsSince > 0 ? "\(commitsSince) commit\(commitsSince == 1 ? "" : "s") since this was asked" : nil
+    }
+
+    func countCommits() {
+        guard let ground = sidecar.presented?.ground else { return }
+        Task {
+            let count = await Self.commits(since: ground)
+            guard ground == sidecar.presented?.ground, count != commitsSince else { return }
+            commitsSince = count
+            model.onChange()
+        }
+    }
+
+    @concurrent nonisolated static func commits(since ground: Ground) async -> Int {
+        ground.commitsSince() ?? 0
     }
 
     static let clock: DateFormatter = {
@@ -178,6 +208,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         frameLinks = [:]
         drives = [:]
         errors = []
+        countCommits()
         // The page reads the record through a document-start script, which is a
         // snapshot taken at injection: re-inject on every load, or a reload sees stale answers.
         installScripts()
@@ -221,17 +252,16 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
     }
 
     func presented(_ p: Presentation) {
-        sidecar.presented = p
-        sidecar.page = location
-        if sidecar.status == "closed" { sidecar.status = "open"; sidecar.closedAt = nil }
+        sidecar.present(p, page: location)
+        commitsSince = 0
+        countCommits()
         save()
         if viewingVersion != nil { load() } else { fileChanged() }
     }
 
     func collected(by session: String) {
         guard sidecar.answered, sidecar.changedSinceCollected else { return }
-        sidecar.collectedAt = Date()
-        sidecar.collectedBy = session
+        sidecar.collect(by: session)
         save()
     }
 
@@ -247,7 +277,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         refreshMedia()
         if let data = try? Data(contentsOf: sidecarURL), data != lastWritten, data != sidecar.data() {
             lastWritten = data
-            do { sidecar = try Sidecar.load(sidecarURL); unreadable = nil } catch { unreadable = "\(error)" }
+            do { sidecar = try Sidecar.load(sidecarURL); unreadable = nil } catch { unreadable = error }
             model.onChange()
         }
         if FileManager.default.fileExists(atPath: location) == missing {
@@ -459,7 +489,6 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         guard viewingVersion == nil, values != sidecar.proposed else { return }
         sidecar.proposed = values
         save()
-        model.onChange()
     }
 
     func record(_ key: String, _ value: JSONValue) {
@@ -716,8 +745,8 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
     }
 
     func setNote(_ id: String, done: Bool) {
-        guard let i = sidecar.comments.firstIndex(where: { $0.id == id }) else { return }
-        sidecar.comments[i].state = done ? "done" : "open"
+        guard sidecar.comments.contains(where: { $0.id == id }) else { return }
+        sidecar.mark(id, done: done)
         save(); model.onChange()
         showPins()
     }

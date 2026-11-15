@@ -119,10 +119,7 @@ func collect(_ loc: String, as session: String = Session.current) {
     if Client.appIsRunning, (try? Client.send(.collect(location: loc, session: session))) != nil { return }
     guard !Client.appIsRunning else { return }
     do {
-        try Sidecar.modify(Paths.sidecar(for: loc)) { s in
-            guard s.answered, s.changedSinceCollected else { return }
-            s.collectedAt = Date(); s.collectedBy = session
-        }
+        try Sidecar.modify(Paths.sidecar(for: loc)) { $0.collect(by: session) }
     } catch {}
 }
 
@@ -272,10 +269,7 @@ case "--done", "--reopen":
     let done = first == "--done"
     if Client.appIsRunning { _ = check(send(.note(location: loc, id: args[2], done: done))) }
     else {
-        modifyOffline(loc) { s in
-            guard let i = s.comments.firstIndex(where: { $0.id == args[2] }) else { return }
-            s.comments[i].state = done ? "done" : "open"
-        }
+        modifyOffline(loc) { $0.mark(args[2], done: done) }
     }
 
 case "--hook":
