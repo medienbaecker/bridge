@@ -887,8 +887,9 @@ function __bridgeInit(options) {
           return;
         }
         post('glass');
-        if (!composer.isConnected) return;
-        notes.drafts[id] = composer.querySelector('textarea').value;
+        const box = composer.querySelector('textarea');
+        if (!composer.isConnected || !box) return;
+        notes.drafts[id] = box.value;
         if (id === notes.pending?.id && !notes.drafts[id]) notes.cancelPending();
       });
       pin.popoverTargetElement = composer;
@@ -979,15 +980,10 @@ function __bridgeInit(options) {
       const box = composer.querySelector('textarea');
       box.value = id in notes.drafts ? notes.drafts[id] : note?.text || '';
       box.addEventListener('keydown', async (e) => {
-        if (e.key === 'Escape') { e.preventDefault(); composer.hidePopover(); }
+        if (e.key === 'Escape') { e.preventDefault(); notes.act(id, 'cancel'); }
         if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
         e.preventDefault();
-        if (!(await notes.act(id, 'save')) || !e.metaKey) return;
-        const picked = bar.querySelector('button[data-picked]');
-        if (picked) return picked.click();
-        bar.querySelector('.bridge-agents-list')?.animate(still.matches
-          ? [{ opacity: 1 }, { opacity: 0.3 }, { opacity: 1 }]
-          : [{ translate: '0' }, { translate: '-8px' }, { translate: '7px' }, { translate: '-4px' }, { translate: '2px' }, { translate: '0' }], { duration: 360, easing: 'ease-out' });
+        if (await notes.act(id, 'save') && e.metaKey) sendToPicked();
       });
       composer.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => notes.act(id, b.dataset.act)));
     };
@@ -1005,7 +1001,7 @@ function __bridgeInit(options) {
     notes.act = async function (id, action) {
       const composer = notes.composer(id);
       const text = composer.querySelector('textarea').value.trim();
-      if (action === 'cancel') { delete notes.drafts[id]; composer.hidePopover(); notes.cancelPending(); return false; }
+      if (action === 'cancel') { delete notes.drafts[id]; composer.replaceChildren(); composer.hidePopover(); notes.cancelPending(); return false; }
       if (action === 'save' && !text) return false;
       const pending = notes.pending?.id === id ? notes.pending : null;
       const list = pending ? (await post('pin', { anchor: pending.anchor, mark: id, text })).notes
@@ -1073,6 +1069,45 @@ function __bridgeInit(options) {
       const chip = e.target.closest('button');
       if (chip && !bar.hasAttribute('data-empty')) post('freeze', { send: chip.dataset.session });
     });
+    const edges = (scroller) => {
+      scroller.toggleAttribute('data-before', scroller.scrollLeft > 1);
+      scroller.toggleAttribute('data-after', scroller.scrollLeft < scroller.scrollWidth - scroller.clientWidth - 1);
+    };
+    const sendToPicked = () => {
+      const picked = bar.querySelector('button[data-picked]');
+      if (picked) return picked.click();
+      bar.querySelector('.bridge-agents-list')?.animate(still.matches
+        ? [{ opacity: 1 }, { opacity: 0.3 }, { opacity: 1 }]
+        : [{ translate: '0' }, { translate: '-8px' }, { translate: '7px' }, { translate: '-4px' }, { translate: '2px' }, { translate: '0' }], { duration: 360, easing: 'ease-out' });
+    };
+    const askToDiscard = () => {
+      const prompt = document.createElement('div');
+      prompt.className = 'bridge-composer bridge-discard';
+      prompt.setAttribute('popover', 'auto');
+      const count = notes.list.length;
+      prompt.innerHTML = `<p>Discard ${count} ${count === 1 ? 'note' : 'notes'}?</p><div class="bridge-bar"><button data-act="discard">Discard</button><button data-act="keep" class="bridge-primary">Keep <kbd>⏎</kbd></button></div>`;
+      prompt.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape' && (e.key !== 'Enter' || e.target.closest('[data-act=discard]'))) return;
+        e.preventDefault();
+        e.stopPropagation();
+        prompt.hidePopover();
+      });
+      prompt.addEventListener('click', (e) => {
+        const act = e.target.closest('button')?.dataset.act;
+        if (act) prompt.hidePopover();
+        if (act === 'discard') post('freeze');
+      });
+      prompt.addEventListener('toggle', (e) => {
+        if (e.newState === 'open') return;
+        post('glass');
+        prompt.remove();
+      });
+      root.appendChild(prompt);
+      prompt.showPopover();
+      prompt.querySelector('[data-act=keep]').focus();
+      const r = prompt.getBoundingClientRect();
+      post('glass', { rect: [r.left, r.top, r.width, r.height] });
+    };
     freeze.agents = (list) => {
       const chips = list.map((agent, i) => {
         const chip = document.createElement('button');
@@ -1081,6 +1116,7 @@ function __bridgeInit(options) {
         chip.toggleAttribute('data-picked', agent.picked);
         const key = document.createElement('kbd');
         key.textContent = i + 1;
+        key.hidden = i > 8;
         const colour = document.createElement('i');
         colour.style.background = agent.colour;
         const label = document.createElement('span');
@@ -1088,13 +1124,14 @@ function __bridgeInit(options) {
         name.textContent = agent.name;
         const project = document.createElement('small');
         project.textContent = agent.project;
-        label.append(name, ' ', project);
+        label.append(name, project);
         chip.append(key, colour, label);
         return chip;
       });
       const scroller = document.createElement('div');
       scroller.className = 'bridge-agents-list';
       scroller.append(...chips);
+      scroller.addEventListener('scroll', () => edges(scroller));
       const draft = document.createElement('button');
       draft.dataset.session = '';
       draft.className = 'bridge-agents-draft';
@@ -1108,6 +1145,7 @@ function __bridgeInit(options) {
         bar.replaceChildren(nobody, draft);
       }
       bar.querySelector('.bridge-agents-list [data-picked]')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+      if (list.length) edges(scroller);
       bar.getAnimations().forEach((a) => a.cancel());
       if (still.matches) return;
       const hidden = bar.animate([{ translate: '0 100%' }], { fill: 'forwards' });
@@ -1134,14 +1172,15 @@ function __bridgeInit(options) {
       if (!still.matches) bar.animate([{ translate: '0 0' }, { translate: '0 100%' }], { duration: 160, easing: 'cubic-bezier(0.4, 0, 1, 1)', fill: 'forwards' });
     };
     freeze.reset = () => {
+      document.querySelector('.bridge-discard')?.remove();
       notes.cancelPending();
       notes.drafts = {};
       notes.set([]);
     };
     document.addEventListener('keydown', (e) => {
       if (e.target.closest?.('textarea, input') || document.querySelector('.bridge-composer:popover-open')) return;
-      if (e.key === 'Escape') { e.preventDefault(); post('freeze'); }
-      if (e.key === 'Enter' && !e.target.closest?.('button')) { e.preventDefault(); bar.querySelector('button[data-picked]')?.click(); }
+      if (e.key === 'Escape') { e.preventDefault(); if (notes.list.length) askToDiscard(); else post('freeze'); }
+      if (e.key === 'Enter' && !e.target.closest?.('button')) { e.preventDefault(); if (notes.list.length) sendToPicked(); }
       if (/^[1-9]$/.test(e.key)) { e.preventDefault(); bar.querySelectorAll('button:not(.bridge-agents-draft)')[e.key - 1]?.click(); }
     });
     let frame = 0;

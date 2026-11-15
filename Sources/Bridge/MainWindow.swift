@@ -470,7 +470,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
             return true
         case "freeze-cancel":
             guard let freeze = Freeze.current else { return false }
-            freeze.page.call("document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))")
+            freeze.page.call("document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))")
             return true
         case "resize":
             let parts = (argument ?? "").split(separator: " ").compactMap { Double($0) }

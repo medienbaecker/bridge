@@ -107,6 +107,8 @@ html[data-bridge-freeze] :is(.bridge-composer, .bridge-composer *, .bridge-pin, 
   padding: 3px 10px;
 }
 .bridge-composer button.bridge-primary { background: AccentColor; color: white; border-color: transparent; }
+.bridge-discard { position-area: none; inset: 0; margin: auto; width: 260px; height: fit-content; }
+.bridge-discard p { margin: 0; padding: 12px 12px 10px; font-weight: 600; }
 
 .bridge-toast {
   position: fixed;
@@ -166,7 +168,22 @@ code:is([data-quote], [data-quoted])::before { content: attr(data-quote) attr(da
   z-index: 2147483001;
 }
 .bridge-agents:popover-open { display: flex; }
-.bridge-agents-list { flex: 1; display: flex; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; overscroll-behavior: contain; }
+.bridge-agents-list {
+  flex: 1;
+  display: flex;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  overscroll-behavior: contain;
+  --bridge-fade-before: 0px;
+  --bridge-fade-after: 0px;
+  mask-image: linear-gradient(to right, transparent, black var(--bridge-fade-before), black calc(100% - var(--bridge-fade-after)), transparent);
+}
+.bridge-agents-list[data-before] { --bridge-fade-before: 32px; }
+.bridge-agents-list[data-after] { --bridge-fade-after: 32px; }
+.bridge-agents[data-empty] > * { opacity: 0.45; }
+.bridge-agents[data-empty] button { pointer-events: none; }
 .bridge-agents button {
   flex: none;
   transition: scale 80ms ease-out;
@@ -181,7 +198,11 @@ code:is([data-quote], [data-quoted])::before { content: attr(data-quote) attr(da
   color: white;
   font: inherit;
   white-space: nowrap;
+  max-width: 280px;
 }
+.bridge-agents button:has(kbd[hidden]) { padding-left: 8px; }
+.bridge-agents button span { display: flex; gap: 4px; align-items: baseline; min-width: 0; }
+.bridge-agents button :is(b, small) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .bridge-agents button:is(:hover, :focus-visible) { background: rgb(255 255 255 / 0.22); }
 .bridge-agents button[data-picked] { background: AccentColor; }
 .bridge-agents button:active { scale: 0.96; filter: brightness(0.9); }
