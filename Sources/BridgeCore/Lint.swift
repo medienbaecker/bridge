@@ -32,9 +32,14 @@ public struct Lint {
 
         // Classes set from script count too: pages that build elements in JS collide on those.
         var seen: Set<String> = []
+        let quoted = Self.ranges(#"(?is)<pre\b.*?</pre>"#, in: html).map(\.whole)
+        let fromScript = (Self.ranges(#"className\s*=\s*['"]([^'"]*)['"]"#, in: html)
+            + Self.ranges(#"classList\.(?:add|toggle)\(\s*['"]([^'"]*)['"]"#, in: html))
+            .filter { m in !quoted.contains { $0.contains(m.whole.lowerBound) } }
         let uses = Self.ranges(#"(?i)<[a-z][\w-]*\s[^<>]*?\bclass\s*=\s*"([^"]*)""#, in: html)
-            + Self.ranges(#"className\s*=\s*['"]([^'"]*)['"]"#, in: html)
-            + Self.ranges(#"classList\.(?:add|toggle)\(\s*['"]([^'"]*)['"]"#, in: html)
+            + Self.ranges(#"(?i)<[a-z][\w-]*\s[^<>]*?\bclass\s*=\s*'([^']*)'"#, in: html)
+            + Self.ranges(#"(?i)<[a-z][\w-]*\s[^<>]*?\bclass\s*=\s*([^\s"'=<>`]+)"#, in: html)
+            + fromScript
         for m in uses {
             for c in String(html[m.inner]).split(separator: " ").map(String.init) where !seen.contains(c) {
                 seen.insert(c)

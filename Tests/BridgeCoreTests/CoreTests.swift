@@ -410,3 +410,11 @@ private let kitOfShapes = ".options { } .draft { } .bars { } .bar { }"
     #expect(!WindowRules.overlay(layer: 23, frame: CGRect(x: 1100, y: 40, width: 380, height: 90), displays: displays))
     #expect(!WindowRules.overlay(layer: 0, frame: CGRect(x: 0, y: 0, width: 1512, height: 982), displays: displays))
 }
+
+@Test func lintReadsEveryWayToWriteAClassAndLeavesQuotedScriptAlone() {
+    let unknown = { (html: String) in Lint(kitCSS: ".card { }").run(html: html).map(\.text).filter { $0.contains("styles nothing") }.map { String($0.prefix(7)) } }
+    #expect(unknown("<div class='lone'>x</div>") == ["`.lone`"])
+    #expect(unknown("<div class=bare>x</div><p class=card>y</p>") == ["`.bare`"])
+    #expect(unknown("<pre><code class=\"language-js\">el.classList.add('open'); el.className = \"shut\";</code></pre>").isEmpty)
+    #expect(unknown("<script>el.classList.add('open')</script>") == ["`.open`"])
+}
