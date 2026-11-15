@@ -16,6 +16,17 @@ enum Notify {
         post(entry, body: "Updated · \(entry.projectName)", sound: false)
     }
 
+    static func denied() async -> Bool {
+        if Env.test { return ProcessInfo.processInfo.environment["BRIDGE_NOTIFICATIONS"] == "denied" }
+        guard Bundle.main.bundleIdentifier != nil else { return false }
+        return await UNUserNotificationCenter.current().notificationSettings().authorizationStatus == .denied
+    }
+
+    static func openSystemSettings() {
+        guard let id = Bundle.main.bundleIdentifier, let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=\(id)") else { return }
+        NSWorkspace.shared.open(url)
+    }
+
     static func post(_ entry: BridgeEntry, body: String, sound: Bool) {
         guard Bundle.main.bundleIdentifier != nil else { return }
         let center = UNUserNotificationCenter.current()
