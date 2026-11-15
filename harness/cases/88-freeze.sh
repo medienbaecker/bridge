@@ -90,7 +90,7 @@ check "started from another app, the pin on a page picks that page's agent" "$(b
 on=$(bridge --state | jq -r '.selected + " " + .projects.scope')
 bridge --do freeze-send 0 >/dev/null; settle 0.5
 for i in $(seq 1 30); do [ "$(inbox "$agent" | grep -c 'sent you notes')" = 1 ] && break; settle 0.1; done
-check "clicking the agent sends it straight away: the pin on the page to the page, the box in the message, and no draft" "$(inbox "$agent" | grep -c 'pinned notes to elements') $(inbox "$agent" | grep -c '^2\. "Consectetur adipiscing elit" on ') $(jq '[.bridges[] | select(.location | contains("/drafts/"))] | length' "$XDG_STATE_HOME/bridge-dev/list.json")" "1 1 0"
+check "clicking the agent sends it straight away: the pin on the page to the page, the box in the message, and no draft" "$(inbox "$agent" | grep -c 'pinned notes to elements') $(inbox "$agent" | grep -c '^2\. "Consectetur adipiscing elit"') $(jq '[.bridges[] | select(.location | contains("/drafts/"))] | length' "$XDG_STATE_HOME/bridge-dev/list.json")" "1 1 0"
 check "and Bridge stays on the page you were on" "$(bridge --state | jq -r '.selected + " " + .projects.scope')" "$on"
 pixels() { sips -g pixelWidth -g pixelHeight "$1" 2>/dev/null | awk '/pixel/ { printf "%s ", $2 }'; }
 first=$(bridge --pins "$CASE_DIR/pages/cards.html" | jq -r '.[0].picture')

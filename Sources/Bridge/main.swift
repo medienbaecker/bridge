@@ -3,14 +3,6 @@ import BridgeCore
 
 enum Env {
     static let test = ProcessInfo.processInfo.environment["BRIDGE_TEST"] == "1"
-    static let logPath = ProcessInfo.processInfo.environment["BRIDGE_LOG"]
-
-    static func log(_ text: @autoclosure () -> String) {
-        guard let logPath else { return }
-        let line = "\(Date().timeIntervalSince1970) \(text())\n"
-        if let h = FileHandle(forWritingAtPath: logPath) { h.seekToEndOfFile(); h.write(Data(line.utf8)); h.closeFile() }
-        else { try? line.write(toFile: logPath, atomically: false, encoding: .utf8) }
-    }
 }
 
 Flavor.name = Flavor.fromBundle(Bundle.main.bundleIdentifier)

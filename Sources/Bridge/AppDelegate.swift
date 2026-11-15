@@ -35,6 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         model.selected = model.listing.bridges.contains { $0.location == remembered } ? remembered : nil
         model.settleSelection()
         model.changed()
+        model.sweepPictures()
         if ProcessInfo.processInfo.environment["BRIDGE_LAUNCH_HIDDEN"] == nil { window.restoreWindows() }
         Timer.scheduledTimer(timeInterval: 30, target: self, selector: #selector(updateTick), userInfo: nil, repeats: true)
         Timer.scheduledTimer(timeInterval: 2, target: self, selector: #selector(waitersTick), userInfo: nil, repeats: true)
@@ -62,7 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         let text = found.count >= Self.pileupCount || total >= Self.pileupBytes
             ? "\(found.count) agent\(found.count == 1 ? "" : "s") waiting · \(size)" : nil
         if text != pileupText { pileupText = text; window?.projects.showPileup(text) }
-        if Set(found.map { "\($0.pid) \($0.session)" }) != listeningBefore || model.agents != agentsBefore { window?.sidebar.reload() }
+        if Set(found.map { "\($0.pid) \($0.session)" }) != listeningBefore || model.agents != agentsBefore { window?.projects.reload(); window?.sidebar.reload() }
     }
 
     func applicationDidBecomeActive(_ notification: Notification) { checkUpdate() }
@@ -169,7 +170,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             }
         case .command(let name, let argument):
             guard Env.test else { reply(.error("test mode only")); return }
-            reply(window.perform(command: name, argument: argument) ? .ok(state()) : .error("unknown command \(name)"))
+            reply(window.perform(command: name, argument: argument) ? .ok(state()) : .error("\(name): unknown command, or nothing to act on"))
         case .shot(let path, let screen):
             Task { @MainActor in
                 do {
@@ -322,17 +323,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     func freeze(fromBridge: Bool = NSWorkspace.shared.frontmostApplication == .current) {
         if let open = Freeze.current { return open.cancel() }
+        pollWaiters()
         let page = (NSApp.keyWindow?.windowController as? PageWindow)?.page ?? model.selectedPage
         let picked = fromBridge ? page.flatMap { model.listing.entry($0.location)?.session } : nil
         Task {
             await Freeze.start(recipients: model.agentsByStart(), picked: picked, page: freezePage) { [weak self] freeze, outcome in
                 guard let self, outcome != .cancel else { return }
                 let session: String? = if case .send(let s) = outcome, model.agents[s] != nil { s } else { nil }
-                let (draft, pages, outside) = model.land(freeze, keep: session == nil)
-                if let session {
-                    freeze.remember(outside.map(\.note), sentTo: session)
-                    return model.tell(session, pages: pages, outside: outside)
+                var sent = false
+                let (draft, pages) = model.land(freeze) { pages, outside in
+                    guard let session else { return true }
+                    sent = model.tell(session, pages: pages, outside: outside)
+                    if sent { freeze.remember(outside.map(\.note), sentTo: session) }
+                    return !sent
                 }
+                model.sweepPictures()
+                if sent { return }
                 guard let location = draft ?? pages.first else { return }
                 model.scope = .project(draft == nil ? model.listing.entry(location)?.project ?? Paths.drafts.path : Paths.drafts.path)
                 model.selected = location

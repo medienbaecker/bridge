@@ -34,8 +34,8 @@ public enum Paths {
 
     // Resolved once per process: looking up the home directory on every call
     // grew each long-running waiter by about 30 MB a minute.
-    static let stateBase: URL = ProcessInfo.processInfo.environment["XDG_STATE_HOME"].flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
-        ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/state")
+    static let stateBase = URL(fileURLWithPath: canonical(ProcessInfo.processInfo.environment["XDG_STATE_HOME"].flatMap { $0.isEmpty ? nil : $0 }
+        ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/state").path))
     static let made = Mutex<Set<String>>([])
 
     public static func stateDir(for flavor: String) -> URL {

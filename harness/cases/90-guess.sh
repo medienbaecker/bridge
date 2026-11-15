@@ -8,11 +8,14 @@ page="$CASE_DIR/alpha/plan.html"
 write() { printf '<!doctype html><title>%s</title><h2 style="margin:40px">Abschnitt IX</h2>' "$1" > "$page"; }
 write "Lorem ipsum"
 (cd "$CASE_DIR/alpha" && claude_session "$alpha" idle)
-(cd "$CASE_DIR/beta" && claude_session "$beta" idle)
 (cd "$CASE_DIR/alpha" && BRIDGE_SESSION="$alpha" bridge plan.html); wait_ready; settle 0.3
 js() { bridge --js "$page" "$1"; }
 note() { bridge --do freeze-mark "$1" >/dev/null; settle 0.3; bridge --do freeze-note "$2" >/dev/null; settle 0.5; }
 picked() { bridge --state | jq -r '.freeze.picked'; }
+bridge --do freeze >/dev/null; settle 1
+check "the only agent running is picked" "$(picked)" "$alpha"
+bridge --do freeze-cancel >/dev/null; settle 0.3
+(cd "$CASE_DIR/beta" && claude_session "$beta" idle); settle 0.5
 toolbar() { bridge --state | jq -r '.freeze.screenFrame as $s | "\(.windowFrame.x - $s[0] + .windowFrame.width - 140) \(($s[1] + $s[3]) - (.windowFrame.y + .windowFrame.height) + 26)"'; }
 chips() { bridge --js "$XDG_STATE_HOME/bridge-dev/freeze/screen.html" "@bridge return [...document.querySelectorAll('.bridge-agents-list button')].map((b) => (b.hasAttribute('data-picked') ? '*' : '') + b.querySelector('small').textContent).join(' | ')" | jq -r .; }
 

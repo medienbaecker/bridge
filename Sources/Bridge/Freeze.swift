@@ -34,6 +34,7 @@ final class Freeze: NSObject {
 
     nonisolated(unsafe) static var current: Freeze?
     nonisolated(unsafe) static var starting = false
+    nonisolated(unsafe) static var ending: Task<Void, Never>?
     static var colour: NSColor { .controlAccentColor }
     static var pin: String {
         let accent = colour.usingColorSpace(.sRGB) ?? colour
@@ -78,7 +79,7 @@ final class Freeze: NSObject {
         self.windows = windows
         self.page = page
         self.recipients = recipients
-        self.picked = recipients.contains { $0.session == picked } ? picked : nil
+        self.picked = recipients.contains { $0.session == picked } ? picked : recipients.count == 1 ? recipients[0].session : nil
         panel = FreezePanel(contentRect: screen.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         super.init()
         panel.level = .screenSaver
@@ -118,6 +119,7 @@ final class Freeze: NSObject {
         guard current == nil, !starting, let screen = screenUnderPointer() else { return }
         starting = true
         defer { starting = false }
+        await ending?.value
         _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": !Env.test] as CFDictionary)
         AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 0.25)
         let previous = Env.test ? nil : NSWorkspace.shared.frontmostApplication.flatMap { $0 == .current ? nil : $0 }
@@ -399,9 +401,13 @@ final class Freeze: NSObject {
         return (spot, w > 0 && h > 0 ? CGRect(x: spot.x, y: spot.y, width: w * size.width, height: h * size.height) : nil)
     }
 
-    func describe(_ anchor: JSONValue, picture: Picture?) async -> (target: String, found: [String: JSONValue]) {
+    func centre(of anchor: JSONValue) -> CGPoint {
         let (spot, box) = area(of: anchor)
-        let found = await element(at: box.map { CGPoint(x: $0.midX, y: $0.midY) } ?? spot, picture: picture)
+        return box.map { CGPoint(x: $0.midX, y: $0.midY) } ?? spot
+    }
+
+    func describe(_ anchor: JSONValue, picture: Picture?) async -> (target: String, found: [String: JSONValue]) {
+        let found = await element(at: centre(of: anchor), picture: picture)
         func string(_ key: String) -> String? { found[key]?.stringValue }
         let what = [string("role"), string("label").map { "\"\($0)\"" }].compactMap { $0 }.joined(separator: " ")
         let place = string("url") ?? string("window")
@@ -421,8 +427,7 @@ final class Freeze: NSObject {
     func clicked(_ anchor: JSONValue) async {
         guard !settled else { return }
         settled = true
-        let (spot, box) = area(of: anchor)
-        let found = await element(at: box.map { CGPoint(x: $0.midX, y: $0.midY) } ?? spot, picture: nil)
+        let found = await element(at: centre(of: anchor), picture: nil)
         await suggest(found, page: await place(anchor)?.page)
     }
 
@@ -463,8 +468,7 @@ final class Freeze: NSObject {
     }
 
     func place(_ anchor: JSONValue) async -> (page: String, anchor: JSONValue)? {
-        let (spot, box) = area(of: anchor)
-        let at = global(box.map { CGPoint(x: $0.midX, y: $0.midY) } ?? spot)
+        let at = global(centre(of: anchor))
         guard let info = window(at: at), info[kCGWindowOwnerPID as String] as? Int32 == getpid(),
               let (_, view, inWindow) = Self.view(at: at, in: info[kCGWindowNumber as String] as? Int ?? 0),
               let web = sequence(first: view, next: \.superview).first(where: { $0 is WKWebView }),
@@ -555,20 +559,23 @@ final class Freeze: NSObject {
         Self.current = nil
         let panel = panel
         page.call("__bridge.leave()")
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.16
-            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
-            panel.animator().alphaValue = 0
-        }, completionHandler: {
-            panel.orderOut(nil)
-            Task { @MainActor in
-                if outcome != .draft, !self.veiled.isEmpty { NSApp.hide(nil) }
-                for window in self.veiled { window.alphaValue = 1 }
-                for task in self.describing { await task.value }
-                self.onFinish(self, outcome)
-                self.page.call("__bridge.reset()")
+        Self.ending = Task { @MainActor in
+            await withCheckedContinuation { faded in
+                NSAnimationContext.runAnimationGroup({ context in
+                    context.duration = 0.16
+                    context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+                    panel.animator().alphaValue = 0
+                }, completionHandler: {
+                    panel.orderOut(nil)
+                    faded.resume()
+                })
             }
-        })
+            if outcome != .draft, !veiled.isEmpty { NSApp.hide(nil) }
+            for window in veiled { window.alphaValue = 1 }
+            for task in describing { await task.value }
+            onFinish(self, outcome)
+            _ = try? await page.run("__bridge.reset()", [:], in: Page.world)
+        }
         if outcome != .draft { previous?.activate() }
     }
 

@@ -983,7 +983,11 @@ function __bridgeInit(options) {
         if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
         e.preventDefault();
         if (!(await notes.act(id, 'save')) || !e.metaKey) return;
-        bar.querySelector('button[data-picked]')?.click();
+        const picked = bar.querySelector('button[data-picked]');
+        if (picked) return picked.click();
+        bar.querySelector('.bridge-agents-list')?.animate(still.matches
+          ? [{ opacity: 1 }, { opacity: 0.3 }, { opacity: 1 }]
+          : [{ translate: '0' }, { translate: '-8px' }, { translate: '7px' }, { translate: '-4px' }, { translate: '2px' }, { translate: '0' }], { duration: 360, easing: 'ease-out' });
       });
       composer.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => notes.act(id, b.dataset.act)));
     };

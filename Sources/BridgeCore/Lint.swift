@@ -180,6 +180,10 @@ public struct Lint {
         }
     }
 
+    public func run(file: String, text: String) -> [Finding] {
+        Kind.of(file) == .md ? run(markdown: text, name: (file as NSString).lastPathComponent) : run(html: text)
+    }
+
     public func run(markdown: String, name: String) -> [Finding] {
         let prose = markdown.replacingOccurrences(of: #"(?s)```.*?```"#, with: " ", options: .regularExpression)
         let pictures = Self.ranges(#"!\[|```mermaid|(?m)^\s*\|?\s*:?-{3,}"#, in: markdown).count

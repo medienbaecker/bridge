@@ -57,7 +57,7 @@ final class Model {
     func bridges(in scope: Scope) -> [BridgeEntry] {
         let all = listing.bridges.sorted { $0.presentedAt > $1.presentedAt }
         switch scope {
-        case .waiting: return all.filter { !$0.crossed && status(of: $0) == "open" && attended($0) }
+        case .waiting: return all.filter(waits)
         case .all: return all.filter { !$0.crossed } + (showCrossed ? all.filter { $0.crossed } : [])
         case .project(let p): return all.filter { $0.project == p && !$0.crossed } + (showCrossed ? all.filter { $0.project == p && $0.crossed } : [])
         }
@@ -87,8 +87,10 @@ final class Model {
         return life(of: entry.session) == .gone ? "session ended" : "no agent waiting"
     }
 
+    func waits(_ entry: BridgeEntry) -> Bool { !entry.crossed && status(of: entry) == "open" && attended(entry) }
+
     func waitingCount(in project: String? = nil) -> Int {
-        listing.bridges.filter { (project == nil || $0.project == project) && !$0.crossed && status(of: $0) == "open" && attended($0) }.count
+        listing.bridges.filter { (project == nil || $0.project == project) && waits($0) }.count
     }
 
 
@@ -152,10 +154,7 @@ final class Model {
 
 
     func deliver(_ page: Page) {
-        let s = page.sidecar
-        guard s.answered, s.changedSinceCollected, let session = s.presented?.session,
-              let agent = agents[session] ?? ClaudeSessions.live()[session],
-              ClaudeSessions.post(s.handOver(page.location, cli: Flavor.name), to: agent) else { return }
+        guard let session = handOver(page.sidecar, of: page.location) else { return }
         page.collected(by: session)
     }
 
@@ -163,11 +162,16 @@ final class Model {
         for entry in listing.bridges where sessions.contains(entry.session) {
             if let page = pages[entry.location] { deliver(page); continue }
             let url = Paths.sidecar(for: entry.location)
-            let s = Sidecar.peek(url)
-            guard s.answered, s.changedSinceCollected, let session = s.presented?.session, let agent = agents[session],
-                  ClaudeSessions.post(s.handOver(entry.location, cli: Flavor.name), to: agent) else { continue }
+            guard let session = handOver(Sidecar.peek(url), of: entry.location) else { continue }
             try? Sidecar.modify(url) { $0.collectedAt = Date(); $0.collectedBy = session }
         }
+    }
+
+    private func handOver(_ s: Sidecar, of location: String) -> String? {
+        guard s.answered, s.changedSinceCollected, let session = s.presented?.session,
+              let agent = agents[session] ?? ClaudeSessions.live()[session],
+              ClaudeSessions.post(s.handOver(location, cli: Flavor.name), to: agent) else { return nil }
+        return session
     }
 
     func hand(_ location: String, to session: String) {
@@ -240,12 +244,19 @@ final class Model {
         let pictures = Sidecar.peek(Paths.sidecar(for: location)).comments.compactMap(\.picture).filter(Paths.inDrafts).map { URL(fileURLWithPath: $0) }
         guard Paths.owned(location) else { return discard(pictures) }
         let file = URL(fileURLWithPath: location)
-        let stem = file.deletingPathExtension().lastPathComponent
-        var items = [file, Paths.sidecar(for: location)] + pictures
-        if Paths.inDrafts(location) {
-            items += ((try? FileManager.default.contentsOfDirectory(at: Paths.drafts, includingPropertiesForKeys: nil)) ?? []).filter { $0.lastPathComponent.hasPrefix(stem + ".") && $0 != file }
+        discard([file, Paths.sidecar(for: location)] + pictures)
+    }
+
+    func sweepPictures() {
+        let used = Set(listing.bridges.flatMap { entry in
+            (pages[entry.location]?.sidecar ?? Sidecar.peek(Paths.sidecar(for: entry.location))).comments.compactMap(\.picture)
+        })
+        let weekAgo = Date().addingTimeInterval(-7 * 24 * 60 * 60)
+        let files = (try? FileManager.default.contentsOfDirectory(at: Paths.drafts, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+        for file in files where file.pathExtension == "png" && !used.contains(file.path)
+            && ((try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? Date()) < weekAgo {
+            try? FileManager.default.removeItem(at: file)
         }
-        discard(items)
     }
 
     func discard(_ items: [URL]) {
@@ -290,7 +301,7 @@ final class Model {
         return file
     }
 
-    func land(_ capture: Freeze, keep: Bool) -> (draft: String?, pages: [String], outside: [(n: Int, note: Comment)]) {
+    func land(_ capture: Freeze, keep: (_ pages: [String], _ outside: [(n: Int, note: Comment)]) -> Bool) -> (draft: String?, pages: [String]) {
         let file = newFile()
         var outside: [(n: Int, note: Comment)] = []
         var widths: [String: CGFloat] = [:]
@@ -308,10 +319,10 @@ final class Model {
             pinned[location, default: []].append(note)
         }
         for location in order { page(for: location).pin(pinned[location]!) }
-        guard keep, !outside.isEmpty else { return (nil, order, outside) }
+        guard keep(order, outside), !outside.isEmpty else { return (nil, order) }
         let draft = draft(file, notes: outside.map(\.note), widths: widths)
         changed()
-        return (draft, order, outside)
+        return (draft, order)
     }
 
     func newFile() -> URL {
@@ -346,8 +357,8 @@ final class Model {
         return file.path
     }
 
-    func tell(_ session: String, pages: [String], outside: [(n: Int, note: Comment)]) {
-        guard let agent = agents[session] else { return }
+    func tell(_ session: String, pages: [String], outside: [(n: Int, note: Comment)]) -> Bool {
+        guard let agent = agents[session] else { return false }
         let cli = Flavor.name
         var text = "Bridge: The user pointed at their screen and sent you notes."
         if !pages.isEmpty {
@@ -355,10 +366,10 @@ final class Model {
         }
         if !outside.isEmpty {
             text += (pages.isEmpty ? "" : " Elsewhere on their screen:") + outside.map { n, note in
-                "\n\(n). \"\(note.text)\" on \(note.target)" + (note.picture.map { ". Picture, with the number drawn on it: \($0)" } ?? "")
+                "\n\(n). \"\(note.text)\"" + (note.target.isEmpty ? "" : " on \(note.target)") + (note.picture.map { ". Picture, with the number drawn on it: \($0)" } ?? "")
             }.joined()
         }
-        ClaudeSessions.post(text, to: agent)
+        return ClaudeSessions.post(text, to: agent)
     }
 
     func lastPage(of session: String) -> BridgeEntry? {

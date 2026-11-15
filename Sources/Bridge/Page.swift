@@ -165,17 +165,6 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         return n > 0 ? "\(n) commit\(n == 1 ? "" : "s") since this was asked" : nil
     }
 
-    static func short(_ v: JSONValue) -> String {
-        switch v {
-        case .string(let s): return s.count > 40 ? String(s.prefix(40)) + "…" : s
-        case .number(let n): return n == n.rounded() ? String(Int(n)) : String(n)
-        case .bool(let b): return b ? "yes" : "no"
-        case .null: return "–"
-        case .array(let a): return a.map(short).joined(separator: ", ")
-        case .object: return "{…}"
-        }
-    }
-
     static let clock: DateFormatter = {
         let f = DateFormatter(); f.dateStyle = .short; f.timeStyle = .short; return f
     }()
@@ -571,11 +560,8 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         sidecar.history.append(old)
         let added = questions.filter { !old.questions.contains($0) }
         let removed = old.questions.filter { !questions.contains($0) }
-        var parts: [String] = []
-        if !added.isEmpty { parts.append("asks " + added.joined(separator: ", ")) }
-        if !removed.isEmpty { parts.append("no longer asks " + removed.joined(separator: ", ")) }
-        if parts.isEmpty { parts.append("the options changed") }
-        changeSummary = "Changed since you answered: " + parts.joined(separator: "; ") + ". Version \(sidecar.version + 1)."
+        let parts = Self.questionChanges(added: added, removed: removed)
+        changeSummary = "Changed since you answered: " + (parts.isEmpty ? "the options changed" : parts.joined(separator: "; ")) + ". Version \(sidecar.version + 1)."
         bump = (lastContent, Self.changes(from: before, to: shape, added: added, removed: removed))
         sidecar.version += 1
         sidecar.fingerprint = fp
@@ -598,10 +584,12 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         }
     }
 
+    static func questionChanges(added: [String], removed: [String]) -> [String] {
+        (added.isEmpty ? [] : ["asks " + added.joined(separator: ", ")]) + (removed.isEmpty ? [] : ["no longer asks " + removed.joined(separator: ", ")])
+    }
+
     static func changes(from old: String?, to new: String, added: [String], removed: [String]) -> String {
-        var parts: [String] = []
-        if !added.isEmpty { parts.append("asks " + added.joined(separator: ", ")) }
-        if !removed.isEmpty { parts.append("no longer asks " + removed.joined(separator: ", ")) }
+        var parts = questionChanges(added: added, removed: removed)
         let decode = { (s: String?) -> [String: [String]] in
             guard let d = s?.data(using: .utf8), let rows = (try? JSONSerialization.jsonObject(with: d)) as? [[Any]] else { return [:] }
             return Dictionary(rows.compactMap { r in (r.first as? String).map { ($0, (r.last as? [String]) ?? []) } }, uniquingKeysWith: { a, _ in a })
@@ -672,6 +660,31 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         default:
             return text
         }
+    }
+
+    // MARK: Commands
+
+    func canPerform(_ command: String) -> Bool? {
+        switch command {
+        case "reveal": kind != .url
+        case "zoom-in", "zoom-out", "zoom-reset": true
+        case "previous": (viewingVersion ?? sidecar.version) > 1
+        case "next": viewingVersion != nil
+        default: nil
+        }
+    }
+
+    func perform(_ command: String) -> Bool {
+        switch command {
+        case "zoom-in": zoom = min(3, zoom + 0.1)
+        case "zoom-out": zoom = max(0.5, zoom - 0.1)
+        case "zoom-reset": zoom = 1
+        case "reveal": if kind != .url { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: location)]) }
+        case "previous": showVersion((viewingVersion ?? sidecar.version) - 1)
+        case "next": showVersion((viewingVersion ?? sidecar.version) + 1)
+        default: return false
+        }
+        return true
     }
 
     // MARK: Notes

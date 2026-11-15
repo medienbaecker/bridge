@@ -75,27 +75,30 @@ final class PageWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
     @objc func menuCommand(_ sender: NSMenuItem) { perform(sender.representedObject as? String ?? "") }
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
-        switch item.representedObject as? String {
+        guard let command = item.representedObject as? String else { return true }
+        let entry = page.model.listing.entry(page.location)
+        switch command {
         case "send": return page.viewingVersion == nil && !(page.isDraft && page.sidecar.blank)
-        case "reveal": return page.kind != .url
-        case "point", "zoom-in", "zoom-out", "zoom-reset": return true
-        case "previous": return (page.viewingVersion ?? page.sidecar.version) > 1
-        case "next": return page.viewingVersion != nil
-        default: return item.representedObject == nil
+        case "point", "new", "crossed": return true
+        case "cross": return entry.map { !$0.crossed } ?? false
+        case "uncross": return entry?.crossed ?? false
+        case "remove":
+            item.title = Paths.owned(page.location) ? "Move to Trash" : "Remove from List"
+            return entry != nil
+        default: return page.canPerform(command) ?? false
         }
     }
 
     func perform(_ command: String) {
+        let app = NSApp.delegate as? AppDelegate
         switch command {
-        case "point": (NSApp.delegate as? AppDelegate)?.freeze()
-        case "send": (NSApp.delegate as? AppDelegate)?.window.send(page, from: window)
-        case "zoom-in": page.zoom = min(3, page.zoom + 0.1)
-        case "zoom-out": page.zoom = max(0.5, page.zoom - 0.1)
-        case "zoom-reset": page.zoom = 1
-        case "reveal": if page.kind != .url { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: page.location)]) }
-        case "previous": page.showVersion((page.viewingVersion ?? page.sidecar.version) - 1)
-        case "next": page.showVersion((page.viewingVersion ?? page.sidecar.version) + 1)
-        default: return
+        case "point": app?.freeze()
+        case "send": app?.window.send(page, from: window)
+        case "new", "crossed": _ = app?.window.perform(command: command, argument: nil); app?.window.showWindow(nil)
+        case "cross": page.model.cross(page.location, true)
+        case "uncross": page.model.cross(page.location, false)
+        case "remove": page.model.trash(page.location)
+        default: guard page.perform(command) else { return }
         }
         refresh()
     }

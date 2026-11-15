@@ -198,11 +198,6 @@ public struct Sidecar: Codable, Equatable, Sendable {
         return sentAt.map { $0 > at } ?? false
     }
 
-    public func collectable(by session: String) -> Bool {
-        guard answered, changedSinceCollected else { return false }
-        return presented?.session == session || stale
-    }
-
     public func handOver(_ file: String, cli: String) -> String {
         if status == "closed" {
             return "Bridge: The user closed \(file) without answering. That means no, or not now; do not present it again unchanged."

@@ -303,7 +303,7 @@ case "--lint":
     var errors = 0
     for file in files {
         guard let text = try? String(contentsOfFile: file, encoding: .utf8) else { fail("cannot read \(file)") }
-        let findings = Kind.of(file) == .md ? lint.run(markdown: text, name: (file as NSString).lastPathComponent) : lint.run(html: text)
+        let findings = lint.run(file: file, text: text)
         for f in findings { print("\((file as NSString).lastPathComponent):\(f.description)") }
         errors += findings.filter { $0.level == .error }.count
     }
@@ -363,7 +363,7 @@ default:
         var errors = 0
         for loc in locations where Kind.of(loc) == .html || Kind.of(loc) == .md {
             guard let text = try? String(contentsOfFile: loc, encoding: .utf8) else { continue }
-            let findings = Kind.of(loc) == .md ? lint.run(markdown: text, name: (loc as NSString).lastPathComponent) : lint.run(html: text)
+            let findings = lint.run(file: loc, text: text)
             for f in findings where f.level == .error {
                 FileHandle.standardError.write(Data("\((loc as NSString).lastPathComponent):\(f.description)\n".utf8))
                 errors += 1

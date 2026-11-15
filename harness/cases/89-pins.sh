@@ -26,7 +26,7 @@ for i in $(seq 1 40); do [ "$(bridge --pins "$page" | jq length)" = 2 ] && break
 settle 0.5
 check "the two pins on the page land on it, and nothing becomes a draft" "$(bridge --pins "$page" | jq -c 'map(.text[0:10])') $(drafts)" '["Überschrif","Donaudampf"] 0'
 check_json "--pins names the element each one sits on, with its picture" "$(bridge --pins "$page")" 'map([.element, (.picture | test("\\.[12]\\.png$"))] | map(tostring) | join(" ")) | join(",")' "h2 true,#send true"
-check "one message tells the agent about the page and carries the note from elsewhere" "$(inbox "$agent" | grep -c 'sent you notes') $(inbox "$agent" | grep -c 'On `'"$page"'` they pinned notes to elements') $(inbox "$agent" | grep -c '^3\. "Lorem ipsum in Safari" on .*\.3\.png$')" "1 1 1"
+check "one message tells the agent about the page and carries the note from elsewhere" "$(inbox "$agent" | grep -c 'sent you notes') $(inbox "$agent" | grep -c 'On `'"$page"'` they pinned notes to elements') $(inbox "$agent" | grep -c '^3\. "Lorem ipsum in Safari".*\.3\.png$')" "1 1 1"
 check "the page shows each pin on its element" "$(on 1 h2) $(on 2 '#send')" "true true"
 
 press 2

@@ -411,12 +411,9 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
             item.title = page.map { targets($0).allSatisfy(Paths.owned) } ?? false ? "Move to Trash" : "Remove from List"
             return entry != nil
         case "send": return Freeze.current == nil && toolbarItems.first { $0.itemIdentifier.rawValue == command }.map(validateToolbarItem) ?? false
-        case "reveal": return page.map { $0.kind != .url } ?? false
         case "zoom-in", "zoom-out", "zoom-reset": return shownPage != nil
         case "window": return page != nil
-        case "previous": return page.map { ($0.viewingVersion ?? $0.sidecar.version) > 1 } ?? false
-        case "next": return page?.viewingVersion != nil
-        default: return true
+        default: return page.flatMap { $0.canPerform(command) } ?? true
         }
     }
 
@@ -509,8 +506,6 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         case "cross": for t in targets(page) { model.cross(t, true) }
         case "uncross": for t in targets(page) { model.cross(t, false) }
         case "remove": for t in targets(page) { model.trash(t) }
-        case "previous": page.showVersion((page.viewingVersion ?? page.sidecar.version) - 1)
-        case "next": page.showVersion((page.viewingVersion ?? page.sidecar.version) + 1)
         case "select-add":
             guard let argument else { return false }
             let row = sidebar.row(for: argument)
@@ -539,13 +534,9 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
             guard row >= 0, let menu = sidebar.contextMenu(forRow: row) else { return false }
             rowMenuTitles = menu.items.filter { !$0.isSeparatorItem }.map { $0.title + ($0.keyEquivalent.isEmpty ? "" : " (" + ($0.keyEquivalentModifierMask.contains(.option) ? "⌥" : "") + ($0.keyEquivalentModifierMask.contains(.shift) ? "⇧" : "") + "⌘" + ($0.keyEquivalent == "\u{8}" ? "⌫" : $0.keyEquivalent.uppercased()) + ")") }
         case "close": window?.performClose(nil)
-        case "zoom-in": page.zoom = min(3, page.zoom + 0.1)
-        case "zoom-out": page.zoom = max(0.5, page.zoom - 0.1)
-        case "zoom-reset": page.zoom = 1
-        case "reveal": if page.kind != .url { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: page.location)]) }
         case "sidebar": window?.contentViewController.map { ($0 as? NSSplitViewController)?.toggleSidebar(nil) }
         case "scrollers": sidebar.outline.enclosingScrollView?.scrollerStyle = argument == "legacy" ? .legacy : .overlay
-        default: return false
+        default: guard page.perform(command) else { return false }
         }
         refresh()
         return true
@@ -560,7 +551,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
     }
 
     func select(_ location: String?) -> Bool {
-        guard let location, let entry = model.listing.entry(location) else { return false }
+        guard let location = location.map({ Paths.resolve($0, relativeTo: "/") }), let entry = model.listing.entry(location) else { return false }
         if !model.shown().contains(where: { $0.location == location }) { model.scope = .project(entry.project) }
         model.selected = location
         model.markRead(location)
@@ -574,7 +565,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        model.selectedPage?.closed()
+        shownPage?.closed()
         return true
     }
 }

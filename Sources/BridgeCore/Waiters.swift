@@ -21,14 +21,6 @@ public enum Waiters {
     }
 
     nonisolated(unsafe) static var registered: String?
-    nonisolated(unsafe) static var mine: Waiter?
-
-    public static func superseded() -> Bool {
-        guard let mine else { return false }
-        return autoreleasepool {
-            all().contains { $0.pid != mine.pid && $0.kind == mine.kind && $0.session == mine.session && $0.started > mine.started }
-        }
-    }
 
     // A killed process cannot take its file back, so readers drop files whose process is gone.
     public static func register(kind: String, session: String, locations: [String]) {
@@ -40,7 +32,6 @@ public enum Waiters {
         let me = Waiter(pid: pid, kind: kind, session: session, locations: locations, flavor: Flavor.name, startSec: start, started: Date())
         guard (try? JSON.encoder.encode(me).write(to: url, options: .atomic)) != nil else { return }
         registered = url.path
-        mine = me
         atexit { if let path = Waiters.registered { unlink(path) } }
     }
 
