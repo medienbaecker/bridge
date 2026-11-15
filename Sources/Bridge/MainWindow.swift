@@ -460,7 +460,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         case "send": return Freeze.current == nil && toolbarItems.first { $0.itemIdentifier.rawValue == command }.map(validateToolbarItem) ?? false
         case "zoom-in", "zoom-out", "zoom-reset": return shownPage != nil
         case "window": return page != nil
-        default: return page.flatMap { $0.canPerform(command) } ?? true
+        default: return Page.commands.contains(command) ? page?.canPerform(command) ?? false : true
         }
     }
 

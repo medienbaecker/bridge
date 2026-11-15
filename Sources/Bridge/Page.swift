@@ -698,6 +698,8 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
 
     // MARK: Commands
 
+    static let commands: Set<String> = ["reveal", "zoom-in", "zoom-out", "zoom-reset", "previous", "next"]
+
     func canPerform(_ command: String) -> Bool? {
         switch command {
         case "reveal": kind != .url
