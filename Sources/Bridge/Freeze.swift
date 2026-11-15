@@ -594,7 +594,7 @@ final class Freeze: NSObject {
         NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
         NSImage(cgImage: image, size: frame.size).draw(in: CGRect(origin: .zero, size: frame.size), from: .zero, operation: .copy, fraction: 1, respectFlipped: true, hints: nil)
         let (spot, box) = area(of: note.anchor)
-        FreezeView.draw(number: index + 1, at: CGPoint(x: spot.x - frame.minX, y: spot.y - frame.minY), box: box?.offsetBy(dx: -frame.minX, dy: -frame.minY))
+        FreezeView.draw(number: index + 1, at: CGPoint(x: spot.x - frame.minX, y: spot.y - frame.minY), box: box?.offsetBy(dx: -frame.minX, dy: -frame.minY), in: frame.size)
         NSGraphicsContext.restoreGraphicsState()
         return rep.representation(using: .png, properties: [:]).map { ($0, frame.width) }
     }
@@ -616,39 +616,44 @@ final class FreezeView: NSView {
         path.stroke()
     }
 
-    static func draw(number: Int, at spot: CGPoint, box: CGRect?) {
-        if let box {
-            let area = NSBezierPath(roundedRect: box, xRadius: 4, yRadius: 4)
-            Freeze.colour.setStroke()
-            area.lineWidth = 2
-            area.stroke()
+    static let radius: CGFloat = 9
+
+    static func badge(for spot: CGPoint, box: CGRect?, in size: CGSize) -> CGPoint {
+        guard let box else {
+            let away: CGFloat = 14
+            return CGPoint(x: spot.x + (spot.x + away + radius + 2 <= size.width ? away : -away), y: spot.y + (spot.y - away - radius - 2 >= 0 ? -away : away))
         }
-        let drop = NSBezierPath()
-        drop.move(to: CGPoint(x: -11, y: 11))
-        drop.line(to: CGPoint(x: -11, y: 0))
-        drop.appendArc(withCenter: .zero, radius: 11, startAngle: 180, endAngle: 450)
-        drop.close()
-        let place = NSAffineTransform()
-        place.translateX(by: spot.x, yBy: spot.y - 11 * 2.squareRoot())
-        place.rotate(byDegrees: -45)
-        drop.transform(using: place as AffineTransform)
+        let above = box.minY - radius - 4, below = box.maxY + radius + 4
+        if above - radius - 2 >= 0 { return CGPoint(x: box.minX + radius, y: above) }
+        if below + radius + 2 <= size.height { return CGPoint(x: box.minX + radius, y: below) }
+        return CGPoint(x: box.minX + radius + 4, y: box.minY + radius + 4)
+    }
+
+    static func draw(number: Int, at spot: CGPoint, box: CGRect?, in size: CGSize) {
+        let target = box.map { NSBezierPath(roundedRect: $0, xRadius: 4, yRadius: 4) } ?? NSBezierPath(ovalIn: CGRect(x: spot.x - 5, y: spot.y - 5, width: 10, height: 10))
+        target.lineWidth = 4
+        NSColor.white.setStroke()
+        target.stroke()
+        target.lineWidth = 2
+        Freeze.colour.setStroke()
+        target.stroke()
+
+        let centre = badge(for: spot, box: box, in: size)
+        let badge = NSBezierPath(ovalIn: CGRect(x: centre.x - radius, y: centre.y - radius, width: radius * 2, height: radius * 2))
         NSGraphicsContext.saveGraphicsState()
         let shadow = NSShadow()
         shadow.shadowColor = NSColor.black.withAlphaComponent(0.16)
         shadow.shadowBlurRadius = 2
         shadow.shadowOffset = NSSize(width: 0, height: -1)
         shadow.set()
-        let ring = drop.copy() as! NSBezierPath
-        ring.lineWidth = 4
-        ring.lineJoinStyle = .round
+        badge.lineWidth = 4
         NSColor.white.setStroke()
-        ring.stroke()
+        badge.stroke()
         NSGraphicsContext.restoreGraphicsState()
         Freeze.colour.setFill()
-        drop.fill()
-        let centre = CGPoint(x: spot.x, y: spot.y - 11 * 2.squareRoot())
+        badge.fill()
         let text = NSAttributedString(string: "\(number)", attributes: [.font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: NSColor.white])
-        let size = text.size()
-        text.draw(at: CGPoint(x: centre.x - size.width / 2, y: centre.y - size.height / 2))
+        let extent = text.size()
+        text.draw(at: CGPoint(x: centre.x - extent.width / 2, y: centre.y - extent.height / 2))
     }
 }
