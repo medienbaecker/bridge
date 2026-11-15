@@ -505,11 +505,16 @@ final class Freeze: NSObject {
         return picture.image.cropping(to: pixels).map { Picture(image: $0, frame: frame) }
     }
 
+    static let leastHeight: CGFloat = 240
+
     func region(for anchor: JSONValue) -> CGRect {
         let (spot, box) = area(of: anchor)
         let bounds = CGRect(origin: .zero, size: screen.frame.size)
         if let box { return box.insetBy(dx: -40, dy: -40).intersection(bounds) }
-        let room = window(at: global(spot)).map { local(Self.frame(of: $0)).intersection(bounds) } ?? bounds
+        var room = window(at: global(spot)).map { local(Self.frame(of: $0)).intersection(bounds) } ?? bounds
+        if room.height < Self.leastHeight {
+            room = CGRect(x: room.minX, y: min(room.minY, bounds.maxY - Self.leastHeight), width: room.width, height: Self.leastHeight).intersection(bounds)
+        }
         let width = min(room.width, 1000), height = min(room.height, 600)
         let x = min(max(spot.x - width / 2, room.minX), room.maxX - width)
         let y = min(max(spot.y - height / 2, room.minY), room.maxY - height)

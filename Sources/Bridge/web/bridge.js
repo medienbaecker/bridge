@@ -849,7 +849,9 @@ function __bridgeInit(options) {
     const place = (el, anchor) => {
       el.style.left = `${anchor.x * 100}vw`;
       el.style.top = `${anchor.y * 100}vh`;
+      if (el.matches('.bridge-pin')) el.toggleAttribute('data-below', anchor.y * innerHeight < 32);
     };
+    const within = (value, least, most) => Math.min(Math.max(value, least), most);
 
     notes.add = function (id, anchor) {
       if (anchor.w) {
@@ -911,7 +913,11 @@ function __bridgeInit(options) {
       pin.addEventListener('pointermove', (e) => {
         if (!from || (!from.moved && Math.hypot(e.clientX - from.x, e.clientY - from.y) < 4)) return;
         from.moved = true;
-        const anchor = { ...pin.anchor, x: pin.anchor.x + (e.clientX - from.x) / innerWidth, y: pin.anchor.y + (e.clientY - from.y) / innerHeight };
+        const anchor = {
+          ...pin.anchor,
+          x: within(pin.anchor.x + (e.clientX - from.x) / innerWidth, 0, 1 - (pin.anchor.w || 0)),
+          y: within(pin.anchor.y + (e.clientY - from.y) / innerHeight, 0, bar.offsetTop / innerHeight - (pin.anchor.h || 0)),
+        };
         place(pin, anchor);
         const box = notes.boxes.get(id);
         if (box) place(box, anchor);
@@ -974,11 +980,12 @@ function __bridgeInit(options) {
     notes.render = function (id) {
       const composer = notes.composer(id);
       const note = notes.list.find((x) => x.id === id);
-      composer.innerHTML = '<textarea placeholder="What about this?" rows="2"></textarea><div class="bridge-bar">'
+      composer.innerHTML = '<textarea placeholder="What about this?"></textarea><div class="bridge-bar">'
         + (note ? '<span><button data-act="delete">Delete</button> <button data-act="cancel">Cancel</button></span>' : '<button data-act="cancel">Cancel</button>')
         + '<button data-act="save" class="bridge-primary">Save <kbd>⏎</kbd></button></div>';
       const box = composer.querySelector('textarea');
       box.value = id in notes.drafts ? notes.drafts[id] : note?.text || '';
+      box.addEventListener('input', () => notes.fit(composer));
       box.addEventListener('keydown', async (e) => {
         if (e.key === 'Escape') { e.preventDefault(); notes.act(id, 'cancel'); }
         if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
@@ -992,7 +999,7 @@ function __bridgeInit(options) {
       composer.style.translate = '';
       const r = composer.getBoundingClientRect();
       const dx = Math.max(8 - r.left, 0) + Math.min(innerWidth - 8 - r.right, 0);
-      const dy = Math.max(8 - r.top, 0) + Math.min(innerHeight - 8 - r.bottom, 0);
+      const dy = Math.max(8 - r.top, 0) + Math.min(bar.offsetTop - 8 - r.bottom, 0);
       composer.style.translate = `${dx}px ${dy}px`;
       const placed = composer.getBoundingClientRect();
       post('glass', { rect: [placed.left, placed.top, placed.width, placed.height] });

@@ -88,7 +88,9 @@ html[data-bridge-capturing] :is(.bridge-pin, .bridge-note) { visibility: hidden;
   color: inherit;
   font: inherit;
   resize: none;
+  field-sizing: content;
   min-height: 58px;
+  max-height: calc(8lh + 18px);
   outline: none;
 }
 .bridge-composer textarea::placeholder { color: color-mix(in srgb, CanvasText 70%, transparent); opacity: 1; }
