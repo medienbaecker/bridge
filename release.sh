@@ -20,6 +20,6 @@ normalize='.hooks |= (with_entries(.value |= (map(.hooks |= map(select(.command 
 zip=build.noindex/bridge.zip
 ./scripts/package.sh "$zip"
 previous="$(git describe --tags --abbrev=0 2>/dev/null || true)"
-if [ -n "$previous" ]; then notes="$(git log --format='- %s' "$previous..HEAD")"; else notes="First release"; fi
+if [ -n "$previous" ]; then notes="$(git log --no-merges --format='- %s' "$previous..HEAD")"; else notes="First release"; fi
 gh release create "$tag" "$zip" --target "$(git rev-parse HEAD)" --title "$tag" --notes "$notes"
 git fetch -q --tags origin
