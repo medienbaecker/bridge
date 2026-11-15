@@ -282,7 +282,10 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         return true
     }
 
+    var refreshes = 0
+
     func refresh() {
+        refreshes += 1
         projects.reload()
         sidebar.reload()
         for (location, pageWindow) in windows where model.listing.entry(location) == nil { pageWindow.close() }

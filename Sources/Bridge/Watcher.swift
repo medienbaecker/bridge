@@ -10,6 +10,7 @@ final class Watcher {
     let onChange: () -> Void
     var sources: [DispatchSourceFileSystemObject] = []
     var pending: DispatchWorkItem?
+    static var calls = 0
 
     init(directory: URL, files: [String], onChange: @escaping () -> Void) {
         self.directory = directory
@@ -37,6 +38,7 @@ final class Watcher {
         pending?.cancel()
         let item = DispatchWorkItem { [weak self] in
             self?.open()
+            Watcher.calls += 1
             self?.onChange()
         }
         pending = item

@@ -115,8 +115,11 @@ final class Model {
         selected = shown.first?.location
     }
 
+    var saves = 0
+
     func changed() {
         try? listing.save()
+        saves += 1
         watchForUpdates()
         onChange()
     }

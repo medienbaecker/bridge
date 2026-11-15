@@ -244,6 +244,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                                      "pictures": .array(freeze.notes.map { note in freeze.pictures[note.id].map { p in .array([p.frame.minX, p.frame.minY, p.frame.width, p.frame.height].map { .number(Double($0)) }) } ?? .null })])
         }
         out["webViews"] = .number(Double(window.content.container.subviews.count))
+        out["loadedPages"] = .array(model.pages.keys.sorted().map { .string($0) })
+        out["webProcesses"] = .array(model.pages.values.compactMap { $0.webView.value(forKey: "_webProcessIdentifier") as? Int }.filter { $0 > 0 }.sorted().map { .number(Double($0)) })
+        var limit = rlimit()
+        getrlimit(RLIMIT_NOFILE, &limit)
+        out["handleLimit"] = .number(Double(limit.rlim_cur))
+        out["handles"] = .number(Double((0..<Int32(limit.rlim_cur)).filter { fcntl($0, F_GETFD) != -1 }.count))
+        out["watcherCalls"] = .number(Double(Watcher.calls))
+        out["listSaves"] = .number(Double(model.saves))
+        out["refreshes"] = .number(Double(window.refreshes))
         if let w = window.window {
             out["windowVisible"] = .bool(w.isVisible)
             out["backingScale"] = .number(Double(w.backingScaleFactor))
