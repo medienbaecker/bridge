@@ -690,6 +690,12 @@ final class ContentController: NSViewController {
         let line = NSBox()
         line.boxType = .separator
         line.translatesAutoresizingMaskIntoConstraints = false
+        let tint = NSBox()
+        tint.boxType = .custom
+        tint.borderWidth = 0
+        tint.fillColor = .systemOrange.withAlphaComponent(0.16)
+        tint.translatesAutoresizingMaskIntoConstraints = false
+        banner.addSubview(tint)
         banner.addSubview(bannerLabel)
         banner.addSubview(line)
         root.addSubview(banner)
@@ -702,6 +708,10 @@ final class ContentController: NSViewController {
             bannerLabel.bottomAnchor.constraint(equalTo: banner.bottomAnchor, constant: -8),
             bannerLabel.leadingAnchor.constraint(equalTo: banner.leadingAnchor, constant: 23),
             bannerLabel.trailingAnchor.constraint(equalTo: banner.trailingAnchor, constant: -21),
+            tint.topAnchor.constraint(equalTo: banner.topAnchor),
+            tint.bottomAnchor.constraint(equalTo: banner.bottomAnchor),
+            tint.leadingAnchor.constraint(equalTo: banner.leadingAnchor),
+            tint.trailingAnchor.constraint(equalTo: banner.trailingAnchor),
             line.leadingAnchor.constraint(equalTo: banner.leadingAnchor),
             line.trailingAnchor.constraint(equalTo: banner.trailingAnchor),
             line.bottomAnchor.constraint(equalTo: banner.bottomAnchor),
