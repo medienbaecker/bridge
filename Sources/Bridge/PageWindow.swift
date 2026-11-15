@@ -6,7 +6,7 @@ final class PageWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
     let content = ContentController()
     var onClose: () -> Void = {}
 
-    init(page: Page, near main: NSWindow?) {
+    init(page: Page) {
         self.page = page
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 760, height: 720),
@@ -14,14 +14,13 @@ final class PageWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
             backing: .buffered, defer: false)
         window.toolbarStyle = .unified
         window.isReleasedWhenClosed = false
-        window.tabbingIdentifier = "Bridge.page"
+        window.tabbingMode = .disallowed
         window.minSize = NSSize(width: 480, height: 300)
         super.init(window: window)
         window.delegate = self
         shouldCascadeWindows = false
         window.contentViewController = content
         window.setContentSize(NSSize(width: 760, height: 720))
-        window.cascadeTopLeft(from: (NSApp.keyWindow ?? main).map { NSPoint(x: $0.frame.minX, y: $0.frame.maxY) } ?? .zero)
 
         let toolbar = NSToolbar(identifier: "Bridge.page")
         toolbar.delegate = self
@@ -62,10 +61,7 @@ final class PageWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
 
     func validateToolbarItem(_ item: NSToolbarItem) -> Bool {
         switch item.itemIdentifier {
-        case MainWindow.send:
-            MainWindow.styleSend(item, page.sendLabel)
-            item.toolTip = page.sendToolTip
-            return page.viewingVersion == nil
+        case MainWindow.send: return MainWindow.validateSend(item, for: page)
         default: return true
         }
     }
@@ -78,14 +74,14 @@ final class PageWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         guard let command = item.representedObject as? String else { return true }
         let entry = page.model.listing.entry(page.location)
         switch command {
-        case "send": return page.viewingVersion == nil && !(page.isDraft && page.sidecar.blank)
-        case "point", "new", "crossed": return true
+        case "send": return MainWindow.canSend(page)
+        case "point": return true
         case "cross": return entry.map { !$0.crossed } ?? false
         case "uncross": return entry?.crossed ?? false
         case "remove":
             item.title = Paths.owned(page.location) ? "Move to Trash" : "Remove from List"
             return entry != nil
-        default: return page.canPerform(command) ?? false
+        default: return page.canPerform(command) ?? (NSApp.delegate as? AppDelegate)?.validateMenuItem(item) ?? false
         }
     }
 
@@ -94,11 +90,10 @@ final class PageWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         switch command {
         case "point": app?.freeze()
         case "send": app?.window.send(page, from: window)
-        case "new", "crossed": _ = app?.window.perform(command: command, argument: nil); app?.window.showWindow(nil)
-        case "cross": page.model.cross([page.location], true)
-        case "uncross": page.model.cross([page.location], false)
-        case "remove": page.model.trash([page.location])
-        default: guard page.perform(command) else { return }
+        case "cross": app?.window.cross([page.location], true)
+        case "uncross": app?.window.cross([page.location], false)
+        case "remove": app?.window.remove([page.location])
+        default: guard page.perform(command) else { app?.perform(menu: command); return }
         }
         refresh()
     }

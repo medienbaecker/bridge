@@ -92,7 +92,7 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
         let menu = NSMenu()
         let now = Date()
         for w in model.waiters {
-            let project = model.listing.bridges.first { $0.session == w.session }?.projectName ?? w.session.prefix(8).description
+            let project = model.listing.bridges.first { $0.session == w.session }.map { model.name(ofProject: $0.project) } ?? w.session.prefix(8).description
             let item = menu.addItem(withTitle: "\(project) · \(w.kind) · \(SidebarController.ago(w.started, from: now)) · \(w.megabytes) MB", action: nil, keyEquivalent: "")
             item.toolTip = "pid \(w.pid)"
         }
@@ -180,9 +180,18 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
             let i = rows.firstIndex(of: row)!
             let f = table.convert(table.rect(ofRow: i), to: nil)
             let top = table.window.map { $0.frame.height - f.maxY } ?? 0
-            return .object(["key": .string(s.key), "name": .string(ScopeCell.name(of: s, model: model)), "count": .number(Double(ScopeCell.count(of: s, model: model))), "countShown": .bool((table.view(atColumn: 0, row: i, makeIfNecessary: false) as? ScopeCell)?.count.stringValue.isEmpty == false),
+            return .object(["key": .string(s.key), "toolTip": .string((table.view(atColumn: 0, row: i, makeIfNecessary: false) as? ScopeCell)?.toolTip ?? ""), "name": .string(ScopeCell.name(of: s, model: model)), "count": .number(Double(ScopeCell.count(of: s, model: model))), "countShown": .bool((table.view(atColumn: 0, row: i, makeIfNecessary: false) as? ScopeCell)?.count.stringValue.isEmpty == false),
                             "top": .number(Double(top)), "height": .number(Double(f.height))])
         })]
+    }
+}
+
+extension Model {
+    func name(ofProject path: String, among others: [String] = []) -> String {
+        if path == Paths.drafts.path { return "Drafts" }
+        let name = (path as NSString).lastPathComponent
+        guard (listing.projects + others).contains(where: { $0 != path && ($0 as NSString).lastPathComponent == name }) else { return name }
+        return ((path as NSString).deletingLastPathComponent as NSString).lastPathComponent + "/" + name
     }
 }
 
@@ -224,7 +233,7 @@ final class ScopeCell: NSTableCellView {
         switch scope {
         case .waiting: return "Waiting"
         case .all: return "All"
-        case .project(let p): return p == Paths.drafts.path ? "Drafts" : (p as NSString).lastPathComponent
+        case .project(let p): return model.name(ofProject: p)
         }
     }
 
@@ -237,7 +246,7 @@ final class ScopeCell: NSTableCellView {
     }
 
     func show(_ scope: Scope, model: Model) {
-        toolTip = nil
+        if case .project(let path) = scope, path != Paths.drafts.path { toolTip = path } else { toolTip = nil }
         name.textColor = .labelColor
         let symbol: String
         icon.contentTintColor = .secondaryLabelColor

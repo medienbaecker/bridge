@@ -12,7 +12,7 @@ bridge --do new >/dev/null; wait_ready; settle 0.3
 draft=$(bridge --state | jq -r .selected)
 js() { bridge --js "$draft" "$1"; }
 check "New bridge opens a draft in Drafts" "$([[ "$draft" == "$XDG_STATE_HOME"/bridge-dev/drafts/*.html ]] && echo yes || echo "$draft")" "yes"
-check_json "it is called New bridge until it has words" "$(bridge --state)" '.title' "New bridge"
+check_json "it is called New Bridge until it has words" "$(bridge --state)" '.title' "New Bridge"
 check_json "the projects column has Drafts, selected" "$(bridge --state)" '.projects | [.scope, (.rows | map(.name) | index("Drafts") != null)] | @tsv' "project:$XDG_STATE_HOME/bridge-dev/drafts	true"
 check "an empty draft cannot be sent" "$(send_enabled)" "false"
 check_json "agents are named by their last page, in the order they started" "$(bridge --state)" '.agents | join(" | ")' "No page yet · pages · busy | Card layout for the archive · pages · idle"

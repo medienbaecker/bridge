@@ -42,7 +42,7 @@ check_json "send taken back" "$read" '.status' "open"
 check_json "answers cleared" "$read" '.answers | length' "0"
 check_json "history keeps version 1 answers" "$read" '.history[0].answers.layout' "grid"
 state=$(bridge --state)
-check_json "the window's subtitle carries it" "$state" '.subtitle' "Changed since you answered: asks density. Version 2."
+check_json "the strip above the page carries it" "$state" '.bannerStrip.text' "Changed since you answered: asks density. Version 2."
 check_json "unread again" "$state" '.sidebar[0].bridges[0].unread' "true"
 check_json "still no reload" "$(js "return window.__marker")" '.' "alive"
 check_json "page shows what the user said last time" "$(js "return document.querySelector('.bridge-previous').textContent")" '.' "Grid"
@@ -52,7 +52,7 @@ snap changed "Version 2: changed-since-you-answered banner, last-time hints"
 # 4. Walking back through versions
 state=$(bridge --do previous)
 check_json "previous shows version 1" "$state" '.viewingVersion' "1"
-check_json "the subtitle says which version" "$state" '.subtitle | startswith("Version 1 of 2")' "true"
+check_json "the strip says which version" "$state" '.bannerStrip.text | startswith("Version 1 of 2")' "true"
 wait_ready
 check_json "old version has no density question" "$(js "return document.querySelectorAll('[data-record=density]').length")" '.' "0"
 check_json "old version shows the old answer" "$(js "return document.querySelector('[data-value=grid]').hasAttribute('data-selected')")" '.' "true"

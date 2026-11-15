@@ -42,6 +42,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
     var collidingClasses: [String] = []
     var changeSummary: String?
     var note: String?
+    var undelivered: String?
     var lastContent: Data?
     var versionContent: Data?
     var lastWritten: Data?
@@ -168,6 +169,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
             let when = sidecar.history.first { $0.n == v }.map { Self.clock.string(from: $0.at) } ?? ""
             return "Version \(v) of \(sidecar.version), as it was at \(when). Read-only; ⌘] goes forward."
         }
+        if let undelivered { return undelivered }
         if let n = note ?? changeSummary { return [n, moved].compactMap { $0 }.joined(separator: " · ") }
         if let moved { return moved }
         // No echo of the answer here: the toolbar already shows the sent state, and an

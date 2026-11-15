@@ -106,9 +106,9 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         sidebar.onRowCommand = { [weak self] command, targets in
             guard let self else { return }
             switch command {
-            case "cross": model.cross(targets, true)
-            case "uncross": model.cross(targets, false)
-            case "remove": model.trash(targets)
+            case "cross": cross(targets, true)
+            case "uncross": cross(targets, false)
+            case "remove": remove(targets)
             case "reveal": if let t = targets.first { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: t)]) }
             case "window": for t in targets { openWindow(t) }
             default: break
@@ -229,7 +229,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
             return
         }
         let page = model.page(for: location)
-        let pageWindow = PageWindow(page: page, near: window)
+        let pageWindow = PageWindow(page: page)
         pageWindow.onClose = { [weak self] in
             self?.windows[location] = nil
             self?.refresh()
@@ -238,9 +238,47 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         model.markRead(location)
         refresh()
         pageWindow.refresh()
-        if let frame { pageWindow.window?.setFrame(frame, display: false) }
+        if let frame { pageWindow.window?.setFrame(frame, display: false) } else if topLeft == nil { place(pageWindow) }
         pageWindow.showWindow(nil)
         if let topLeft { pageWindow.window?.setFrameTopLeftPoint(topLeft) }
+        lastPageWindow = pageWindow
+    }
+
+    weak var lastPageWindow: PageWindow?
+
+    func place(_ pageWindow: PageWindow) {
+        if let last = lastPageWindow?.window, last.isVisible {
+            _ = pageWindow.window?.cascadeTopLeft(from: last.cascadeTopLeft(from: .zero))
+        } else if let main = window {
+            let pane = main.convertToScreen(content.view.convert(content.view.bounds, to: nil))
+            _ = pageWindow.window?.cascadeTopLeft(from: NSPoint(x: pane.minX, y: main.frame.maxY))
+        }
+    }
+
+    // MARK: Undo
+
+    func cross(_ targets: [String], _ crossed: Bool) {
+        let changing = targets.filter { model.listing.entry($0)?.crossed == !crossed }
+        guard !changing.isEmpty else { return }
+        model.cross(changing, crossed)
+        registerUndo(crossed ? "Cross" : "Uncross") { $0.cross(changing, !crossed) }
+    }
+
+    func remove(_ targets: [String]) {
+        let entries = targets.compactMap { model.listing.entry($0) }
+        guard !entries.isEmpty else { return }
+        let name = targets.allSatisfy(Paths.owned) ? "Move to Trash" : "Remove from List"
+        let files = model.trash(targets)
+        registerUndo(name) { main in
+            main.model.restore(entries, files: files)
+            main.registerUndo(name) { $0.remove(targets) }
+        }
+    }
+
+    func registerUndo(_ name: String, _ undo: @escaping (MainWindow) -> Void) {
+        guard let manager = window?.undoManager else { return }
+        manager.registerUndo(withTarget: self, handler: undo)
+        if !manager.isUndoing, !manager.isRedoing { manager.setActionName(name) }
     }
 
     var shownPage: Page? { model.selectedPage.flatMap { windows[$0.location] == nil ? $0 : nil } }
@@ -276,8 +314,11 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         if let cwd = model.agents[session]?.cwd, !cwd.isEmpty {
             let project = Ground.projectRoot(for: cwd)
             model.listing.update(location) { $0.project = project }
+            model.scope = .project(project)
+            model.selected = location
             model.changed()
         }
+        page.undelivered = nil
         page.send()
         return true
     }
@@ -294,7 +335,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         content.show(page: away == nil ? page : nil)
         content.showAway(away.map { w in { w.showWindow(nil) } })
         for w in windows.values { w.refresh() }
-        window?.subtitle = page?.bannerText ?? ""
+        content.showBanner(away == nil ? page?.bannerText : nil)
         window?.toolbar?.validateVisibleItems()
         window?.title = page?.title ?? "Bridge"
         listHeader.show(ScopeCell.name(of: model.scope, model: model))
@@ -379,20 +420,20 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
     }
 
     func validateToolbarItem(_ item: NSToolbarItem) -> Bool {
-        let page = shownPage
         switch item.itemIdentifier {
-        case Self.send:
-            let state = page?.sendLabel ?? "Send"
-            Self.styleSend(item, state)
-            item.toolTip = page?.sendToolTip ?? "Send your answer"
-            guard let page else { return false }
-            if page.isDraft {
-                item.toolTip = "Pick the agent it goes to"
-                return !page.sidecar.blank
-            }
-            return page.viewingVersion == nil
+        case Self.send: return Self.validateSend(item, for: shownPage)
         default: return true
         }
+    }
+
+    static func validateSend(_ item: NSToolbarItem, for page: Page?) -> Bool {
+        styleSend(item, page?.sendLabel ?? "Send")
+        item.toolTip = page.map { $0.isDraft ? "Pick the agent it goes to" : $0.sendToolTip } ?? "Send your answer"
+        return page.map(canSend) ?? false
+    }
+
+    static func canSend(_ page: Page) -> Bool {
+        page.isDraft ? !page.sidecar.blank : page.viewingVersion == nil
     }
 
     @objc func toolbarAction(_ sender: NSToolbarItem) {
@@ -410,6 +451,9 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         switch command {
         case "cross": return entry.map { !$0.crossed } ?? false
         case "uncross": return entry?.crossed ?? false
+        case "crossed":
+            item.title = crossedTitle
+            return true
         case "remove":
             item.title = page.map { targets($0).allSatisfy(Paths.owned) } ?? false ? "Move to Trash" : "Remove from List"
             return entry != nil
@@ -420,12 +464,22 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         }
     }
 
+    var crossedTitle: String { model.showCrossed ? "Hide Crossed" : "Show Crossed" }
+
+    func focusDraft() {
+        guard let page = shownPage, page.isDraft else { return }
+        window?.makeFirstResponder(page.webView)
+        page.call("document.getElementById('text').focus()")
+    }
+
     func perform(command: String, argument: String?) -> Bool {
         if command == "relaunch" { (NSApp.delegate as? AppDelegate)?.relaunch(); return true }
         switch command {
         case "select": return select(argument)
         case "cleanup": model.crossEnded(); return true
-        case "new": model.newBridge(); return true
+        case "new": model.newBridge(); focusDraft(); return true
+        case "undo": window?.undoManager?.undo(); return true
+        case "redo": window?.undoManager?.redo(); return true
         case "settings": (NSApp.delegate as? AppDelegate)?.showSettings(); return true
         case "freeze": (NSApp.delegate as? AppDelegate)?.freeze(fromBridge: argument == "front"); return true
         case "point": (NSApp.delegate as? AppDelegate)?.freeze(); return true
@@ -487,6 +541,10 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
             guard let w = argument.flatMap(Double.init) else { return false }
             split.splitViewItems[0].minimumThickness = w; split.splitViewItems[0].maximumThickness = w; window?.layoutIfNeeded()
             return true
+        case "listwidth":
+            guard let w = argument.flatMap(Double.init) else { return false }
+            split.splitView.setPosition((split.splitViewItems[0].isCollapsed ? 0 : split.splitView.arrangedSubviews[0].frame.maxX) + w, ofDividerAt: 1); window?.layoutIfNeeded()
+            return true
         case "dragout":
             let parts = (argument ?? "").split(separator: " ").map(String.init)
             guard parts.count == 3, let x = Double(parts[1]), let y = Double(parts[2]) else { return false }
@@ -506,9 +564,10 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
             guard let argument else { return false }
             page.attach([URL(fileURLWithPath: argument)])
         case "sendto": if !sendDraft(page.location, to: argument ?? "") { return false }
-        case "cross": model.cross(targets(page), true); return true
-        case "uncross": model.cross(targets(page), false); return true
-        case "remove": model.trash(targets(page)); return true
+        case "cross": cross(targets(page), true); return true
+        case "uncross": cross(targets(page), false); return true
+        case "remove": remove(targets(page)); return true
+        case "undelivered": page.undelivered = argument
         case "select-add":
             guard let argument else { return false }
             let row = sidebar.row(for: argument)
@@ -583,6 +642,17 @@ final class ContentController: NSViewController {
     weak var shown: Page?
     private let away = NSStackView()
     private var bringBack: (() -> Void)?
+    let banner = NSVisualEffectView()
+    let bannerLabel = NSTextField(wrappingLabelWithString: "")
+
+    func showBanner(_ text: String?) {
+        guard text != (banner.isHidden ? nil : bannerLabel.stringValue) else { return }
+        bannerLabel.stringValue = text ?? ""
+        bannerLabel.toolTip = text
+        banner.isHidden = text == nil
+        view.layoutSubtreeIfNeeded()
+        inset()
+    }
 
     func showAway(_ action: (() -> Void)?) {
         bringBack = action
@@ -607,8 +677,34 @@ final class ContentController: NSViewController {
         away.addArrangedSubview(button)
         away.isHidden = true
         away.translatesAutoresizingMaskIntoConstraints = false
+        banner.material = .headerView
+        banner.blendingMode = .withinWindow
+        banner.isHidden = true
+        banner.translatesAutoresizingMaskIntoConstraints = false
+        bannerLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        bannerLabel.maximumNumberOfLines = 3
+        bannerLabel.cell?.truncatesLastVisibleLine = true
+        bannerLabel.isSelectable = false
+        bannerLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        bannerLabel.translatesAutoresizingMaskIntoConstraints = false
+        let line = NSBox()
+        line.boxType = .separator
+        line.translatesAutoresizingMaskIntoConstraints = false
+        banner.addSubview(bannerLabel)
+        banner.addSubview(line)
+        root.addSubview(banner)
         root.addSubview(away)
         NSLayoutConstraint.activate([
+            banner.topAnchor.constraint(equalTo: root.safeAreaLayoutGuide.topAnchor),
+            banner.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            banner.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            bannerLabel.topAnchor.constraint(equalTo: banner.topAnchor, constant: 7),
+            bannerLabel.bottomAnchor.constraint(equalTo: banner.bottomAnchor, constant: -8),
+            bannerLabel.leadingAnchor.constraint(equalTo: banner.leadingAnchor, constant: 23),
+            bannerLabel.trailingAnchor.constraint(equalTo: banner.trailingAnchor, constant: -21),
+            line.leadingAnchor.constraint(equalTo: banner.leadingAnchor),
+            line.trailingAnchor.constraint(equalTo: banner.trailingAnchor),
+            line.bottomAnchor.constraint(equalTo: banner.bottomAnchor),
             away.centerXAnchor.constraint(equalTo: root.centerXAnchor),
             away.centerYAnchor.constraint(equalTo: root.centerYAnchor),
             container.topAnchor.constraint(equalTo: root.topAnchor),
@@ -627,7 +723,7 @@ final class ContentController: NSViewController {
 
     func inset() {
         guard let web = shown?.webView else { return }
-        let insets = NSEdgeInsets(top: view.safeAreaInsets.top, left: 0, bottom: 0, right: 0)
+        let insets = NSEdgeInsets(top: view.safeAreaInsets.top + (banner.isHidden ? 0 : banner.frame.height), left: 0, bottom: 0, right: 0)
         if web.obscuredContentInsets.top != insets.top { web.obscuredContentInsets = insets }
     }
 
@@ -687,6 +783,20 @@ class TitleLabel: NSTextField {
     }
 
     var indent: CGFloat = 0 { didSet { show(stringValue) } }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        fit()
+    }
+
+    var fits: Bool { alphaValue > 0 }
+
+    private func fit() {
+        let font = font ?? .titleBarFont(ofSize: NSFont.systemFontSize)
+        let width = { (text: String) in (text as NSString).size(withAttributes: [.font: font]).width }
+        let least = min(width(stringValue), width(String(stringValue.prefix(3)) + "…"))
+        alphaValue = bounds.width - indent < least.rounded(.down) ? 0 : 1
+    }
     override var intrinsicContentSize: NSSize {
         var size = super.intrinsicContentSize
         size.width += indent
@@ -698,5 +808,6 @@ class TitleLabel: NSTextField {
         style.lineBreakMode = .byTruncatingTail
         attributedStringValue = NSAttributedString(string: text, attributes: [.font: font ?? .titleBarFont(ofSize: NSFont.systemFontSize), .paragraphStyle: style])
         invalidateIntrinsicContentSize()
+        fit()
     }
 }

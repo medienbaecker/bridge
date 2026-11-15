@@ -49,6 +49,9 @@ final class SettingsWindow: NSWindowController {
     let sound = NSButton(checkboxWithTitle: "Sound when a bridge arrives", target: nil, action: nil)
     let updates = NSButton(checkboxWithTitle: "Tell me when a page is updated", target: nil, action: nil)
     let appearance = NSPopUpButton()
+    let loginError = SettingsWindow.hint("")
+    let denied = NSStackView()
+    var grid: NSGridView!
 
     init() {
         let window = NSWindow(contentRect: .zero, styleMask: [.titled, .closable], backing: .buffered, defer: false)
@@ -78,30 +81,43 @@ final class SettingsWindow: NSWindowController {
         let separator = NSBox()
         separator.boxType = .separator
 
+        let open = NSButton(title: "System Settings…", target: self, action: #selector(openNotifications))
+        open.controlSize = .small
+        denied.orientation = .vertical
+        denied.alignment = .leading
+        denied.spacing = 6
+        denied.addArrangedSubview(Self.hint("Notifications are turned off for Bridge in System Settings."))
+        denied.addArrangedSubview(open)
+
         let grid = NSGridView(views: [
             [label("Point at the screen:"), recorder],
-            [NSGridCell.emptyContentView, hint("Starts a new bridge from any app.")],
+            [NSGridCell.emptyContentView, Self.hint("Starts a new bridge from any app.")],
             [NSGridCell.emptyContentView, loginRow],
+            [NSGridCell.emptyContentView, loginError],
             [separator],
             [label("Clear ended sessions after:"), ended],
-            [NSGridCell.emptyContentView, hint("Bridges whose agent is gone are crossed off.")],
+            [NSGridCell.emptyContentView, Self.hint("Bridges whose agent is gone are crossed off.")],
             [label("Notifications:"), sound],
             [NSGridCell.emptyContentView, updates],
+            [NSGridCell.emptyContentView, denied],
             [label("Appearance:"), appearance],
         ])
+        self.grid = grid
+        grid.cell(for: loginError)?.row?.isHidden = true
+        grid.cell(for: denied)?.row?.isHidden = true
         grid.rowSpacing = 10
         grid.columnSpacing = 8
         grid.rowAlignment = .firstBaseline
         grid.column(at: 0).xPlacement = .trailing
         grid.column(at: 1).xPlacement = .leading
         grid.column(at: 1).width = 240
-        grid.row(at: 3).mergeCells(in: NSRange(location: 0, length: 2))
+        grid.row(at: 4).mergeCells(in: NSRange(location: 0, length: 2))
         grid.row(at: 2).topPadding = 4
-        grid.row(at: 3).topPadding = 6
-        grid.row(at: 3).bottomPadding = 6
-        grid.row(at: 6).topPadding = 6
-        grid.row(at: 8).topPadding = 6
-        for row in [1, 5] { grid.row(at: row).topPadding = -4 }
+        grid.row(at: 4).topPadding = 6
+        grid.row(at: 4).bottomPadding = 6
+        grid.row(at: 7).topPadding = 6
+        grid.row(at: 10).topPadding = 6
+        for row in [1, 3, 6] { grid.row(at: row).topPadding = -4 }
         grid.translatesAutoresizingMaskIntoConstraints = false
         let content = NSView()
         content.addSubview(grid)
@@ -121,15 +137,26 @@ final class SettingsWindow: NSWindowController {
     required init?(coder: NSCoder) { fatalError() }
 
     override func showWindow(_ sender: Any?) {
-        if window?.isVisible == false { window?.center() }
+        if let window, !window.isVisible {
+            window.layoutIfNeeded()
+            let screen = ((NSApp.delegate as? AppDelegate)?.window.window?.screen ?? window.screen)?.visibleFrame ?? .zero
+            window.setFrameOrigin(NSPoint(x: screen.midX - window.frame.width / 2, y: screen.midY - window.frame.height / 2))
+        }
         updateLogin()
+        Task { show(denied, await Notify.denied()) }
         super.showWindow(sender)
         window?.makeFirstResponder(nil)
     }
 
     private func label(_ text: String) -> NSTextField { NSTextField(labelWithString: text) }
 
-    private func hint(_ text: String) -> NSTextField {
+    private func show(_ view: NSView, _ shown: Bool) {
+        grid.cell(for: view)?.row?.isHidden = !shown
+    }
+
+    @objc func openNotifications() { Notify.openSystemSettings() }
+
+    private static func hint(_ text: String) -> NSTextField {
         let hint = NSTextField(wrappingLabelWithString: text)
         hint.preferredMaxLayoutWidth = 240
         hint.font = .systemFont(ofSize: 11)
@@ -143,7 +170,14 @@ final class SettingsWindow: NSWindowController {
     @objc func chooseAppearance() { Settings.appearance = appearance.titleOfSelectedItem ?? "System" }
 
     @objc func toggleLogin() {
-        try? login.state == .on ? SMAppService.mainApp.register() : SMAppService.mainApp.unregister()
+        do {
+            if Env.test { throw CocoaError(.featureUnsupported) }
+            try login.state == .on ? SMAppService.mainApp.register() : SMAppService.mainApp.unregister()
+            show(loginError, false)
+        } catch {
+            loginError.stringValue = "Open at Login could not be changed: \(error.localizedDescription)"
+            show(loginError, true)
+        }
         updateLogin()
     }
 
@@ -159,6 +193,9 @@ final class SettingsWindow: NSWindowController {
         .object([
             "visible": .bool(window?.isVisible ?? false), "ended": .string(ended.titleOfSelectedItem ?? ""),
             "sound": .bool(sound.state == .on), "updates": .bool(updates.state == .on), "appearance": .string(appearance.titleOfSelectedItem ?? ""),
+            "loginError": .string(grid.cell(for: loginError)?.row?.isHidden == false ? loginError.stringValue : ""),
+            "notificationsDenied": .bool(grid.cell(for: denied)?.row?.isHidden == false),
+            "screen": .string(window?.screen?.localizedName ?? ""),
             "shortcut": .string(KeyboardShortcuts.getShortcut(for: .freezeScreen)?.description ?? ""),
         ])
     }
