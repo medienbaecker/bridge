@@ -106,14 +106,13 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         sidebar.onRowCommand = { [weak self] command, targets in
             guard let self else { return }
             switch command {
-            case "cross": for t in targets { model.cross(t, true) }
-            case "uncross": for t in targets { model.cross(t, false) }
-            case "remove": for t in targets { model.trash(t) }
+            case "cross": model.cross(targets, true)
+            case "uncross": model.cross(targets, false)
+            case "remove": model.trash(targets)
             case "reveal": if let t = targets.first { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: t)]) }
             case "window": for t in targets { openWindow(t) }
             default: break
             }
-            refresh()
         }
         sidebar.onSelect = { [weak self] loc in
             guard let self, model.selected != loc else { return }
@@ -510,9 +509,9 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
             guard let argument else { return false }
             page.attach([URL(fileURLWithPath: argument)])
         case "sendto": if !sendDraft(page.location, to: argument ?? "") { return false }
-        case "cross": for t in targets(page) { model.cross(t, true) }
-        case "uncross": for t in targets(page) { model.cross(t, false) }
-        case "remove": for t in targets(page) { model.trash(t) }
+        case "cross": model.cross(targets(page), true); return true
+        case "uncross": model.cross(targets(page), false); return true
+        case "remove": model.trash(targets(page)); return true
         case "previous": page.showVersion((page.viewingVersion ?? page.sidecar.version) - 1)
         case "next": page.showVersion((page.viewingVersion ?? page.sidecar.version) + 1)
         case "select-add":

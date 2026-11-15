@@ -145,9 +145,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                                "bumpedByThis": .bool(onDisk != nil && page.bump?.content == onDisk),
                                "why": page.bump.map { .string($0.why) } ?? .null])))
         case .cross(let loc):
-            model.cross(loc, true); reply(.ok(.null))
+            model.cross([loc], true); reply(.ok(.null))
         case .uncross(let loc):
-            model.cross(loc, false); reply(.ok(.null))
+            model.cross([loc], false); reply(.ok(.null))
         case .remove(let loc):
             model.remove(loc); reply(.ok(.null))
         case .reset(let loc):

@@ -109,7 +109,7 @@ final class Model {
             !entry.crossed && !isDraft(entry) && now.timeIntervalSince(entry.presentedAt) > endedAfter
                 && life(of: entry.session) == .gone
         }
-        for entry in ended { cross(entry.location, true) }
+        if !ended.isEmpty { cross(ended.map(\.location), true) }
         return ended.count
     }
 
@@ -268,23 +268,36 @@ final class Model {
         changed()
     }
 
-    func cross(_ location: String, _ crossed: Bool) {
-        if crossed { Notify.withdraw(listing.entry(location)) }
-        listing.update(location) { $0.crossed = crossed; if crossed { $0.unread = false } }
+    func cross(_ locations: [String], _ crossed: Bool) {
+        for location in locations {
+            if crossed { Notify.withdraw(listing.entry(location)) }
+            listing.update(location) { $0.crossed = crossed; if crossed { $0.unread = false } }
+        }
         changed()
     }
 
     func remove(_ location: String) {
+        forget(location)
+        changed()
+    }
+
+    func forget(_ location: String) {
         Notify.withdraw(listing.entry(location))
         listing.bridges.removeAll { $0.location == location }
         close(location)
         lastShown[location] = nil
         if selected == location { selected = nil; settleSelection() }
+    }
+
+    func trash(_ locations: [String]) {
+        for location in locations {
+            forget(location)
+            discardFiles(of: location)
+        }
         changed()
     }
 
-    func trash(_ location: String) {
-        remove(location)
+    func discardFiles(of location: String) {
         let pictures = Sidecar.peek(Paths.sidecar(for: location)).comments.compactMap(\.picture).filter(Paths.inDrafts).map { URL(fileURLWithPath: $0) }
         guard Paths.owned(location) else { return discard(pictures) }
         let file = URL(fileURLWithPath: location)

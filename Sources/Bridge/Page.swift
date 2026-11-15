@@ -500,7 +500,6 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         guard viewingVersion == nil, values != sidecar.proposed else { return }
         sidecar.proposed = values
         save()
-        model.onChange()
     }
 
     func record(_ key: String, _ value: JSONValue) {
