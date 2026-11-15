@@ -29,6 +29,9 @@ html[data-bridge-freeze] :is(.bridge-composer, .bridge-composer *, .bridge-pin, 
   text-align: center;
 }
 .bridge-pin[data-lost] { opacity: 0.5; }
+.bridge-pin[data-below] { margin-top: 4.56px; transform: rotate(135deg); }
+.bridge-pin[data-below]::after { transform: rotate(-135deg); }
+html[data-bridge-capturing] :is(.bridge-pin, .bridge-note) { visibility: hidden; }
 .bridge-note {
   position: fixed;
   position-area: bottom span-right;

@@ -139,7 +139,13 @@ final class Freeze: NSObject {
         freeze.panel.orderFrontRegardless()
         freeze.content = Task { await Result { try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true) } }
         freeze.captures += 1
-        freeze.still = Task { await freeze.shoot(CGRect(origin: .zero, size: screen.frame.size)) }
+        freeze.still = Task {
+            let pinned = page.model.pages.values.filter { !$0.pinsJSON().isEmpty && $0.webView.window?.isVisible == true }
+            await Self.hidePins(on: pinned)
+            let picture = await freeze.shoot(CGRect(origin: .zero, size: screen.frame.size))
+            for page in pinned { page.call("document.documentElement.removeAttribute('data-bridge-capturing')") }
+            return picture
+        }
         Task {
             guard let picture = await freeze.still?.value, current === freeze else { return }
             freeze.backdrop.layer?.contents = picture.image
@@ -150,6 +156,14 @@ final class Freeze: NSObject {
         _ = try? await page.run("__bridge.agents(list); __bridge.cursor(pin)", ["list": list, "pin": pin], in: Page.world)
         await freeze.setCursor()
         await freeze.opened(from: previous)
+    }
+
+    static func hidePins(on pages: [Page]) async {
+        for page in pages {
+            _ = await within(0.3) {
+                try? await page.run("document.documentElement.setAttribute('data-bridge-capturing', ''); await new Promise((painted) => requestAnimationFrame(() => requestAnimationFrame(painted)))", [:], in: Page.world)
+            }
+        }
     }
 
     static func onScreen() -> [[String: Any]] {
