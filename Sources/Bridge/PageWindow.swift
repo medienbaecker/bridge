@@ -100,6 +100,8 @@ final class PageWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         refresh()
     }
 
+    func windowDidBecomeKey(_ notification: Notification) { page.countCommits() }
+
     func windowWillClose(_ notification: Notification) {
         content.show(page: nil)
         onClose()

@@ -120,6 +120,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
             model.selected = loc
             if let loc { model.markRead(loc) }
             refresh()
+            model.selectedPage?.countCommits()
         }
         sidebar.onDragOut = { [weak self] locations, topLeft in
             for (i, location) in locations.enumerated() {
@@ -568,11 +569,13 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         model.selected = location
         model.markRead(location)
         refresh()
+        model.selectedPage?.countCommits()
         windows[location]?.showWindow(nil)
         return true
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
+        model.selectedPage?.countCommits()
         if let loc = model.selected { model.markRead(loc) }
     }
 

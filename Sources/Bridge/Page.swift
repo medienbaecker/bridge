@@ -175,9 +175,24 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         return nil
     }
 
+    var commitsSince = 0
+
     var moved: String? {
-        let n = sidecar.presented?.ground?.commitsSince() ?? 0
-        return n > 0 ? "\(n) commit\(n == 1 ? "" : "s") since this was asked" : nil
+        commitsSince > 0 ? "\(commitsSince) commit\(commitsSince == 1 ? "" : "s") since this was asked" : nil
+    }
+
+    func countCommits() {
+        guard let ground = sidecar.presented?.ground else { return }
+        Task {
+            let count = await Self.commits(since: ground)
+            guard ground == sidecar.presented?.ground, count != commitsSince else { return }
+            commitsSince = count
+            model.onChange()
+        }
+    }
+
+    @concurrent nonisolated static func commits(since ground: Ground) async -> Int {
+        ground.commitsSince() ?? 0
     }
 
     static func short(_ v: JSONValue) -> String {
@@ -204,6 +219,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         frameLinks = [:]
         drives = [:]
         errors = []
+        countCommits()
         // The page reads the record through a document-start script, which is a
         // snapshot taken at injection: re-inject on every load, or a reload sees stale answers.
         installScripts()
@@ -248,6 +264,8 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
 
     func presented(_ p: Presentation) {
         sidecar.present(p, page: location)
+        commitsSince = 0
+        countCommits()
         save()
         if viewingVersion != nil { load() } else { fileChanged() }
     }

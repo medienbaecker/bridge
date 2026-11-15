@@ -157,9 +157,13 @@ public struct Ground: Codable, Equatable, Sendable {
         return Int(n)
     }
 
+    static let roots = Mutex<[String: String]>([:])
+
     public static func projectRoot(for cwd: String) -> String {
-        if let repo = git(["rev-parse", "--show-toplevel"], in: cwd) { return repo }
-        return claudeScratchpadProject(cwd) ?? cwd
+        if let known = roots.withLock({ $0[cwd] }) { return known }
+        let root = git(["rev-parse", "--show-toplevel"], in: cwd) ?? claudeScratchpadProject(cwd) ?? cwd
+        roots.withLock { $0[cwd] = root }
+        return root
     }
 
     /// A session whose cwd is its own scratchpad is in no repo, and naming the project
@@ -200,17 +204,36 @@ public struct Ground: Codable, Equatable, Sendable {
     }
 
     static func git(_ args: [String], in dir: String) -> String? {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        p.arguments = args
-        p.currentDirectoryURL = URL(fileURLWithPath: dir)
-        let out = Pipe()
-        p.standardOutput = out
-        p.standardError = FileHandle.nullDevice
-        guard (try? p.run()) != nil else { return nil }
-        let data = out.fileHandleForReading.readDataToEndOfFile()
-        p.waitUntilExit()
-        guard p.terminationStatus == 0 else { return nil }
+        var ends: [Int32] = [0, 0]
+        guard pipe(&ends) == 0 else { return nil }
+        var actions: posix_spawn_file_actions_t?
+        posix_spawn_file_actions_init(&actions)
+        posix_spawn_file_actions_addopen(&actions, 0, "/dev/null", O_RDONLY, 0)
+        posix_spawn_file_actions_adddup2(&actions, ends[1], 1)
+        posix_spawn_file_actions_addopen(&actions, 2, "/dev/null", O_WRONLY, 0)
+        posix_spawn_file_actions_addchdir_np(&actions, dir)
+        var attributes: posix_spawnattr_t?
+        posix_spawnattr_init(&attributes)
+        posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_CLOEXEC_DEFAULT))
+        var arguments: [UnsafeMutablePointer<CChar>?] = (["git"] + args).map { strdup($0) }
+        arguments.append(nil)
+        var pid: pid_t = 0
+        let spawned = posix_spawn(&pid, "/usr/bin/git", &actions, &attributes, arguments, environ) == 0
+        for argument in arguments { free(argument) }
+        posix_spawn_file_actions_destroy(&actions)
+        posix_spawnattr_destroy(&attributes)
+        close(ends[1])
+        defer { close(ends[0]) }
+        guard spawned else { return nil }
+        var data = Data()
+        var chunk = [UInt8](repeating: 0, count: 4096)
+        while true {
+            let count = read(ends[0], &chunk, chunk.count)
+            if count > 0 { data.append(contentsOf: chunk[0..<count]) } else if count == 0 || errno != EINTR { break }
+        }
+        var status: Int32 = 0
+        while waitpid(pid, &status, 0) < 0, errno == EINTR {}
+        guard status == 0 else { return nil }
         let s = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
         return s.isEmpty ? nil : s
     }
