@@ -130,6 +130,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         sidebar.windowPreview = { [weak self] location in self?.windowPreview(location) }
         sidebar.hasSnapshot = { [weak self] location in self?.snapshots[location] != nil }
         model.onChange = { [weak self] in self?.refresh() }
+        model.inWindows = { [weak self] in Set((self?.windows ?? [:]).keys) }
         model.watched = { [weak self] in self?.window?.isVisible == true && self?.window?.isMiniaturized == false && !NSApp.isHidden }
     }
 
@@ -154,8 +155,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
 
     func takeSnapshots(_ locations: [String]) {
         for location in locations {
-            let web = model.page(for: location).webView
-            guard web.window != nil, web.bounds.width > 0 else { continue }
+            guard let web = model.pages[location]?.webView, web.window != nil, web.bounds.width > 0 else { continue }
             web.takeSnapshot(with: nil) { [weak self] image, _ in self?.snapshots[location] = image }
         }
     }

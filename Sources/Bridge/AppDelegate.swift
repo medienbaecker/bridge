@@ -153,13 +153,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         case .reset(let loc):
             model.reset(loc); reply(.ok(.null))
         case .note(let loc, let id, let done):
-            let page = model.page(for: loc)
-            if let why = page.unreadable { reply(.error(why)); return }
-            page.setNote(id, done: done); reply(.ok(.null))
+            do { try model.setNote(id, done: done, on: loc); reply(.ok(.null)) } catch { reply(.error("\(error)")) }
         case .collect(let loc, let session):
-            let page = model.page(for: loc)
-            if let why = page.unreadable { reply(.error(why)); return }
-            page.collected(by: session); reply(.ok(.null))
+            do { try model.collect(loc, by: session); reply(.ok(.null)) } catch { reply(.error("\(error)")) }
         case .js(let loc, let code):
             guard Env.test, let page = loc.map({ $0 == Paths.freezePage.path ? freezePage : model.page(for: $0) }) ?? model.selectedPage else {
                 reply(.error("no page")); return

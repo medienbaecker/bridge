@@ -45,7 +45,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
     var lastContent: Data?
     var versionContent: Data?
     var lastWritten: Data?
-    var unreadable: String?
+    var unreadable: (any Error)?
     var lastData: Data?
     var watcher: Watcher?
     var media: [String: Date] = [:]
@@ -66,7 +66,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         self.kind = Kind.of(location)
         self.model = model
         self.sidecarURL = Paths.sidecar(for: location)
-        do { self.sidecar = try Sidecar.load(sidecarURL) } catch { self.sidecar = Sidecar(); self.unreadable = "\(error)" }
+        do { self.sidecar = try Sidecar.load(sidecarURL) } catch { self.sidecar = Sidecar(); self.unreadable = error }
         self.title = model.listing.entry(location)?.title ?? BridgeEntry.defaultTitle(location)
         let config = WKWebViewConfiguration()
         config.preferences.setValue(true, forKey: "developerExtrasEnabled")
@@ -91,7 +91,22 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         webView.uiDelegate = self
         webView.setValue(false, forKey: "drawsBackground")
         if kind != .url, !preview { watch() }
+        if !preview, let shown = model.lastShown[location] {
+            versionContent = shown.content
+            shape = shown.shape
+            changeSummary = shown.changeSummary
+            zoom = shown.zoom
+        }
     }
+
+    struct Shown {
+        let content: Data?
+        let shape: String?
+        let changeSummary: String?
+        let zoom: CGFloat
+    }
+
+    var shown: Shown { Shown(content: versionContent, shape: shape, changeSummary: changeSummary, zoom: zoom) }
 
     func watch() {
         let inPlace = media.keys.filter { Self.existingFolder(of: $0) == ($0 as NSString).deletingLastPathComponent }
@@ -232,17 +247,14 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
     }
 
     func presented(_ p: Presentation) {
-        sidecar.presented = p
-        sidecar.page = location
-        if sidecar.status == "closed" { sidecar.status = "open"; sidecar.closedAt = nil }
+        sidecar.present(p, page: location)
         save()
         if viewingVersion != nil { load() } else { fileChanged() }
     }
 
     func collected(by session: String) {
         guard sidecar.answered, sidecar.changedSinceCollected else { return }
-        sidecar.collectedAt = Date()
-        sidecar.collectedBy = session
+        sidecar.collect(by: session)
         save()
     }
 
@@ -258,7 +270,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         refreshMedia()
         if let data = try? Data(contentsOf: sidecarURL), data != lastWritten, data != sidecar.data() {
             lastWritten = data
-            do { sidecar = try Sidecar.load(sidecarURL); unreadable = nil } catch { unreadable = "\(error)" }
+            do { sidecar = try Sidecar.load(sidecarURL); unreadable = nil } catch { unreadable = error }
             model.onChange()
         }
         if FileManager.default.fileExists(atPath: location) == missing {
@@ -703,8 +715,8 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
     }
 
     func setNote(_ id: String, done: Bool) {
-        guard let i = sidecar.comments.firstIndex(where: { $0.id == id }) else { return }
-        sidecar.comments[i].state = done ? "done" : "open"
+        guard sidecar.comments.contains(where: { $0.id == id }) else { return }
+        sidecar.mark(id, done: done)
         save(); model.onChange()
         showPins()
     }
