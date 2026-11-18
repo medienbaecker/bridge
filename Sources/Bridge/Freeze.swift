@@ -247,18 +247,27 @@ final class Freeze: NSObject {
     nonisolated static func accessible(at spot: CGPoint, in pid: pid_t, into out: inout [String: JSONValue]) -> CGRect? {
         var hit: AXUIElement?
         guard AXIsProcessTrusted(), AXUIElementCopyElementAtPosition(AXUIElementCreateApplication(pid), Float(spot.x), Float(spot.y), &hit) == .success, let hit else { return nil }
+        let page = page(of: hit)
+        if let page, let url = attribute(page, "AXURL") as? URL { out["url"] = .string(url.absoluteString) }
+        if let page, zoomed(page) { return nil }
         if let role = attribute(hit, "AXRole") as? String { out["role"] = .string(role.replacingOccurrences(of: "AX", with: "").lowercased()) }
         if let label = name(of: hit) { out["label"] = .string(label) }
-        var node = attribute(hit, "AXParent") as! AXUIElement?
+        return bounds(of: hit)
+    }
+
+    nonisolated static func page(of element: AXUIElement) -> AXUIElement? {
+        var node: AXUIElement? = element
         for _ in 0..<40 {
-            guard let current = node else { break }
-            if attribute(current, "AXRole") as? String == "AXWebArea" {
-                if let url = attribute(current, "AXURL") as? URL { out["url"] = .string(url.absoluteString) }
-                break
-            }
+            guard let current = node else { return nil }
+            if attribute(current, "AXRole") as? String == "AXWebArea" { return current }
             node = attribute(current, "AXParent") as! AXUIElement?
         }
-        return bounds(of: hit)
+        return nil
+    }
+
+    nonisolated static func zoomed(_ page: AXUIElement) -> Bool {
+        guard let parent = attribute(page, "AXParent"), let own = bounds(of: page), let view = bounds(of: parent as! AXUIElement) else { return false }
+        return own.width > view.width + 1 || own.height > view.height + 1
     }
 
     nonisolated static func bounds(of element: AXUIElement) -> CGRect? {
@@ -276,6 +285,7 @@ final class Freeze: NSObject {
     @concurrent nonisolated static func bounds(at spot: CGPoint, in pid: pid_t) async -> CGRect? {
         var hit: AXUIElement?
         guard AXUIElementCopyElementAtPosition(AXUIElementCreateApplication(pid), Float(spot.x), Float(spot.y), &hit) == .success, let hit else { return nil }
+        if let page = page(of: hit), zoomed(page) { return nil }
         return bounds(of: hit)
     }
 
