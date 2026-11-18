@@ -309,7 +309,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         out["contentShowsPage"] = .bool(window.content.shown != nil)
         out["quietRows"] = .array(model.shown().filter { model.isQuiet($0) }.map { .string($0.location) })
         out["toolbar"] = .array(window.toolbarItems.map {
-            .object(["id": .string($0.itemIdentifier.rawValue), "label": .string($0.label), "enabled": .bool($0.isEnabled), "hidden": .bool($0.isHidden),
+            .object(["id": .string($0.itemIdentifier.rawValue), "label": .string($0.label), "enabled": .bool($0.isEnabled), "hidden": .bool($0.isHidden), "prominent": .bool($0.style == .prominent),
                      "symbol": .string($0.image?.accessibilityDescription ?? "")])
         })
         out["sidebar"] = .array(model.listing.projects.map { project in
@@ -351,16 +351,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             await Freeze.start(recipients: recipients, picked: picked, page: freezePage) { [weak self] freeze, outcome in
                 guard let self, outcome != .cancel else { return }
                 let session: String? = if case .send(let s) = outcome { s } else { nil }
-                let (draft, pages, outside, told) = model.land(freeze, to: session)
+                let (draft, notes, told) = model.land(freeze, to: session)
                 model.sweepPictures()
-                if told, let session { return freeze.remember(outside.map(\.note), sentTo: session) }
-                guard let location = draft ?? pages.first else { return }
-                if let draft, let session {
+                if told, let session { return freeze.remember(notes, sentTo: session) }
+                guard let draft else { return }
+                if let session {
                     let name = [recipients.first { $0.session == session }?.name, model.lastPage(of: session)?.title].compactMap { $0 }.first { !$0.isEmpty }
                     model.page(for: draft).undelivered = "\(name ?? "The agent") had ended, so your notes are kept here as a draft."
                 }
-                model.scope = .project(draft == nil ? model.listing.entry(location)?.project ?? Paths.drafts.path : Paths.drafts.path)
-                model.selected = location
+                model.scope = .project(Paths.drafts.path)
+                model.selected = draft
                 model.changed()
                 if window.window?.isVisible != true { window.showWindow(nil) }
                 if !Env.test { NSApp.activate() }

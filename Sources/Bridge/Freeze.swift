@@ -64,7 +64,6 @@ final class Freeze: NSObject {
     var still: Task<Picture?, Never>?
     var taking: [String: Task<Picture?, Never>] = [:]
     var pictures: [String: Picture] = [:]
-    var placed: [String: (page: String, anchor: JSONValue)] = [:]
     var captures = 0
     var glassLeftOut = false
     var content: Task<Result<SCShareableContent, Error>, Never>?
@@ -445,7 +444,7 @@ final class Freeze: NSObject {
         guard !settled else { return }
         settled = true
         let found = await element(at: centre(of: anchor), picture: nil)
-        await suggest(found, page: await place(anchor)?.page)
+        await suggest(found, page: bridgePage(under: anchor))
     }
 
     func suggest(_ found: [String: JSONValue], page location: String?) async {
@@ -465,9 +464,9 @@ final class Freeze: NSObject {
         return recipients.last { $0.project == project }?.session
     }
 
-    func landed(_ id: String, found: [String: JSONValue]) {
+    func landed(_ id: String, anchor: JSONValue, found: [String: JSONValue]) {
         let key = Place.key(url: found["url"]?.stringValue, app: found["app"]?.stringValue ?? "")
-        places[id] = placed[id] == nil && !key.isEmpty ? key : nil
+        places[id] = bridgePage(under: anchor) == nil && !key.isEmpty ? key : nil
     }
 
     func remember(_ notes: [Comment], sentTo session: String) {
@@ -484,15 +483,12 @@ final class Freeze: NSObject {
         return false
     }
 
-    func place(_ anchor: JSONValue) async -> (page: String, anchor: JSONValue)? {
+    func bridgePage(under anchor: JSONValue) -> String? {
         let at = global(centre(of: anchor))
         guard let info = window(at: at), info[kCGWindowOwnerPID as String] as? Int32 == getpid(),
-              let (_, view, inWindow) = Self.view(at: at, in: info[kCGWindowNumber as String] as? Int ?? 0),
-              let web = sequence(first: view, next: \.superview).first(where: { $0 is WKWebView }),
-              let target = page.model.pages.values.first(where: { $0.webView === web && !$0.preview && !Paths.inDrafts($0.location) }) else { return nil }
-        let css = Self.css(inWindow, in: target.webView)
-        guard let found = try? await target.run("return __bridge.anchor(x, y)", ["x": css.x, "y": css.y], in: Page.world), Self.onElement(found) else { return nil }
-        return (target.location, found)
+              let (_, view, _) = Self.view(at: at, in: info[kCGWindowNumber as String] as? Int ?? 0),
+              let web = sequence(first: view, next: \.superview).first(where: { $0 is WKWebView }) else { return nil }
+        return page.model.pages.values.first { $0.webView === web && !$0.preview && !Paths.inDrafts($0.location) }?.location
     }
 
     // MARK: Pictures

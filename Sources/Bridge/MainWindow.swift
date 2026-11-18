@@ -380,7 +380,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
             item.label = Model.untitled; item.toolTip = "Write a bridge to an agent (⌘N)"
             item.image = Self.symbol("square.and.pencil", Model.untitled)
         case Self.point:
-            item.label = "Point"; item.toolTip = "Point at something on screen"
+            item.label = "Point"
             item.image = Self.symbol("mappin.and.ellipse", "Point")
         case Self.send:
             item.toolTip = "Send your answer"
@@ -422,8 +422,20 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
     func validateToolbarItem(_ item: NSToolbarItem) -> Bool {
         switch item.itemIdentifier {
         case Self.send: return Self.validateSend(item, for: shownPage)
+        case Self.point: Self.stylePoint(item, for: shownPage); return true
         default: return true
         }
+    }
+
+    static func point(_ page: Page?) {
+        guard let page, page.canPin else { (NSApp.delegate as? AppDelegate)?.freeze(); return }
+        page.togglePinning()
+    }
+
+    static func stylePoint(_ item: NSToolbarItem, for page: Page?) {
+        let on = page?.pinning == true
+        item.style = on ? .prominent : .plain
+        item.toolTip = page?.canPin == true ? (on ? "Stop pinning notes on this page" : "Pin notes on this page") : "Point at something on screen"
     }
 
     static func validateSend(_ item: NSToolbarItem, for page: Page?) -> Bool {
@@ -482,7 +494,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         case "redo": window?.undoManager?.redo(); return true
         case "settings": (NSApp.delegate as? AppDelegate)?.showSettings(); return true
         case "freeze": (NSApp.delegate as? AppDelegate)?.freeze(fromBridge: argument == "front"); return true
-        case "point": (NSApp.delegate as? AppDelegate)?.freeze(); return true
+        case "point": Self.point(shownPage); return true
         case "freeze-mark":
             let n = (argument ?? "").split(separator: " ").compactMap { Double($0) }
             guard let freeze = Freeze.current, n.count == 2 || n.count == 4 else { return false }

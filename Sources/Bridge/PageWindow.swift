@@ -62,6 +62,7 @@ final class PageWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
     func validateToolbarItem(_ item: NSToolbarItem) -> Bool {
         switch item.itemIdentifier {
         case MainWindow.send: return MainWindow.validateSend(item, for: page)
+        case MainWindow.point: MainWindow.stylePoint(item, for: page); return true
         default: return true
         }
     }
@@ -88,7 +89,7 @@ final class PageWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
     func perform(_ command: String) {
         let app = NSApp.delegate as? AppDelegate
         switch command {
-        case "point": app?.freeze()
+        case "point": MainWindow.point(page)
         case "send": app?.window.send(page, from: window)
         case "cross": app?.window.cross([page.location], true)
         case "uncross": app?.window.cross([page.location], false)

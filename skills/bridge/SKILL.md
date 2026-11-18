@@ -251,24 +251,26 @@ then `bridge --cross <file>`.
 
 ## When the user points
 
-To point at something, on your page or anywhere else on their screen, the
-user clicks a spot or drags a box over their screen and types a note on
-each. A note on a Bridge page pins to the element under it, and stays on
-that element when you rewrite the page. Notes anywhere else arrive in the
-message itself: each one's number, text, what was under it on screen, and
-a picture. For pinned notes:
+On your page, the user can pin notes to its elements: a click pins one to
+the element under it, a drag pins a box. The pins stay on their elements when
+you rewrite the page, and they reach you with the page's answer when the user
+presses Send. Read and close them with:
 
 ```sh
-bridge --pins <page>          # each pinned note's text, element, target and picture
+bridge --pins <page>          # each pinned note's text, element and target
 bridge --done <page> <id>     # handled: its pin leaves the page and --pins leaves it out (--reopen brings it back)
 ```
 
-`element` is the selector a pin sits on. `target` names what was under a
-note on screen (`button "Theme" · Helium · http://…`). `picture` is an image
-of the window under the note (or the 1000×600 points around it in a large
-window; for a box, the box with a little around it), with the note's number
-drawn on it. Read it. Answer in the terminal or with a page of your own, and
-mark each pinned note done once it is handled.
+`element` is the selector a pin sits on, `target` its tag and text. Mark each
+pinned note done once it is handled.
+
+Anywhere else on their screen, the user points with a frozen screen: a click
+or a box and a note on each, sent to you straight away. Those notes arrive in
+the message itself: each one's number, text, what was under it on screen
+(`button "Theme" · Helium · http://…`), and a picture of the window under it
+(or the 1000×600 points around it in a large window; for a box, the box with a
+little around it) with the note's number drawn on it. Read it. Answer in the
+terminal or with a page of your own.
 
 ## Revising a page
 

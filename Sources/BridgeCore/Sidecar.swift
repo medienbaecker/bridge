@@ -229,6 +229,7 @@ public struct Sidecar: Codable, Equatable, Sendable {
         if left > 0 { text += " \(left) control\(left == 1 ? " was" : "s were") left at the page's default (`defaults` in --read)." }
         let open = openComments.count
         if open > 0, Paths.inDrafts(file) { text += " They pointed at their screen with \(open) numbered note\(open == 1 ? "" : "s"); read them with `\(cli) --pins \(file)`: each note's `target` says what it points at, and `picture` is the window or area under it with the note's number drawn on it." }
+        if open > 0, !Paths.inDrafts(file) { text += " \(open) note\(open == 1 ? " is" : "s are") pinned to elements on the page; read them with `\(cli) --pins \(file)`: `element` is the selector a note sits on, `target` its tag and text. `\(cli) --done \(file) <id>` takes a handled note's pin off the page." }
         return text + " Full answer: `\(cli) --read \(file)`. Act on it, then `\(cli) --cross \(file)`."
     }
 }

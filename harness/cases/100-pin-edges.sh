@@ -29,7 +29,7 @@ framed=$(bridge --state | jq -c '.freeze.pictures[0]')
 note "$target" "Dolor sit amet"
 picture pinned
 bridge --do freeze-send 0 >/dev/null
-for i in $(seq 1 40); do [ "$(bridge --pins "$page" | jq length)" = 1 ] && break; settle 0.1; done
+for i in $(seq 1 40); do [ "$(inbox "$agent" | grep -c 'sent you notes')" = 1 ] && break; settle 0.1; done
 settle 0.5
 first=$(inbox "$agent" | grep -o '/[^ ]*\.1\.png$')
 cp "$first" "$CASE_DIR/shots/agent-pin.png"
@@ -37,6 +37,10 @@ check "in the agent's picture the spot itself stays visible, a ring around it an
 
 # ---- pins already on a page stay out of the next capture
 
+bridge --do point >/dev/null; settle 0.3
+page_mark "$page" "#target"
+page_note "$page" "Dolor sit amet"
+bridge --do point >/dev/null; settle 0.3
 for i in $(seq 1 40); do [ "$(bridge --js "$page" "@bridge return document.querySelectorAll('.bridge-pin').length" | jq -r .)" = 1 ] && break; settle 0.1; done
 old=$(bridge --js "$page" "@bridge const r = document.querySelector('.bridge-pin').getBoundingClientRect(); return [r.left - 4, r.top - 4, r.right + 4, r.bottom + 4]")
 inner=$(bridge --state | jq -r '"\(.pageX) \(.pageY)"')

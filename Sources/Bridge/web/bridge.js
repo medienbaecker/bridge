@@ -273,7 +273,7 @@ function __bridgeInit(options) {
     applyPrevious(payload.previous);
     frameRefused();
     applyDrives();
-    if (!options.freeze) pins.show(payload.pins || []);
+    if (!options.freeze) pins.set(payload.pins || []);
   }
 
   function send() {
@@ -769,12 +769,12 @@ function __bridgeInit(options) {
     return { reload: false };
   }
 
-  // ---- pins the user left on the page
+  // ---- pins and their notes: over the screen in the freeze, on their elements in a page
 
   function cssPath(el) {
     const parts = [];
     let node = el;
-    while (node && node !== document.body && parts.length < 6) {
+    while (node && node !== document.body && node !== root && parts.length < 6) {
       if (node.id) { parts.unshift('#' + CSS.escape(node.id)); break; }
       let part = node.localName;
       const classes = [...node.classList].filter((c) => !c.startsWith('bridge-')).slice(0, 3);
@@ -784,26 +784,24 @@ function __bridgeInit(options) {
       parts.unshift(part);
       node = node.parentElement;
     }
-    return parts.join(' > ');
+    return parts.join(' > ') || el.localName;
   }
 
-  function sameText(el, text) {
-    if (!text) return true;
-    const now = (el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ');
-    return now.startsWith(text.slice(0, 30));
-  }
+  const textOf = (el) => (el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ');
+  const sameText = (el, text) => !text || textOf(el).startsWith(text.slice(0, 30));
+  const nth = (el) => (el.parentElement ? [...el.parentElement.children].filter((c) => c.localName === el.localName).indexOf(el) : 0);
 
-  const pins = { list: [], buttons: new Map() };
+  const pins = { list: [], els: new Map(), boxes: new Map(), drafts: {}, pending: null, dragging: null, mode: null };
+  const furniture = (el) => !!el?.closest?.('.bridge-pin, .bridge-composer, .bridge-box, .bridge-agents');
+  const within = (value, least, most) => Math.min(Math.max(value, least), most);
 
   pins.anchor = function (x, y) {
-    const el = document.elementsFromPoint(x, y).find((e) => !ours(e));
-    if (!el || el === document.body || el === document.documentElement) return null;
+    const el = document.elementsFromPoint(x, y).find((e) => !ours(e)) || root;
     const rect = el.getBoundingClientRect();
-    const fraction = (v) => (Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.5);
+    const fraction = (v) => (Number.isFinite(v) ? v : 0.5);
+    const text = el === root || el === document.body ? '' : textOf(el).slice(0, 80);
     return {
-      selector: cssPath(el), tag: el.localName, classes: [...el.classList].filter((c) => !c.startsWith('bridge-')),
-      index: [...el.parentElement.children].filter((c) => c.localName === el.localName).indexOf(el),
-      text: (el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 80),
+      selector: cssPath(el), tag: el.localName, classes: [...el.classList].filter((c) => !c.startsWith('bridge-')), index: nth(el), text,
       x: fraction((x - rect.left) / rect.width), y: fraction((y - rect.top) / rect.height),
     };
   };
@@ -815,300 +813,326 @@ function __bridgeInit(options) {
     } catch (e) { /* selector no longer parses */ }
     const candidates = [...document.getElementsByTagName(anchor.tag)].filter((el) =>
       !ours(el) && anchor.classes.every((c) => el.classList.contains(c)) && sameText(el, anchor.text));
-    return candidates.find((el) => [...el.parentElement.children].filter((c) => c.localName === el.localName).indexOf(el) === anchor.index) || candidates[0] || null;
+    return candidates.find((el) => nth(el) === anchor.index) || candidates[0] || null;
   };
 
-  pins.show = function (list) {
-    pins.list = list;
-    const ids = new Set(list.map((p) => p.id));
-    for (const [id, button] of pins.buttons) if (!ids.has(id)) { button.remove(); button.popoverTargetElement.remove(); pins.buttons.delete(id); }
-    list.forEach((pin, i) => {
-      let button = pins.buttons.get(pin.id);
-      if (!button) {
-        button = document.createElement('button');
-        button.className = 'bridge-pin';
-        button.setAttribute('popover', 'manual');
-        button.style.anchorName = `--bridge-pin-${pin.id}`;
-        const note = document.createElement('div');
-        note.className = 'bridge-note';
-        note.setAttribute('popover', 'auto');
-        note.style.positionAnchor = `--bridge-pin-${pin.id}`;
-        note.addEventListener('beforetoggle', (e) => { if (e.newState === 'open') pins.fill(button); });
-        note.addEventListener('toggle', (e) => button.toggleAttribute('data-open', e.newState === 'open'));
-        button.popoverTargetElement = note;
-        root.append(button, note);
-        pins.buttons.set(pin.id, button);
-      }
-      button.pin = pin;
-      button.dataset.n = i + 1;
-      button.title = pin.text;
-    });
-    pins.place();
-  };
-
-  pins.place = function () {
-    const anchored = new Map();
-    let lost = 0;
-    for (const el of document.querySelectorAll('[style*="--bridge-at-"]')) el.style.removeProperty('anchor-name');
-    for (const pin of pins.list) {
-      const button = pins.buttons.get(pin.id);
-      const el = pins.find(pin.anchor);
-      button.toggleAttribute('data-lost', !el);
-      if (el) {
-        anchored.set(el, [...(anchored.get(el) || []), `--bridge-at-${pin.id}`]);
-        button.style.positionAnchor = `--bridge-at-${pin.id}`;
-        button.style.left = `calc(anchor(left) + anchor-size(width) * ${pin.anchor.x})`;
-        button.style.top = `calc(anchor(top) + anchor-size(height) * ${pin.anchor.y})`;
-        button.style.right = '';
-      } else {
-        button.style.positionAnchor = 'none';
-        button.style.left = 'auto';
-        button.style.right = '16px';
-        button.style.top = `${52 + lost * 30}px`;
-        lost += 1;
-      }
-      if (!button.matches(':popover-open')) button.showPopover();
-      pins.fill(button);
+  pins.add = function (id, anchor) {
+    if (anchor.w) {
+      const box = document.createElement('div');
+      box.className = 'bridge-box';
+      box.setAttribute('popover', 'manual');
+      box.style.anchorName = `--bridge-box-${id}`;
+      root.appendChild(box);
+      box.showPopover();
+      pins.boxes.set(id, box);
     }
-    for (const [el, names] of anchored) el.style.anchorName = names.join(', ');
+    const pin = document.createElement('button');
+    pin.className = 'bridge-pin';
+    pin.setAttribute('popover', 'manual');
+    pin.dataset.id = id;
+    pin.style.anchorName = `--bridge-pin-${id}`;
+    pin.anchor = anchor;
+    const composer = document.createElement('div');
+    composer.className = 'bridge-composer';
+    composer.setAttribute('popover', 'auto');
+    composer.dataset.id = id;
+    composer.style.positionAnchor = anchor.w ? `--bridge-box-${id}` : `--bridge-pin-${id}`;
+    composer.toggleAttribute('data-box', !!anchor.w);
+    composer.addEventListener('beforetoggle', (e) => { if (e.newState === 'open') pins.render(id); });
+    composer.addEventListener('toggle', (e) => {
+      pin.toggleAttribute('data-open', e.newState === 'open');
+      if (e.newState === 'open') {
+        pins.mode.fit(composer);
+        const box = composer.querySelector('textarea');
+        box.focus();
+        box.setSelectionRange(box.value.length, box.value.length);
+        return;
+      }
+      pins.mode.glass();
+      const box = composer.querySelector('textarea');
+      if (!composer.isConnected || !box) return;
+      pins.drafts[id] = box.value;
+      if (id === pins.pending?.id && !pins.drafts[id]) pins.cancelPending();
+    });
+    pin.popoverTargetElement = composer;
+    pins.draggable(pin, id);
+    root.append(pin, composer);
+    pin.showPopover();
+    pins.els.set(id, pin);
+    pins.mode.place();
+    return pin;
   };
 
-  pins.fill = function (button) {
-    const note = button.popoverTargetElement;
-    note.replaceChildren();
-    if (button.hasAttribute('data-lost')) note.append(Object.assign(document.createElement('div'), { className: 'bridge-lost', textContent: 'Pointing at nothing now' }));
-    note.append(button.pin.text);
+  pins.draggable = function (pin, id) {
+    let from = null;
+    pin.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      from = { x: e.clientX, y: e.clientY, start: pins.mode.point(pin), moved: false };
+      pin.setPointerCapture(e.pointerId);
+    });
+    pin.addEventListener('pointermove', (e) => {
+      if (!from || (!from.moved && Math.hypot(e.clientX - from.x, e.clientY - from.y) < 4)) return;
+      from.moved = true;
+      const { w, h } = pins.mode.size(pin.anchor);
+      const at = {
+        x: within(from.start.x + e.clientX - from.x, 0, innerWidth - w),
+        y: within(from.start.y + e.clientY - from.y, 0, pins.mode.bottom() - h),
+        w, h,
+      };
+      for (const part of [pin, pins.boxes.get(id)]) {
+        if (!part) continue;
+        part.style.positionAnchor = 'none';
+        part.style.left = `${at.x}px`;
+        part.style.top = `${at.y}px`;
+      }
+      from.at = at;
+      pins.dragging = at;
+      pins.follow(id);
+    });
+    pin.addEventListener('pointerup', async () => {
+      pins.dragging = null;
+      pins.mode.dragged();
+      const moved = from?.moved && from.at;
+      from = moved ? { dropped: true } : null;
+      if (!moved) return;
+      pin.anchor = { ...pins.mode.anchor(moved.x, moved.y), ...(pin.anchor.w ? pins.mode.box(moved) : {}) };
+      pins.mode.place();
+      pins.follow(id);
+      if (pins.pending?.id === id) { pins.pending.anchor = pin.anchor; pins.mode.mark(id, pin.anchor); return; }
+      pins.set(await pins.mode.post('note', { id, action: 'move', anchor: pin.anchor, target: pins.mode.target(pin.anchor) }));
+    });
+    pin.addEventListener('click', (e) => {
+      if (!from?.dropped) return;
+      from = null;
+      e.preventDefault();
+    });
   };
+
+  pins.follow = function (id) {
+    requestAnimationFrame(() => {
+      const composer = pins.composer(id);
+      if (composer?.matches(':popover-open')) pins.mode.fit(composer);
+    });
+  };
+
+  pins.drop = function (id) {
+    pins.els.get(id)?.remove();
+    pins.els.delete(id);
+    pins.boxes.get(id)?.remove();
+    pins.boxes.delete(id);
+    pins.composer(id)?.remove();
+  };
+
+  pins.set = function (list) {
+    pins.list = list;
+    const ids = new Set(list.map((n) => n.id));
+    for (const id of [...pins.els.keys()]) if (!ids.has(id) && id !== pins.pending?.id) pins.drop(id);
+    list.forEach((note, i) => {
+      const pin = pins.els.get(note.id) || pins.add(note.id, note.anchor);
+      pin.anchor = note.anchor;
+      pin.dataset.n = i + 1;
+      pin.title = note.text;
+    });
+    pins.mode.place();
+    pins.mode.counted(list.length);
+  };
+
+  pins.composer = (id) => document.querySelector(`.bridge-composer[data-id="${CSS.escape(id)}"]`);
+
+  pins.open = function (id) {
+    const composer = pins.composer(id);
+    if (!composer.matches(':popover-open')) composer.showPopover();
+  };
+
+  pins.render = function (id) {
+    const composer = pins.composer(id);
+    const note = pins.list.find((x) => x.id === id);
+    composer.innerHTML = (pins.els.get(id)?.hasAttribute('data-lost') ? '<div class="bridge-lost">Pointing at nothing now</div>' : '')
+      + '<textarea placeholder="What about this?"></textarea><div class="bridge-bar">'
+      + (note ? '<span><button data-act="delete">Delete</button> <button data-act="cancel">Cancel</button></span>' : '<button data-act="cancel">Cancel</button>')
+      + '<button data-act="save" class="bridge-primary">Save <kbd>⏎</kbd></button></div>';
+    const box = composer.querySelector('textarea');
+    box.value = id in pins.drafts ? pins.drafts[id] : note?.text || '';
+    box.addEventListener('input', () => pins.mode.fit(composer));
+    box.addEventListener('keydown', async (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); pins.act(id, 'cancel'); }
+      if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
+      e.preventDefault();
+      if (await pins.act(id, 'save') && e.metaKey) pins.mode.send();
+    });
+    composer.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => pins.act(id, b.dataset.act)));
+  };
+
+  pins.act = async function (id, action) {
+    const composer = pins.composer(id);
+    const text = composer.querySelector('textarea').value.trim();
+    if (action === 'cancel') { delete pins.drafts[id]; composer.replaceChildren(); composer.hidePopover(); pins.cancelPending(); return false; }
+    if (action === 'save' && !text) return false;
+    const pending = pins.pending?.id === id ? pins.pending : null;
+    const list = pending ? (await pins.mode.post('pin', { anchor: pending.anchor, mark: id, text, target: pins.mode.target(pending.anchor) })).notes
+      : await pins.mode.post('note', { id, action: action === 'save' ? 'edit' : 'delete', text });
+    delete pins.drafts[id];
+    composer.hidePopover();
+    if (pending) { pins.drop(id); pins.pending = null; }
+    pins.set(list);
+    return true;
+  };
+
+  pins.cancelPending = function () {
+    if (!pins.pending) return;
+    pins.drop(pins.pending.id);
+    pins.pending = null;
+  };
+
+  pins.start = function (anchor) {
+    pins.cancelPending();
+    const id = 'new-' + Date.now();
+    pins.pending = { id, anchor };
+    pins.add(id, anchor).dataset.n = pins.list.length + 1;
+    pins.open(id);
+    pins.mode.mark(id, anchor);
+  };
+
+  let pressed = null;
+  let drawing = null;
+  document.addEventListener('click', (e) => {
+    if (!pins.mode.active() || furniture(e.target)) { pressed = null; return; }
+    e.preventDefault();
+    e.stopPropagation();
+    if (pressed?.composing || pressed?.drew) { pressed = null; return; }
+    pressed = null;
+    pins.start(pins.mode.anchor(e.clientX, e.clientY));
+  }, true);
+  document.addEventListener('pointerdown', (e) => {
+    if (!pins.mode.active() || e.button !== 0 || furniture(e.target)) return;
+    pressed = { x: e.clientX, y: e.clientY, composing: !!document.querySelector('.bridge-composer:popover-open'), drew: false };
+    if (!pressed.composing) e.preventDefault();
+  }, true);
+  document.addEventListener('pointermove', (e) => {
+    if (!pressed || pressed.composing || !(e.buttons & 1)) return;
+    if (!drawing && Math.hypot(e.clientX - pressed.x, e.clientY - pressed.y) < 8) return;
+    if (!drawing) { drawing = document.createElement('div'); drawing.className = 'bridge-box bridge-drawing'; root.appendChild(drawing); }
+    Object.assign(drawing.style, { left: Math.min(e.clientX, pressed.x) + 'px', top: Math.min(e.clientY, pressed.y) + 'px', width: Math.abs(e.clientX - pressed.x) + 'px', height: Math.abs(e.clientY - pressed.y) + 'px' });
+  }, true);
+  document.addEventListener('pointerup', () => {
+    if (!drawing || !pressed) return;
+    const rect = drawing.getBoundingClientRect();
+    drawing.remove();
+    drawing = null;
+    pressed.drew = true;
+    const at = { x: rect.left, y: rect.top, w: rect.width, h: rect.height };
+    pins.start({ ...pins.mode.anchor(at.x, at.y), ...pins.mode.box(at) });
+  }, true);
+
+  pins.mode = {
+    pinning: false,
+    active() { return this.pinning; },
+    anchor: (x, y) => pins.anchor(x, y),
+    box: (at) => ({ w: at.w, h: at.h }),
+    size: (anchor) => ({ w: anchor.w || 0, h: anchor.h || 0 }),
+    bottom: () => innerHeight,
+    point(pin) {
+      const el = pins.find(pin.anchor);
+      if (!el) { const r = pin.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.bottom }; }
+      const r = el.getBoundingClientRect();
+      return { x: r.left + r.width * pin.anchor.x, y: r.top + r.height * pin.anchor.y };
+    },
+    target(anchor) {
+      const el = pins.find(anchor);
+      return el ? [el.localName, anchor.text && `"${anchor.text.slice(0, 40)}"`].filter(Boolean).join(' ') : '';
+    },
+    place() {
+      for (const el of document.querySelectorAll('[style*="--bridge-at-"]')) if (!ours(el)) el.style.removeProperty('anchor-name');
+      const anchored = new Map();
+      let lost = 0;
+      for (const [id, pin] of pins.els) {
+        const anchor = pin.anchor;
+        const el = pins.find(anchor);
+        pin.toggleAttribute('data-lost', !el);
+        if (el) anchored.set(el, [...(anchored.get(el) || []), `--bridge-at-${id}`]);
+        for (const part of [pin, pins.boxes.get(id)]) {
+          if (!part) continue;
+          part.style.positionAnchor = el ? `--bridge-at-${id}` : 'none';
+          part.style.left = el ? `calc(anchor(left) + anchor-size(width) * ${anchor.x})` : 'calc(100vw - 27px)';
+          part.style.top = el ? `calc(anchor(top) + anchor-size(height) * ${anchor.y})` : `${52 + lost * 30}px`;
+          if (part !== pin) { part.style.width = `${anchor.w}px`; part.style.height = `${anchor.h}px`; }
+        }
+        if (!el) lost += 1;
+      }
+      for (const [el, names] of anchored) el.style.anchorName = names.join(', ');
+    },
+    fit() {},
+    glass() {},
+    mark() {},
+    dragged() {},
+    counted() {},
+    send,
+    async post(type, data) {
+      const reply = await post(type, data);
+      if (state.status === 'sent') setStatus('open');
+      return reply;
+    },
+    turn(on) {
+      this.pinning = on && !state.readOnly;
+      root.toggleAttribute('data-bridge-pinning', this.pinning);
+      if (!this.pinning) { pins.cancelPending(); document.querySelector('.bridge-composer:popover-open')?.hidePopover(); }
+    },
+  };
+
+  if (!options.freeze) {
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || !pins.mode.pinning || document.querySelector('.bridge-composer:popover-open')) return;
+      e.preventDefault();
+      pins.mode.turn(false);
+      post('pinning', { on: false });
+    });
+  }
 
   // ---- the freeze: pins and boxes over the screen, and the agents bar
 
-  let freeze = { agents() {}, pick() {}, cursor() {}, reset() {}, leave() {}, wheel() {}, pinsAt() { return false; } };
+  let freeze = { agents() {}, pick() {}, reset() {}, leave() {}, wheel() {}, pinsAt() { return false; } };
   if (options.freeze) {
     root.setAttribute('data-bridge-freeze', '');
-    const notes = { list: [], pins: new Map(), boxes: new Map(), drafts: {}, pending: null, dragging: null };
-    const furniture = (el) => !!el?.closest?.('.bridge-pin, .bridge-composer, .bridge-box, .bridge-agents');
+    const bar = document.createElement('div');
 
-    const place = (el, anchor) => {
-      el.style.left = `${anchor.x * 100}vw`;
-      el.style.top = `${anchor.y * 100}vh`;
-      if (el.matches('.bridge-pin')) el.toggleAttribute('data-below', anchor.y * innerHeight < 32);
-    };
-    const within = (value, least, most) => Math.min(Math.max(value, least), most);
-
-    notes.add = function (id, anchor) {
-      if (anchor.w) {
-        const box = document.createElement('div');
-        box.className = 'bridge-box';
-        box.setAttribute('popover', 'manual');
-        place(box, anchor);
-        box.style.width = `${anchor.w * 100}vw`;
-        box.style.height = `${anchor.h * 100}vh`;
-        box.style.anchorName = `--bridge-box-${id}`;
-        root.appendChild(box);
-        box.showPopover();
-        notes.boxes.set(id, box);
-      }
-      const pin = document.createElement('button');
-      pin.className = 'bridge-pin';
-      pin.setAttribute('popover', 'manual');
-      pin.dataset.id = id;
-      pin.style.anchorName = `--bridge-pin-${id}`;
-      pin.anchor = anchor;
-      const composer = document.createElement('div');
-      composer.className = 'bridge-composer';
-      composer.setAttribute('popover', 'auto');
-      composer.dataset.id = id;
-      composer.style.positionAnchor = anchor.w ? `--bridge-box-${id}` : `--bridge-pin-${id}`;
-      composer.toggleAttribute('data-box', !!anchor.w);
-      composer.addEventListener('beforetoggle', (e) => { if (e.newState === 'open') notes.render(id); });
-      composer.addEventListener('toggle', (e) => {
-        pin.toggleAttribute('data-open', e.newState === 'open');
-        if (e.newState === 'open') {
-          notes.fit(composer);
-          const box = composer.querySelector('textarea');
-          box.focus();
-          box.setSelectionRange(box.value.length, box.value.length);
-          return;
+    pins.mode = {
+      active: () => true,
+      anchor: (x, y) => ({ x: x / innerWidth, y: y / innerHeight }),
+      box: (at) => ({ w: at.w / innerWidth, h: at.h / innerHeight }),
+      size: (anchor) => ({ w: (anchor.w || 0) * innerWidth, h: (anchor.h || 0) * innerHeight }),
+      bottom: () => bar.offsetTop,
+      point: (pin) => ({ x: pin.anchor.x * innerWidth, y: pin.anchor.y * innerHeight }),
+      target: () => undefined,
+      place() {
+        for (const [id, pin] of pins.els) {
+          const anchor = pin.anchor;
+          for (const part of [pin, pins.boxes.get(id)]) {
+            if (!part) continue;
+            part.style.left = `${anchor.x * 100}vw`;
+            part.style.top = `${anchor.y * 100}vh`;
+            if (part !== pin) { part.style.width = `${anchor.w * 100}vw`; part.style.height = `${anchor.h * 100}vh`; }
+          }
+          pin.toggleAttribute('data-below', anchor.y * innerHeight < 32);
         }
-        post('glass');
-        const box = composer.querySelector('textarea');
-        if (!composer.isConnected || !box) return;
-        notes.drafts[id] = box.value;
-        if (id === notes.pending?.id && !notes.drafts[id]) notes.cancelPending();
-      });
-      pin.popoverTargetElement = composer;
-      notes.draggable(pin, id);
-      place(pin, anchor);
-      root.append(pin, composer);
-      pin.showPopover();
-      notes.pins.set(id, pin);
-      return pin;
+      },
+      fit(composer) {
+        composer.style.translate = '';
+        const r = composer.getBoundingClientRect();
+        const dx = Math.max(8 - r.left, 0) + Math.min(innerWidth - 8 - r.right, 0);
+        const dy = Math.max(8 - r.top, 0) + Math.min(bar.offsetTop - 8 - r.bottom, 0);
+        composer.style.translate = `${dx}px ${dy}px`;
+        const placed = composer.getBoundingClientRect();
+        post('glass', { rect: [placed.left, placed.top, placed.width, placed.height] });
+      },
+      glass: () => post('glass'),
+      mark: (id, anchor) => post('mark', { id, anchor }),
+      dragged: () => post('hover'),
+      counted: (count) => bar.toggleAttribute('data-empty', !count),
+      send: () => sendToPicked(),
+      post,
     };
-
-    notes.draggable = function (pin, id) {
-      let from = null;
-      pin.addEventListener('pointerdown', (e) => {
-        if (e.button !== 0) return;
-        from = { x: e.clientX, y: e.clientY, moved: false };
-        pin.setPointerCapture(e.pointerId);
-      });
-      pin.addEventListener('pointermove', (e) => {
-        if (!from || (!from.moved && Math.hypot(e.clientX - from.x, e.clientY - from.y) < 4)) return;
-        from.moved = true;
-        const anchor = {
-          ...pin.anchor,
-          x: within(pin.anchor.x + (e.clientX - from.x) / innerWidth, 0, 1 - (pin.anchor.w || 0)),
-          y: within(pin.anchor.y + (e.clientY - from.y) / innerHeight, 0, bar.offsetTop / innerHeight - (pin.anchor.h || 0)),
-        };
-        place(pin, anchor);
-        const box = notes.boxes.get(id);
-        if (box) place(box, anchor);
-        from.anchor = anchor;
-        notes.dragging = anchor;
-        notes.follow(id);
-      });
-      pin.addEventListener('pointerup', async () => {
-        notes.dragging = null;
-        post('hover');
-        const moved = from?.moved && from.anchor;
-        from = moved ? { dropped: true } : null;
-        if (!moved) return;
-        pin.anchor = moved;
-        notes.follow(id);
-        if (notes.pending?.id === id) { notes.pending.anchor = moved; post('mark', { id, anchor: moved }); return; }
-        notes.set(await post('note', { id, action: 'move', anchor: moved }));
-      });
-      pin.addEventListener('click', (e) => {
-        if (!from?.dropped) return;
-        from = null;
-        e.preventDefault();
-      });
-    };
-
-    notes.follow = function (id) {
-      requestAnimationFrame(() => {
-        const composer = notes.composer(id);
-        if (composer?.matches(':popover-open')) notes.fit(composer);
-      });
-    };
-
-    notes.drop = function (id) {
-      notes.pins.get(id)?.remove();
-      notes.pins.delete(id);
-      notes.boxes.get(id)?.remove();
-      notes.boxes.delete(id);
-      notes.composer(id)?.remove();
-    };
-
-    notes.set = function (list) {
-      notes.list = list;
-      bar.toggleAttribute('data-empty', !list.length);
-      const ids = new Set(list.map((n) => n.id));
-      for (const id of [...notes.pins.keys()]) if (!ids.has(id) && id !== notes.pending?.id) notes.drop(id);
-      list.forEach((note, i) => {
-        const pin = notes.pins.get(note.id) || notes.add(note.id, note.anchor);
-        pin.dataset.n = i + 1;
-        pin.title = note.text;
-      });
-    };
-
-    notes.composer = (id) => document.querySelector(`.bridge-composer[data-id="${CSS.escape(id)}"]`);
-
-    notes.open = function (id) {
-      const composer = notes.composer(id);
-      if (!composer.matches(':popover-open')) composer.showPopover();
-    };
-
-    notes.render = function (id) {
-      const composer = notes.composer(id);
-      const note = notes.list.find((x) => x.id === id);
-      composer.innerHTML = '<textarea placeholder="What about this?"></textarea><div class="bridge-bar">'
-        + (note ? '<span><button data-act="delete">Delete</button> <button data-act="cancel">Cancel</button></span>' : '<button data-act="cancel">Cancel</button>')
-        + '<button data-act="save" class="bridge-primary">Save <kbd>⏎</kbd></button></div>';
-      const box = composer.querySelector('textarea');
-      box.value = id in notes.drafts ? notes.drafts[id] : note?.text || '';
-      box.addEventListener('input', () => notes.fit(composer));
-      box.addEventListener('keydown', async (e) => {
-        if (e.key === 'Escape') { e.preventDefault(); notes.act(id, 'cancel'); }
-        if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
-        e.preventDefault();
-        if (await notes.act(id, 'save') && e.metaKey) sendToPicked();
-      });
-      composer.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => notes.act(id, b.dataset.act)));
-    };
-
-    notes.fit = function (composer) {
-      composer.style.translate = '';
-      const r = composer.getBoundingClientRect();
-      const dx = Math.max(8 - r.left, 0) + Math.min(innerWidth - 8 - r.right, 0);
-      const dy = Math.max(8 - r.top, 0) + Math.min(bar.offsetTop - 8 - r.bottom, 0);
-      composer.style.translate = `${dx}px ${dy}px`;
-      const placed = composer.getBoundingClientRect();
-      post('glass', { rect: [placed.left, placed.top, placed.width, placed.height] });
-    };
-
-    notes.act = async function (id, action) {
-      const composer = notes.composer(id);
-      const text = composer.querySelector('textarea').value.trim();
-      if (action === 'cancel') { delete notes.drafts[id]; composer.replaceChildren(); composer.hidePopover(); notes.cancelPending(); return false; }
-      if (action === 'save' && !text) return false;
-      const pending = notes.pending?.id === id ? notes.pending : null;
-      const list = pending ? (await post('pin', { anchor: pending.anchor, mark: id, text })).notes
-        : await post('note', { id, action: action === 'save' ? 'edit' : 'delete', text });
-      delete notes.drafts[id];
-      composer.hidePopover();
-      if (pending) { notes.drop(id); notes.pending = null; }
-      notes.set(list);
-      return true;
-    };
-
-    notes.cancelPending = function () {
-      if (!notes.pending) return;
-      notes.drop(notes.pending.id);
-      notes.pending = null;
-    };
-
-    function startNote(anchor) {
-      notes.cancelPending();
-      const id = 'new-' + Date.now();
-      notes.pending = { id, anchor };
-      notes.add(id, anchor).dataset.n = notes.list.length + 1;
-      notes.open(id);
-      post('mark', { id, anchor });
-    }
-
-    let pressed = null;
-    let drawing = null;
-    document.addEventListener('click', (e) => {
-      if (furniture(e.target)) { pressed = null; return; }
-      e.preventDefault();
-      e.stopPropagation();
-      if (pressed?.composing || pressed?.drew) { pressed = null; return; }
-      pressed = null;
-      startNote({ x: e.clientX / innerWidth, y: e.clientY / innerHeight });
-    }, true);
-    document.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0 || furniture(e.target)) return;
-      pressed = { x: e.clientX, y: e.clientY, composing: !!document.querySelector('.bridge-composer:popover-open'), drew: false };
-      if (!pressed.composing) e.preventDefault();
-    }, true);
-    document.addEventListener('pointermove', (e) => {
-      if (!pressed || pressed.composing || !(e.buttons & 1)) return;
-      if (!drawing && Math.hypot(e.clientX - pressed.x, e.clientY - pressed.y) < 8) return;
-      if (!drawing) { drawing = document.createElement('div'); drawing.className = 'bridge-box bridge-drawing'; root.appendChild(drawing); }
-      Object.assign(drawing.style, { left: Math.min(e.clientX, pressed.x) + 'px', top: Math.min(e.clientY, pressed.y) + 'px', width: Math.abs(e.clientX - pressed.x) + 'px', height: Math.abs(e.clientY - pressed.y) + 'px' });
-    }, true);
-    document.addEventListener('pointerup', () => {
-      if (!drawing || !pressed) return;
-      const rect = drawing.getBoundingClientRect();
-      drawing.remove();
-      drawing = null;
-      pressed.drew = true;
-      startNote({ x: rect.left / innerWidth, y: rect.top / innerHeight, w: rect.width / innerWidth, h: rect.height / innerHeight });
-    }, true);
 
     const still = matchMedia('(prefers-reduced-motion: reduce)');
-    const bar = document.createElement('div');
     bar.className = 'bridge-agents';
     bar.setAttribute('popover', 'manual');
     bar.toggleAttribute('data-empty', true);
@@ -1133,7 +1157,7 @@ function __bridgeInit(options) {
       const prompt = document.createElement('div');
       prompt.className = 'bridge-composer bridge-discard';
       prompt.setAttribute('popover', 'auto');
-      const count = notes.list.length;
+      const count = pins.list.length;
       prompt.innerHTML = `<p>Discard ${count} ${count === 1 ? 'note' : 'notes'}?</p><div class="bridge-bar"><button data-act="discard">Discard</button><button data-act="keep" class="bridge-primary">Keep <kbd>⏎</kbd></button></div>`;
       prompt.addEventListener('keydown', (e) => {
         if (e.key !== 'Escape' && (e.key !== 'Enter' || e.target.closest('[data-act=discard]'))) return;
@@ -1207,7 +1231,6 @@ function __bridgeInit(options) {
       for (const chip of bar.querySelectorAll('.bridge-agents-list button')) chip.toggleAttribute('data-picked', chip.dataset.session === session);
       bar.querySelector('.bridge-agents-list [data-picked]')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
     };
-    freeze.cursor = (pin) => root.style.setProperty('--bridge-cursor', `url("data:image/svg+xml,${encodeURIComponent(pin)}") 14 29, crosshair`);
     freeze.wheel = (x, y, dx, dy) => {
       const list = bar.querySelector('.bridge-agents-list');
       if (list && y >= bar.offsetTop) list.scrollLeft += Math.abs(dx) > Math.abs(dy) ? dx : dy;
@@ -1222,14 +1245,14 @@ function __bridgeInit(options) {
     };
     freeze.reset = () => {
       document.querySelector('.bridge-discard')?.remove();
-      notes.cancelPending();
-      notes.drafts = {};
-      notes.set([]);
+      pins.cancelPending();
+      pins.drafts = {};
+      pins.set([]);
     };
     document.addEventListener('keydown', (e) => {
       if (e.target.closest?.('textarea, input') || document.querySelector('.bridge-composer:popover-open')) return;
-      if (e.key === 'Escape') { e.preventDefault(); if (notes.list.length) askToDiscard(); else post('freeze'); }
-      if (e.key === 'Enter' && !e.target.closest?.('button')) { e.preventDefault(); if (notes.list.length) sendToPicked(); }
+      if (e.key === 'Escape') { e.preventDefault(); if (pins.list.length) askToDiscard(); else post('freeze'); }
+      if (e.key === 'Enter' && !e.target.closest?.('button')) { e.preventDefault(); if (pins.list.length) sendToPicked(); }
       if (/^[1-9]$/.test(e.key)) { e.preventDefault(); bar.querySelectorAll('button:not(.bridge-agents-draft)')[e.key - 1]?.click(); }
     });
     let frame = 0;
@@ -1237,8 +1260,8 @@ function __bridgeInit(options) {
       if (frame) return;
       frame = requestAnimationFrame(() => {
         frame = 0;
-        const dragged = notes.dragging;
-        if (dragged) post('hover', { x: dragged.x + (dragged.w || 0) / 2, y: dragged.y + (dragged.h || 0) / 2 });
+        const dragged = pins.dragging;
+        if (dragged) post('hover', { x: (dragged.x + dragged.w / 2) / innerWidth, y: (dragged.y + dragged.h / 2) / innerHeight });
         else if (pressed || document.querySelector('.bridge-composer:popover-open') || e.target.closest?.('.bridge-agents')) post('hover');
         else post('hover', { x: e.clientX / innerWidth, y: e.clientY / innerHeight });
       });
@@ -1285,11 +1308,12 @@ function __bridgeInit(options) {
   globalThis.__bridge = {
     patch,
     anchor: (x, y) => pins.anchor(x, y),
-    pins: (list) => pins.show(list),
+    pins: (list) => pins.set(list),
+    pinning: (on) => pins.mode.turn(on),
     status: setStatus,
     agents: (list) => freeze.agents(list),
     pick: (session) => freeze.pick(session),
-    cursor: (pin) => freeze.cursor(pin),
+    cursor: (pin) => root.style.setProperty('--bridge-cursor', `url("data:image/svg+xml,${encodeURIComponent(pin)}") 14 29, crosshair`),
     reset: () => freeze.reset(),
     pinsAt: (x, y) => freeze.pinsAt(x, y),
     wheel: (x, y, dx, dy) => freeze.wheel(x, y, dx, dy),

@@ -383,29 +383,22 @@ final class Model {
         return file
     }
 
-    func land(_ capture: Freeze, to session: String?) -> (draft: String?, pages: [String], outside: [(n: Int, note: Comment)], told: Bool) {
+    func land(_ capture: Freeze, to session: String?) -> (draft: String?, notes: [Comment], told: Bool) {
         let file = newFile()
-        var outside: [(n: Int, note: Comment)] = []
+        var notes: [Comment] = []
         var widths: [String: CGFloat] = [:]
-        var pinned: [String: [Comment]] = [:]
-        var order: [String] = []
         for (index, var note) in capture.notes.enumerated() {
             let path = file.deletingPathExtension().appendingPathExtension("\(index + 1).png")
             if let (data, width) = capture.picture(of: index), (try? data.write(to: path)) != nil {
                 note.picture = path.path
                 widths[note.id] = width
             }
-            guard let (location, anchor) = capture.placed[note.id] else { outside.append((index + 1, note)); continue }
-            note.anchor = anchor
-            if pinned[location] == nil { order.append(location) }
-            pinned[location, default: []].append(note)
+            notes.append(note)
         }
-        for location in order { page(for: location).pin(pinned[location]!) }
-        if let session, tell(session, pages: order, outside: outside) { return (nil, order, outside, true) }
-        guard !outside.isEmpty else { return (nil, order, outside, false) }
-        let draft = draft(file, notes: outside.map(\.note), widths: widths)
+        if let session, tell(session, notes) { return (nil, notes, true) }
+        let draft = draft(file, notes: notes, widths: widths)
         changed()
-        return (draft, order, outside, false)
+        return (draft, notes, false)
     }
 
     func newFile() -> URL {
@@ -440,18 +433,11 @@ final class Model {
         return file.path
     }
 
-    func tell(_ session: String, pages: [String], outside: [(n: Int, note: Comment)]) -> Bool {
+    func tell(_ session: String, _ notes: [Comment]) -> Bool {
         guard let agent = agents[session] else { return false }
-        let cli = Flavor.name
-        var text = "Bridge: The user pointed at their screen and sent you notes."
-        if !pages.isEmpty {
-            text += " On " + pages.map { "`\($0)`" }.joined(separator: ", ") + " they pinned notes to elements: read them with `\(cli) --pins <page>` (`element` is the selector a pin sits on, `picture` shows it with the note's number), and when you have handled one, `\(cli) --done <page> <id>` takes its pin off the page."
-        }
-        if !outside.isEmpty {
-            text += (pages.isEmpty ? "" : " Elsewhere on their screen:") + outside.map { n, note in
-                "\n\(n). \"\(note.text)\"" + (note.target.isEmpty ? "" : " on \(note.target)") + (note.picture.map { ". Picture, with the number drawn on it: \($0)" } ?? "")
-            }.joined()
-        }
+        let text = "Bridge: The user pointed at their screen and sent you notes." + notes.enumerated().map { index, note in
+            "\n\(index + 1). \"\(note.text)\"" + (note.target.isEmpty ? "" : " on \(note.target)") + (note.picture.map { ". Picture, with the number drawn on it: \($0)" } ?? "")
+        }.joined()
         return ClaudeSessions.post(text, to: agent)
     }
 

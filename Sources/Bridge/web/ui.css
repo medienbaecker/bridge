@@ -1,5 +1,5 @@
-html[data-bridge-freeze]:where(:not(:has(.bridge-composer:popover-open))), html[data-bridge-freeze]:where(:not(:has(.bridge-composer:popover-open))) * { cursor: var(--bridge-cursor, crosshair) !important; }
-html[data-bridge-freeze] :is(.bridge-composer, .bridge-composer *, .bridge-pin, .bridge-pin *, .bridge-agents, .bridge-agents *) { cursor: auto !important; }
+html:is([data-bridge-freeze], [data-bridge-pinning]):where(:not(:has(.bridge-composer:popover-open))), html:is([data-bridge-freeze], [data-bridge-pinning]):where(:not(:has(.bridge-composer:popover-open))) * { cursor: var(--bridge-cursor, crosshair) !important; }
+html:is([data-bridge-freeze], [data-bridge-pinning]) :is(.bridge-composer, .bridge-composer *, .bridge-pin, .bridge-pin *, .bridge-agents, .bridge-agents *) { cursor: auto !important; }
 
 .bridge-pin {
   position: fixed;
@@ -31,30 +31,8 @@ html[data-bridge-freeze] :is(.bridge-composer, .bridge-composer *, .bridge-pin, 
 .bridge-pin[data-lost] { opacity: 0.5; }
 .bridge-pin[data-below] { margin-top: 4.56px; transform: rotate(135deg); }
 .bridge-pin[data-below]::after { transform: rotate(-135deg); }
-html[data-bridge-capturing] :is(.bridge-pin, .bridge-note) { visibility: hidden; }
-.bridge-note {
-  position: fixed;
-  position-area: bottom span-right;
-  position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
-  margin: 24px 0 8px 0;
-  inset: auto;
-  max-width: 320px;
-  box-sizing: border-box;
-  padding: 9px 12px;
-  border: 0;
-  border-radius: 12px;
-  background: Canvas;
-  color: CanvasText;
-  color-scheme: light dark;
-  font: 13px/1.45 -apple-system, system-ui, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  overflow-wrap: anywhere;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), 0 0 0 0.5px color-mix(in srgb, CanvasText 14%, transparent);
-  z-index: 2147483001;
-}
-.bridge-note:popover-open { display: block; }
-@media (prefers-color-scheme: dark) { .bridge-note { background: color-mix(in srgb, Canvas, white 7%); } }
-.bridge-lost { margin-bottom: 4px; font-size: 11px; color: color-mix(in srgb, CanvasText 55%, transparent); }
+html[data-bridge-capturing] :is(.bridge-pin, .bridge-composer, .bridge-box) { visibility: hidden; }
+.bridge-lost { padding: 9px 12px 0; font-size: 11px; color: color-mix(in srgb, CanvasText 55%, transparent); }
 .bridge-pin[data-open] { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.16), 0 0 0 2px Canvas, 0 0 0 4px color-mix(in srgb, AccentColor 45%, transparent); }
 
 .bridge-composer {
@@ -63,19 +41,22 @@ html[data-bridge-capturing] :is(.bridge-pin, .bridge-note) { visibility: hidden;
   position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
   margin: 24px 0 8px 0;
   inset: auto;
-  width: 320px;
+  width: min(320px, 100vw - 16px);
   box-sizing: border-box;
   padding: 0;
   border: 0;
   border-radius: 12px;
-  background: transparent;
+  background: Canvas;
   color: CanvasText;
   color-scheme: light dark;
   font: 13px/1.45 -apple-system, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), 0 0 0 0.5px color-mix(in srgb, CanvasText 14%, transparent);
   z-index: 2147483001;
 }
 .bridge-composer:popover-open { display: block; }
+@media (prefers-color-scheme: dark) { .bridge-composer { background: color-mix(in srgb, Canvas, white 7%); } }
+html[data-bridge-freeze] .bridge-composer { background: transparent; box-shadow: none; }
 .bridge-composer textarea {
   display: block;
   width: 100%;

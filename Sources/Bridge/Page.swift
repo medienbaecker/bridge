@@ -60,6 +60,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
     var zoom: CGFloat = 1 { didSet { webView.pageZoom = zoom } }
     var drives: [String: [String: Any]] = [:]
     var errors: [String] = []
+    var pinning = false
 
     init(location: String, model: Model, preview: Bool = false, freezing: Bool = false) {
         self.location = location
@@ -332,6 +333,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         switch type {
         case "ready":
             ready = true
+            pinning = false
             let classes = body["classes"] as? [String: Any]
             unknownClasses = (classes?["unknown"] as? [String]) ?? []
             collidingClasses = (classes?["both"] as? [String]) ?? []
@@ -423,24 +425,31 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
             }
             replyHandler(nil, nil)
         case "pin":
-            guard freezing, let freeze = Freeze.current else { replyHandler(nil, "not freezing"); return }
             let anchor = JSONValue(any: body["anchor"] ?? NSNull())
+            guard freezing, let freeze = Freeze.current else {
+                addComment(anchor: anchor, target: body["target"] as? String ?? "", text: body["text"] as? String ?? "")
+                replyHandler(["notes": pinsJSON()], nil)
+                return
+            }
             let taking = freeze.taking.removeValue(forKey: body["mark"] as? String ?? "")
             freeze.describing.append(Task {
                 let picture = await taking?.value
                 let (target, found) = await freeze.describe(anchor, picture: picture)
                 let id = addComment(anchor: anchor, target: target, text: body["text"] as? String ?? "")
                 freeze.pictures[id] = picture
-                freeze.placed[id] = await freeze.place(anchor)
-                freeze.landed(id, found: found)
+                freeze.landed(id, anchor: anchor, found: found)
                 replyHandler(["notes": notesJSON()], nil)
             })
         case "note":
             let id = body["id"] as? String ?? ""
             switch body["action"] as? String {
             case "move":
-                guard freezing, let freeze = Freeze.current else { replyHandler(nil, "not freezing"); return }
                 let anchor = JSONValue(any: body["anchor"] ?? NSNull())
+                guard freezing, let freeze = Freeze.current else {
+                    moveComment(id, anchor: anchor, target: body["target"] as? String ?? "")
+                    replyHandler(pinsJSON(), nil)
+                    return
+                }
                 freeze.take(id, anchor: anchor)
                 let taking = freeze.taking.removeValue(forKey: id)
                 freeze.describing.append(Task {
@@ -448,15 +457,18 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
                     let (target, found) = await freeze.describe(anchor, picture: picture)
                     moveComment(id, anchor: anchor, target: target)
                     freeze.pictures[id] = picture
-                    freeze.placed[id] = await freeze.place(anchor)
-                    freeze.landed(id, found: found)
+                    freeze.landed(id, anchor: anchor, found: found)
                     replyHandler(notesJSON(), nil)
                 })
                 return
             case "edit": editComment(id, text: body["text"] as? String ?? "")
             default: deleteComment(id)
             }
-            replyHandler(notesJSON(), nil)
+            replyHandler(freezing ? notesJSON() : pinsJSON(), nil)
+        case "pinning":
+            pinning = false
+            model.onChange()
+            replyHandler(nil, nil)
         case "error":
             if let text = body["text"] as? String, !errors.contains(text), errors.count < 10 { errors.append(text) }
             replyHandler(nil, nil)
@@ -550,6 +562,7 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
 
     func send() {
         guard viewingVersion == nil else { return }
+        if pinning { togglePinning() }
         sidecar.status = "sent"
         sidecar.sentAt = Date()
         sidecar.withdrawn = (sidecar.sentAnswers ?? [:]).keys.filter { sidecar.answers[$0] == nil }.sorted()
@@ -725,30 +738,35 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
 
     // MARK: Notes
 
-    func addComment(anchor: JSONValue, target: String, text: String) -> String {
+    @discardableResult func addComment(anchor: JSONValue, target: String, text: String) -> String {
         let id = String(UUID().uuidString.prefix(8)).lowercased()
         sidecar.comments.append(Comment(id: id, text: text, target: target, anchor: anchor, version: sidecar.version))
-        save()
-        model.onChange()
+        commentsChanged()
         return id
     }
 
     func editComment(_ id: String, text: String) {
         guard let i = sidecar.comments.firstIndex(where: { $0.id == id }) else { return }
         sidecar.comments[i].text = text
-        save(); model.onChange()
+        commentsChanged()
     }
 
     func moveComment(_ id: String, anchor: JSONValue, target: String) {
         guard let i = sidecar.comments.firstIndex(where: { $0.id == id }) else { return }
         sidecar.comments[i].anchor = anchor
         sidecar.comments[i].target = target
-        save(); model.onChange()
+        commentsChanged()
     }
 
     func deleteComment(_ id: String) {
         sidecar.comments.removeAll { $0.id == id }
-        save(); model.onChange()
+        commentsChanged()
+    }
+
+    func commentsChanged() {
+        reopen()
+        save()
+        model.onChange()
     }
 
     func setNote(_ id: String, done: Bool) {
@@ -758,10 +776,12 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
         showPins()
     }
 
-    func pin(_ notes: [Comment]) {
-        sidecar.comments += notes
-        save()
-        showPins()
+    var canPin: Bool { kind != .pdf && !isDraft && !missing && viewingVersion == nil }
+
+    func togglePinning() {
+        pinning.toggle()
+        call("__bridge.cursor(pin); __bridge.pinning(on)", ["pin": Freeze.pin, "on": pinning])
+        model.onChange()
     }
 
     func pinsJSON() -> [Any] {

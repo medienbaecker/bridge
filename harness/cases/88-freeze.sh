@@ -91,10 +91,10 @@ check "started from another app, the pin on a page picks that page's agent" "$(b
 on=$(bridge --state | jq -r '.selected + " " + .projects.scope')
 bridge --do freeze-send 0 >/dev/null; settle 0.5
 for i in $(seq 1 30); do [ "$(inbox "$agent" | grep -c 'sent you notes')" = 1 ] && break; settle 0.1; done
-check "clicking the agent sends it straight away: the pin on the page to the page, the box in the message, and no draft" "$(inbox "$agent" | grep -c 'pinned notes to elements') $(inbox "$agent" | grep -c '^2\. "Consectetur adipiscing elit"') $(jq '[.bridges[] | select(.location | contains("/drafts/"))] | length' "$XDG_STATE_HOME/bridge-dev/list.json")" "1 1 0"
+check "clicking the agent sends it straight away: the pin over the page and the box both in the message, nothing pinned to the page, and no draft" "$(inbox "$agent" | grep -c '^1\. "Lorem ipsum dolor sit amet"') $(inbox "$agent" | grep -c '^2\. "Consectetur adipiscing elit"') $(bridge --pins "$CASE_DIR/pages/cards.html" | jq length) $(jq '[.bridges[] | select(.location | contains("/drafts/"))] | length' "$XDG_STATE_HOME/bridge-dev/list.json")" "1 1 0 0"
 check "and Bridge stays on the page you were on" "$(bridge --state | jq -r '.selected + " " + .projects.scope')" "$on"
 pixels() { sips -g pixelWidth -g pixelHeight "$1" 2>/dev/null | awk '/pixel/ { printf "%s ", $2 }'; }
-first=$(bridge --pins "$CASE_DIR/pages/cards.html" | jq -r '.[0].picture')
+first=$(inbox "$agent" | grep -o '/[^ ]*\.1\.png$')
 room=$(printf '%s' "$state" | jq -c --arg c "$centre" '.freeze.screenFrame as $s | ($c | split(" ") | map(tonumber)) as [$x, $y] | .windowFrame as $w | ([$w.x - $s[0], 0] | max) as $left | ([$s[1] + $s[3] - $w.y - $w.height, 0] | max) as $top | ([$w.x - $s[0] + $w.width, $s[2]] | min) as $right | ([$s[1] + $s[3] - $w.y, $s[3]] | min) as $bottom | ([$right - $left, 1000] | min) as $width | ([$bottom - $top, 600] | min) as $height | [([([$x - $width / 2, $left] | max), $right - $width] | min), ([([$y - $height / 2, $top] | max), $bottom - $height] | min), $width, $height] | map(round)')
 check "what changed on screen after the freeze is not in the picture" "$(python3 "$ROOT/harness/measure.py" "$first" 40 | awk '$3 > 240 && $4 < 30 && $5 < 30' | wc -l | tr -d ' ')" "0"
 check "a pin's picture is the window under it, at most 1000 by 600, not the screen" "$(printf '%s' "$pictured" | jq -c 'map(round)') $(pixels "$first")" "$room $(printf '%s' "$state" | jq -r --argjson r "$room" '"\($r[2] * .backingScale | round) \($r[3] * .backingScale | round) "')"
@@ -106,7 +106,7 @@ check "Bridge's own glass is not in it: where the composer stood is the plain pa
 box=$(inbox "$agent" | grep -o '/[^ ]*\.2\.png$')
 want=$(printf '%s' "$state" | jq -r --arg c "$corner" '(($c | split(" ")[0] | tonumber) - 40 + 80) * .backingScale | round')
 check "a box's picture is the box with 40 points around it" "$(sips -g pixelWidth "$box" 2>/dev/null | awk -v w="$want" '/pixelWidth/ { d = $2 - w; print (d * d <= 4) ? "yes" : $2 }')" "yes"
-check "each note has its picture, numbered as on the glass" "$(bridge --pins "$CASE_DIR/pages/cards.html" | jq -c 'map(.picture | test("\\.1\\.png$"))') $(ls "$first" "$box" | wc -l | tr -d ' ')" "[true] 2"
+check "each note has its picture, numbered as on the glass" "$(ls "$first" "$box" | wc -l | tr -d ' ')" "2"
 
 before=$(listed)
 bar=$(printf '%s' "$state" | jq -r '.freeze.screenFrame as $s | "\(.windowFrame.x - $s[0] + .windowFrame.width - 140) \(($s[1] + $s[3]) - (.windowFrame.y + .windowFrame.height) + 26)"')
