@@ -15,3 +15,19 @@ public enum WindowRules {
             && !menuBarStrip(title: title, frame: frame, displays: displays)
     }
 }
+
+public struct SavedElement: Sendable, Equatable {
+    public let frame: CGRect
+    public let role: String?
+    public let label: String?
+
+    public init(frame: CGRect, role: String?, label: String?) {
+        self.frame = frame
+        self.role = role
+        self.label = label
+    }
+
+    public static func innermost(at point: CGPoint, in elements: [SavedElement]) -> SavedElement? {
+        elements.filter { $0.frame.contains(point) }.min { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height }
+    }
+}

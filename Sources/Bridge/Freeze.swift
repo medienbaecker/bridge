@@ -59,6 +59,7 @@ final class Freeze: NSObject {
     var pointer: CGPoint?
     var looking = false
     var awake: Set<pid_t> = []
+    var saved: [pid_t: [SavedElement]] = [:]
     var describing: [Task<Void, Never>] = []
     var veiled: [NSWindow] = []
     var still: Task<Picture?, Never>?
@@ -136,7 +137,6 @@ final class Freeze: NSObject {
             for window in freeze.veiled { window.alphaValue = 0 }
         }
         freeze.panel.alphaValue = 0
-        freeze.panel.orderFrontRegardless()
         freeze.content = Task { await Result { try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true) } }
         freeze.captures += 1
         freeze.still = Task {
@@ -146,17 +146,30 @@ final class Freeze: NSObject {
             for page in pinned { page.call("document.documentElement.removeAttribute('data-bridge-capturing')") }
             return picture
         }
+        let displays = displays()
+        let floating = windows.filter { $0[kCGWindowLayer as String] as? Int ?? 0 > 0 && pointable($0, displays: displays) }.compactMap { $0[kCGWindowOwnerPID as String] as? Int32 }
+        let owners = Set(floating + [previous?.processIdentifier].compactMap { $0 }).subtracting([getpid()])
+        let saving = Task {
+            await withTaskGroup(of: (pid_t, [SavedElement]).self) { group in
+                for pid in owners { group.addTask { (pid, await elements(of: pid)) } }
+                var saved: [pid_t: [SavedElement]] = [:]
+                for await (pid, elements) in group { saved[pid] = elements }
+                return saved
+            }
+        }
         Task {
             let picture = await freeze.still?.value
+            freeze.saved = await saving.value
             guard current === freeze else { return }
             freeze.backdrop.layer?.contents = picture?.image
             freeze.panel.alphaValue = 1
+            freeze.panel.orderFrontRegardless()
+            if !Env.test { freeze.panel.makeKeyAndOrderFront(nil) }
+            await freeze.setCursor()
         }
-        if !Env.test { freeze.panel.makeKeyAndOrderFront(nil) }
         freeze.panel.makeFirstResponder(page.webView)
         let list = freeze.recipients.map { ["session": $0.session, "name": $0.name.isEmpty ? $0.page : $0.name, "project": $0.project.isEmpty ? "No project" : $0.project, "busy": $0.busy, "picked": $0.session == freeze.picked, "colour": Self.css(Model.colour(of: $0.session))] as [String: Any] }
         _ = try? await page.run("__bridge.agents(list); __bridge.cursor(pin)", ["list": list, "pin": pin], in: Page.world)
-        await freeze.setCursor()
         await freeze.opened(from: previous)
     }
 
@@ -193,12 +206,14 @@ final class Freeze: NSObject {
 
     func window(at point: CGPoint) -> [String: Any]? {
         let displays = Self.displays()
-        return windows.first { info in
-            let layer = info[kCGWindowLayer as String] as? Int ?? 0, frame = Self.frame(of: info)
-            return layer < 1000 && (info[kCGWindowAlpha as String] as? Double ?? 1) > 0 && frame.contains(point)
-                && !WindowRules.menuBarStrip(title: info[kCGWindowName as String] as? String, frame: frame, displays: displays)
-                && !WindowRules.overlay(layer: layer, frame: frame, displays: displays)
-        }
+        return windows.first { Self.frame(of: $0).contains(point) && Self.pointable($0, displays: displays) }
+    }
+
+    static func pointable(_ info: [String: Any], displays: [CGRect]) -> Bool {
+        let layer = info[kCGWindowLayer as String] as? Int ?? 0, frame = frame(of: info)
+        return layer < 1000 && (info[kCGWindowAlpha as String] as? Double ?? 1) > 0
+            && !WindowRules.menuBarStrip(title: info[kCGWindowName as String] as? String, frame: frame, displays: displays)
+            && !WindowRules.overlay(layer: layer, frame: frame, displays: displays)
     }
 
     static func main(_ info: [String: Any], displays: [CGRect]) -> Bool {
@@ -230,12 +245,18 @@ final class Freeze: NSObject {
         var out: [String: JSONValue] = ["app": .string(info[kCGWindowOwnerName as String] as? String ?? "")]
         if let title = info[kCGWindowName as String] as? String, !title.isEmpty { out["window"] = .string(title) }
         let offset = CGPoint(x: spot.x - point.x, y: spot.y - point.y)
-        return await Self.label(out, at: point, offset: offset, in: pid == getpid() ? nil : pid, picture: picture)
+        let remembered = Self.gone(info) ? SavedElement.innermost(at: spot, in: saved[pid] ?? []) : nil
+        return await Self.label(out, at: point, offset: offset, in: pid == getpid() ? nil : pid, remembered: remembered, picture: picture)
     }
 
-    @concurrent nonisolated static func label(_ known: [String: JSONValue], at point: CGPoint, offset: CGPoint, in pid: pid_t?, picture: Picture?) async -> [String: JSONValue] {
+    @concurrent nonisolated static func label(_ known: [String: JSONValue], at point: CGPoint, offset: CGPoint, in pid: pid_t?, remembered: SavedElement?, picture: Picture?) async -> [String: JSONValue] {
         var out = known
-        let frame = pid.flatMap { accessible(at: CGPoint(x: point.x + offset.x, y: point.y + offset.y), in: $0, into: &out) }?.offsetBy(dx: -offset.x, dy: -offset.y)
+        if let remembered {
+            if let role = remembered.role { out["role"] = .string(role) }
+            if let label = remembered.label { out["label"] = .string(label) }
+        }
+        let live = remembered?.frame ?? pid.flatMap { accessible(at: CGPoint(x: point.x + offset.x, y: point.y + offset.y), in: $0, into: &out) }
+        let frame = live?.offsetBy(dx: -offset.x, dy: -offset.y)
         guard out["label"] == nil, let picture else { return out }
         let small = frame.map { $0.width < 800 && $0.height < 240 } ?? false
         let area = small ? frame! : CGRect(x: point.x - 160, y: point.y - 16, width: 320, height: 32)
@@ -250,9 +271,31 @@ final class Freeze: NSObject {
         let page = page(of: hit)
         if let page, let url = attribute(page, "AXURL") as? URL { out["url"] = .string(url.absoluteString) }
         if let page, zoomed(page) { return nil }
-        if let role = attribute(hit, "AXRole") as? String { out["role"] = .string(role.replacingOccurrences(of: "AX", with: "").lowercased()) }
+        if let role = role(of: hit) { out["role"] = .string(role) }
         if let label = name(of: hit) { out["label"] = .string(label) }
         return bounds(of: hit)
+    }
+
+    nonisolated static func role(of element: AXUIElement) -> String? {
+        (attribute(element, "AXRole") as? String)?.replacingOccurrences(of: "AX", with: "").lowercased()
+    }
+
+    @concurrent nonisolated static func elements(of pid: pid_t) async -> [SavedElement] {
+        let deadline = Date().addingTimeInterval(0.15)
+        var queue = (attribute(AXUIElementCreateApplication(pid), "AXWindows") as? [AXUIElement]) ?? []
+        var out: [SavedElement] = []
+        while !queue.isEmpty, Date() < deadline {
+            let element = queue.removeFirst()
+            if let frame = bounds(of: element) { out.append(SavedElement(frame: frame, role: role(of: element), label: text(element))) }
+            queue += (attribute(element, "AXChildren") as? [AXUIElement]) ?? []
+        }
+        return out
+    }
+
+    static func gone(_ window: [String: Any]) -> Bool {
+        guard let number = window[kCGWindowNumber as String] as? Int else { return false }
+        let now = CGWindowListCopyWindowInfo(.optionIncludingWindow, CGWindowID(number)) as? [[String: Any]] ?? []
+        return now.first?[kCGWindowIsOnscreen as String] as? Bool != true
     }
 
     nonisolated static func page(of element: AXUIElement) -> AXUIElement? {
@@ -364,7 +407,9 @@ final class Freeze: NSObject {
         let asleep = awake.insert(pid).inserted
         Task {
             if asleep, pid != getpid() { await Self.wake(pid) }
-            let found = pid == getpid() ? await own(at: spot, in: number) : await Self.bounds(at: spot, in: pid)
+            let found = pid == getpid() ? await own(at: spot, in: number)
+                : Self.gone(info) ? SavedElement.innermost(at: spot, in: saved[pid] ?? [])?.frame
+                : await Self.bounds(at: spot, in: pid)
             let frame = found.flatMap { $0.width * $0.height < whole.width * whole.height * 0.8 ? $0 : nil }
             looking = false
             show(frame.map(local), for: point)

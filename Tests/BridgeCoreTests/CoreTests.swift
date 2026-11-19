@@ -411,6 +411,15 @@ private let kitOfShapes = ".options { } .draft { } .bars { } .bar { }"
     #expect(!WindowRules.overlay(layer: 0, frame: CGRect(x: 0, y: 0, width: 1512, height: 982), displays: displays))
 }
 
+@Test func savedElementsAnswerWithTheSmallestOneUnderThePointer() {
+    let window = SavedElement(frame: CGRect(x: 100, y: 100, width: 700, height: 300), role: "window", label: "Alfred")
+    let bar = SavedElement(frame: CGRect(x: 100, y: 350, width: 700, height: 50), role: "group", label: nil)
+    let field = SavedElement(frame: CGRect(x: 110, y: 360, width: 140, height: 30), role: "popupbutton", label: "Detect language")
+    #expect(SavedElement.innermost(at: CGPoint(x: 120, y: 370), in: [window, bar, field]) == field)
+    #expect(SavedElement.innermost(at: CGPoint(x: 600, y: 370), in: [window, field, bar]) == bar)
+    #expect(SavedElement.innermost(at: CGPoint(x: 900, y: 370), in: [window, bar, field]) == nil)
+}
+
 @Test func lintReadsEveryWayToWriteAClassAndLeavesQuotedScriptAlone() {
     let unknown = { (html: String) in Lint(kitCSS: ".card { }").run(html: html).map(\.text).filter { $0.contains("styles nothing") }.map { String($0.prefix(7)) } }
     #expect(unknown("<div class='lone'>x</div>") == ["`.lone`"])
