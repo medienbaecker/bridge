@@ -29,7 +29,10 @@ the answer records repo, branch and commit.
 A URL defaults to `--links external`: the user can click around the site and a
 link to another host opens in their browser. A file defaults to `browser`. The
 mode holds until the next present, which sets it again. A `target="_blank"`
-link always opens in the browser.
+link always opens in the browser. A link from a page to another local file
+(`<a href="2-next.html">`) opens that file as its own entry in the user's
+list, whatever the mode, so an index page can link the pages it lists; a file
+not presented yet is presented for the session that presented the linking page.
 
 ## `--lint`
 

@@ -881,9 +881,15 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
 
     // A link that opens a new window has no target frame; createWebViewWith hands it to the browser.
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void) {
-        guard action.navigationType == .linkActivated, let url = action.request.url, !url.isFileURL, let frame = action.targetFrame else {
+        guard action.navigationType == .linkActivated, let url = action.request.url, let frame = action.targetFrame else {
             decisionHandler(.allow); return
         }
+        if frame.isMainFrame, url.isFileURL || url.scheme == LocalFiles.scheme, Self.isOtherFile(url.path, than: [location, webView.url?.path]) {
+            decisionHandler(.cancel)
+            openLinked(url.path)
+            return
+        }
+        guard !url.isFileURL else { decisionHandler(.allow); return }
         // A main frame's info reads about:blank during a fragment navigation, so the main frame goes by the web view's URL.
         let current = frame.isMainFrame ? webView.url : frame.request.url
         let samePage = url.fragment != nil && Self.document(url) == Self.document(current)
@@ -895,6 +901,20 @@ final class Page: NSObject, WKScriptMessageHandlerWithReply, WKNavigationDelegat
             return
         }
         decisionHandler(.allow)
+    }
+
+    static func isOtherFile(_ path: String, than shown: [String?]) -> Bool {
+        var isDirectory: ObjCBool = false
+        return !shown.contains(path) && FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) && !isDirectory.boolValue
+    }
+
+    func openLinked(_ target: String) {
+        if model.listing.entry(target) == nil, let presented = sidecar.presented {
+            model.present([target], cwd: presented.cwd, session: presented.session, ground: presented.ground, links: nil, site: nil)
+        }
+        guard let main = (NSApp.delegate as? AppDelegate)?.window else { return }
+        main.showWindow(nil)
+        _ = main.select(target)
     }
 
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {

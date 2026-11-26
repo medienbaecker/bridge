@@ -98,4 +98,29 @@ check "data-links=window: a link to another host navigates inside the frame and 
 frames browser 'data-links="browser"'
 fclick a.same
 check "data-links=browser: a same-host link is handed to the browser, the frame left alone" "$(at_frame) $(opened | jq -r last)" "$url $next"
+index="$CASE_DIR/pages/index.html"; listed="$CASE_DIR/pages/listed.html"; notes="$CASE_DIR/pages/notes.md"
+cat > "$index" <<HTML
+<!doctype html><html><head><title>Index</title></head><body>
+<a id="listed" href="listed.html">Listed</a> <a id="notes" href="notes.md#part">Notes</a> <a id="self" href="index.html#end">Self</a><p id="end">End</p>
+</body></html>
+HTML
+echo '<!doctype html><html><head><title>Listed</title></head><body><p>Listed</p></body></html>' > "$listed"
+printf '# Notes\n\n## Part\n' > "$notes"
+(cd "$CASE_DIR/pages" && bridge listed.html && bridge --links window index.html)
+wait_ready; settle 0.6
+before=$(opened | jq length)
+ijs() { bridge --js "$index" "$1"; }
+iclick() { ijs "document.querySelector('$1').click(); return 1" >/dev/null; settle 0.8; }
+iclick a#listed
+check "a link to a listed local page selects its entry and leaves the index as it was" "$(bridge --state | jq -r .selected) $(ijs "return document.title" | jq -r .) $(opened | jq length)" "$listed Index $before"
+iclick a#notes
+check "a link to a local file not listed yet presents it as its own entry" "$(bridge --state | jq -r .selected) $(bridge --state | jq -c '.bridgesColumn | index("'"$notes"'") != null')" "$notes true"
+check "it is presented for the session that presented the index" "$(bridge --read "$notes" | jq -c '[.status, has("heldBy")]')" '["open",false]'
+(cd "$CASE_DIR/pages" && bridge index.html)
+wait_ready; settle 0.6
+shown=$(bridge --state | jq -r .selected)
+iclick a#self
+check "without --links, a link to the page itself stays in the page" "$(bridge --state | jq -r .selected) $(ijs "return location.hash" | jq -r .)" "$shown #end"
+iclick a#listed
+check "without --links, a local link selects its entry instead of opening the browser" "$(bridge --state | jq -r .selected) $(opened | jq length)" "$listed $before"
 finish

@@ -69,7 +69,7 @@ done
 check_json "a frame's scrollIntoView scrolls the frame and leaves the page where it was" "$(bridge --js "$beside" "scrollTo(0, 0); const f = document.getElementById('f').contentWindow; f.go(); return f.scrollY > 0 && scrollY == 0")" '.' "true"
 check_json "a file the page never named is out of reach" "$(bridge --js "$beside" "return fetch('bridge-file:///etc/hosts').then(() => 'read', () => 'refused')")" '.' "refused"
 bridge --js "$beside" "document.getElementById('out').click(); return 1" >/dev/null; settle 0.5
-check "a link to a file beside it opens that file, outside Bridge" "$(bridge --state | jq -c '.openedExternally')" "[\"file://$CASE_DIR/pages/notes.md\"]"
+check "a link to a file beside it opens that file as its own entry, nothing outside Bridge" "$(bridge --state | jq -c '[.selected, .openedExternally]')" "[\"$CASE_DIR/pages/notes.md\",[]]"
 shotme="$CASE_DIR/pages/shotme.html"
 printf '<!doctype html><title>Shot</title><style>body{margin:0}iframe{display:block;border:0;width:400px;height:150px}</style><iframe id="f"></iframe><script>document.getElementById("f").src = "/red.html"</script>' > "$shotme"
 r=$(bridge --shot "$shotme" "$CASE_DIR/shots/shotme.png" --width 600 --site "http://127.0.0.1:$port/")
