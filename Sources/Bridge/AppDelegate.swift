@@ -279,7 +279,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         out["undo"] = .string(window.window?.undoManager?.canUndo == true ? window.window?.undoManager?.undoMenuItemTitle ?? "" : "")
         out["redo"] = .string(window.window?.undoManager?.canRedo == true ? window.window?.undoManager?.redoMenuItemTitle ?? "" : "")
         out["pageFocused"] = .bool((window.window?.firstResponder as? NSView)?.isDescendant(of: window.content.container) == true)
-        out["listHeaderFits"] = .bool(window.listHeader.fits)
         out["rowMenu"] = .array(window.rowMenuTitles.map { .string($0) })
         out["rowMenuTargets"] = .array(window.rowMenuTargets.map { .string($0) })
         out["sidebarGeometry"] = .object(window.sidebar.geometry())
@@ -294,8 +293,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         out["pageY"] = .number(Double((window.window?.frame.height ?? 0) - pageBox.maxY + window.content.view.safeAreaInsets.top))
         out["crossedShown"] = .bool(model.showCrossed)
         out["listEmpty"] = .string(window.sidebar.emptyText)
-        out["listHeader"] = .string(window.listHeader.stringValue)
-        out["listHeaderX"] = .number(Double(window.listHeader.convert(window.listHeader.bounds, to: nil).minX))
+        out["query"] = .string(model.query)
+        let field = window.searchField
+        out["searchFocused"] = .bool((window.window?.firstResponder as? NSText)?.delegate === field)
+        let frame = field.convert(field.bounds, to: nil)
+        out["searchFrame"] = .object(["x": .number(Double(frame.minX)), "width": .number(Double(frame.width)), "shown": .bool(field.window != nil && !field.isHiddenOrHasHiddenAncestor)])
+        out["projectsDimmed"] = .bool(window.projects.table.alphaValue < 1)
         out["documentTitle"] = .string(window.docTitleView.stringValue)
         out["documentTitleX"] = .number(Double(window.docTitleView.convert(window.docTitleView.bounds, to: nil).minX))
         out["bridgesColumn"] = .array(model.shown().map { .string($0.location) })
@@ -390,6 +393,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
         edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        edit.addItem(.separator())
+        edit.addItem(withTitle: "Find…", action: #selector(MainWindow.menuCommand(_:)), keyEquivalent: "f").representedObject = "find"
         main.addItem(withTitle: "Edit", action: nil, keyEquivalent: "").submenu = edit
 
         let view = NSMenu(title: "View")

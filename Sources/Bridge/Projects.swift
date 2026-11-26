@@ -1,8 +1,8 @@
 import AppKit
 import BridgeCore
 
-/// The left column: the two smart scopes, then the projects with their waiting
-/// counts, and the update row at its foot.
+/// The left column: the smart scopes (Earlier holds the projects with nothing open),
+/// then the projects with open pages, and the update row at its foot.
 final class ProjectsController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
     enum Row: Equatable { case scope(Scope), gap }
 
@@ -63,11 +63,10 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
         reloading = true
         defer { reloading = false }
         let drafts = Paths.drafts.path
-        rows = [.scope(.waiting), .scope(.all), .gap]
+        let quiet = model.quietProjects()
+        rows = [.scope(.waiting), .scope(.all)] + (quiet.isEmpty ? [] : [.scope(.earlier)]) + [.gap]
         if model.listing.projects.contains(drafts) { rows += [.scope(.project(drafts)), .gap] }
-        let mine = model.listing.projects.filter { $0 != drafts }
-        let active = mine.filter { p in model.listing.bridges.contains { $0.project == p && !$0.crossed } }
-        rows += (active + mine.filter { !active.contains($0) }).map { .scope(.project($0)) }
+        rows += model.listing.projects.filter { $0 != drafts && (!quiet.contains($0) || .project($0) == model.scope) }.map { .scope(.project($0)) }
         table.reloadData()
         if let i = rows.firstIndex(of: .scope(model.scope)) { table.selectRowIndexes([i], byExtendingSelection: false) }
     }
@@ -134,10 +133,7 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
     }
 
     func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool {
-        switch rows[row] {
-        case .scope: return true
-        default: return false
-        }
+        rows[row] != .gap
     }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
@@ -176,10 +172,10 @@ final class ProjectsController: NSViewController, NSTableViewDataSource, NSTable
 
     func dump() -> [String: JSONValue] {
         return ["scope": .string(model.scope.key), "vibrant": .bool(vibrant), "rows": .array(rows.compactMap { row in
-            guard case .scope(let s) = row else { return nil }
             let i = rows.firstIndex(of: row)!
             let f = table.convert(table.rect(ofRow: i), to: nil)
             let top = table.window.map { $0.frame.height - f.maxY } ?? 0
+            guard case .scope(let s) = row else { return nil }
             return .object(["key": .string(s.key), "toolTip": .string((table.view(atColumn: 0, row: i, makeIfNecessary: false) as? ScopeCell)?.toolTip ?? ""), "name": .string(ScopeCell.name(of: s, model: model)), "count": .number(Double(ScopeCell.count(of: s, model: model))), "countShown": .bool((table.view(atColumn: 0, row: i, makeIfNecessary: false) as? ScopeCell)?.count.stringValue.isEmpty == false),
                             "top": .number(Double(top)), "height": .number(Double(f.height))])
         })]
@@ -233,6 +229,7 @@ final class ScopeCell: NSTableCellView {
         switch scope {
         case .waiting: return "Waiting"
         case .all: return "All"
+        case .earlier: return "Earlier"
         case .project(let p): return model.name(ofProject: p)
         }
     }
@@ -241,6 +238,7 @@ final class ScopeCell: NSTableCellView {
         switch scope {
         case .waiting: return model.waitingCount()
         case .all: return model.listing.bridges.filter { !$0.crossed }.count
+        case .earlier: return 0
         case .project(let p): return model.waitingCount(in: p)
         }
     }
@@ -253,6 +251,7 @@ final class ScopeCell: NSTableCellView {
         switch scope {
         case .waiting: symbol = "tray.full"
         case .all: symbol = "tray.2"
+        case .earlier: symbol = "clock"
         case .project(let p): symbol = p == Paths.drafts.path ? "doc" : "folder"
         }
         icon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: Self.name(of: scope, model: model))?.withSymbolConfiguration(.init(pointSize: 13, weight: .regular))

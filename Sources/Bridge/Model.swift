@@ -4,14 +4,15 @@ import BridgeCore
 
 /// What the middle column shows: the bridges waiting on the user, all of them, or one project's.
 enum Scope: Equatable {
-    case waiting, all, project(String)
+    case waiting, all, earlier, project(String)
 
     var key: String {
-        switch self { case .waiting: return "waiting"; case .all: return "all"; case .project(let p): return "project:" + p }
+        switch self { case .waiting: return "waiting"; case .all: return "all"; case .earlier: return "earlier"; case .project(let p): return "project:" + p }
     }
 
     init(key: String) {
         if key == "all" { self = .all }
+        else if key == "earlier" { self = .earlier }
         else if key.hasPrefix("project:") { self = .project(String(key.dropFirst(8))) }
         else { self = .waiting }
     }
@@ -63,11 +64,19 @@ final class Model {
         switch scope {
         case .waiting: return all.filter(waits)
         case .all: return all.filter { !$0.crossed } + (showCrossed ? all.filter { $0.crossed } : [])
+        case .earlier: return all.filter { quietProjects().contains($0.project) }
         case .project(let p): return all.filter { $0.project == p && !$0.crossed } + (showCrossed ? all.filter { $0.project == p && $0.crossed } : [])
         }
     }
 
+    func quietProjects() -> [String] {
+        listing.projects.filter { p in p != Paths.drafts.path && !listing.bridges.contains { $0.project == p && !$0.crossed } }
+    }
+
+    var query = ""
+
     func shown() -> [BridgeEntry] {
+        if !query.isEmpty { return matches(query) }
         guard scope == .waiting else { return bridges(in: scope) }
         let live = bridges(in: .waiting).map(\.location)
         var kept = held ?? live
@@ -113,6 +122,15 @@ final class Model {
         }
         if !ended.isEmpty { cross(ended.map(\.location), true) }
         return ended.count
+    }
+
+    func matches(_ query: String) -> [BridgeEntry] {
+        let words = query.split(whereSeparator: \.isWhitespace)
+        let found = listing.bridges.sorted { $0.presentedAt > $1.presentedAt }.filter { entry in
+            let haystack = entry.title + " " + name(ofProject: entry.project)
+            return words.allSatisfy { haystack.range(of: $0, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
+        }
+        return found.filter { !$0.crossed } + found.filter(\.crossed)
     }
 
     func settleSelection() {

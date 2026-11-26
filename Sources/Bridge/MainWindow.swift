@@ -30,6 +30,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
     static let newBridge = NSToolbarItem.Identifier("new")
     static let point = NSToolbarItem.Identifier("point")
     static let send = NSToolbarItem.Identifier("send")
+    static let search = NSToolbarItem.Identifier("search")
 
     init(model: Model) {
         self.model = model
@@ -96,9 +97,12 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         toolbar.allowsUserCustomization = false
         window.toolbar = toolbar
 
+        content.view.postsFrameChangedNotifications = true
+        NotificationCenter.default.addObserver(self, selector: #selector(fitSearchAfterLayout), name: NSView.frameDidChangeNotification, object: content.view)
         projects.onRelaunch = { (NSApp.delegate as? AppDelegate)?.relaunch() }
         projects.onSelect = { [weak self] scope in
             guard let self, model.scope != scope else { return }
+            if !model.query.isEmpty { searchField.stringValue = ""; model.query = "" }
             model.scope = scope
             model.settleSelection()
             refresh()
@@ -139,9 +143,9 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
     var split: NSSplitViewController!
     let projects: ProjectsController
     static let bridgesSeparator = NSToolbarItem.Identifier("bridgesTrackingSeparator")
-    static let listName = NSToolbarItem.Identifier("listName")
     static let docTitle = NSToolbarItem.Identifier("documentTitle")
-    let listHeader = TitleLabel()
+    let searchField = NSSearchField()
+    lazy var searchWidth = searchField.widthAnchor.constraint(equalToConstant: 160)
     let docTitleView = TitleLabel()
 
     var toolbarItems: [NSToolbarItem] {
@@ -328,6 +332,8 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
     func refresh() {
         refreshes += 1
         projects.reload()
+        projects.table.alphaValue = model.query.isEmpty ? 1 : 0.4
+        fitSearch()
         sidebar.reload()
         for (location, pageWindow) in windows where model.listing.entry(location) == nil { pageWindow.close() }
         let page = model.selectedPage
@@ -338,7 +344,6 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         content.showBanner(away == nil ? page?.bannerText : nil)
         window?.toolbar?.validateVisibleItems()
         window?.title = page?.title ?? "Bridge"
-        listHeader.show(ScopeCell.name(of: model.scope, model: model))
         docTitleView.show(page?.title ?? "")
     }
 
@@ -348,7 +353,7 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
         // AppKit puts the window title after the sidebar separator, over the list, and
         // handing that identifier to the second divider hangs the toolbar. So the
         // window's title is hidden and the toolbar carries its own two titles.
-        [.toggleSidebar, .sidebarTrackingSeparator, Self.listName, .flexibleSpace, Self.newBridge, Self.bridgesSeparator, Self.docTitle, .flexibleSpace, Self.point, .space, Self.send]
+        [.toggleSidebar, .sidebarTrackingSeparator, Self.search, Self.newBridge, Self.bridgesSeparator, Self.docTitle, .flexibleSpace, Self.point, .space, Self.send]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -356,14 +361,19 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
     }
 
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier id: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
-        if id == Self.bridgesSeparator { return NSTrackingSeparatorToolbarItem(identifier: id, splitView: split.splitView, dividerIndex: 1) }
-        if id == Self.listName {
+        if id == Self.search {
             let item = NSToolbarItem(itemIdentifier: id)
-            listHeader.edge = { [weak self] in self?.sidebar.titleEdge ?? 0 }
-            item.view = listHeader
-            item.label = "List"
+            searchField.placeholderString = "Page or project"
+            searchField.target = self
+            searchField.action = #selector(searched(_:))
+            searchField.toolTip = "Search page titles (⌘F)"
+            searchWidth.isActive = true
+            item.view = searchField
+            item.label = "Search"
+            item.isBordered = true
             return item
         }
+        if id == Self.bridgesSeparator { return NSTrackingSeparatorToolbarItem(identifier: id, splitView: split.splitView, dividerIndex: 1) }
         if id == Self.docTitle {
             let item = NSToolbarItem(itemIdentifier: id)
             docTitleView.edge = { [weak self] in (self?.content.view.convert(NSPoint.zero, to: nil).x ?? 0) + 21 }
@@ -446,6 +456,32 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
 
     static func canSend(_ page: Page) -> Bool {
         page.isDraft ? !page.sidecar.blank : page.viewingVersion == nil
+    }
+
+    @objc func fitSearchAfterLayout() {
+        DispatchQueue.main.async { [weak self] in self?.fitSearch() }
+    }
+
+    func fitSearch() {
+        guard searchField.window != nil else { return }
+        let start = searchField.convert(NSPoint.zero, to: nil).x
+        let page = content.view.convert(NSPoint.zero, to: nil).x
+        let width = max((page - start - Self.composeRoom).rounded(.down), 80)
+        if searchWidth.constant != width { searchWidth.constant = width }
+    }
+
+    static let composeRoom: CGFloat = 52
+
+    @objc func searched(_ sender: NSSearchField) {
+        search(sender.stringValue)
+    }
+
+    func search(_ query: String) {
+        let query = query.trimmingCharacters(in: .whitespaces)
+        guard query != model.query else { return }
+        model.query = query
+        model.settleSelection()
+        refresh()
     }
 
     @objc func toolbarAction(_ sender: NSToolbarItem) {
@@ -563,6 +599,8 @@ final class MainWindow: NSWindowController, NSToolbarDelegate, NSWindowDelegate,
             sidebar.onDragOut([parts[0]], NSPoint(x: x, y: y)); return true
         case "closewindow": guard let w = argument.flatMap({ windows[$0] }) else { return false }; w.close(); return true
         case "project": model.scope = Scope(key: argument ?? "waiting"); model.settleSelection(); refresh(); return true
+        case "find": window?.makeKeyAndOrderFront(nil); window?.makeFirstResponder(searchField); return true
+        case "search": searchField.stringValue = argument ?? ""; search(argument ?? ""); return true
         case "crossed": model.showCrossed = argument == nil ? !model.showCrossed : argument == "show"; model.settleSelection(); refresh(); return true
         default: break
         }
@@ -810,8 +848,6 @@ class TitleLabel: NSTextField {
         super.setFrameSize(newSize)
         fit()
     }
-
-    var fits: Bool { alphaValue > 0 }
 
     private func fit() {
         let font = font ?? .titleBarFont(ofSize: NSFont.systemFontSize)

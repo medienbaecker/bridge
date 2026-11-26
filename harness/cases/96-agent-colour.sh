@@ -14,5 +14,5 @@ mkdir -p "$CASE_DIR/done" && git -C "$CASE_DIR/done" init -q
 printf '<!doctype html><title>Done</title><p>x</p>' > "$CASE_DIR/done/d.html"
 (cd "$CASE_DIR/done" && bridge d.html); wait_ready; settle 0.3
 bridge --cross "$CASE_DIR/done/d.html"; settle 0.3
-check_json "a project with nothing open is listed with the others, no more-projects row" "$(bridge --state)" '[.projects.rows[].key] | [(map(select(endswith("/done"))) | length), (map(select(. == "more")) | length)] | map(tostring) | join(",")' "1,0"
+check_json "a project with nothing open leaves the column for Earlier" "$(bridge --state)" '[.projects.rows[].key] | [(map(select(endswith("/done"))) | length), (map(select(. == "earlier")) | length)] | map(tostring) | join(",")' "0,1"
 finish

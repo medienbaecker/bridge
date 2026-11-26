@@ -111,7 +111,7 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
             if case .project(let project) = model.scope { return entry.project == project }
             return model.scope == .all
         }.count
-        empty.stringValue = model.scope == .waiting ? "Nothing waiting" : hidden > 0 ? "No bridges\n\(hidden) crossed hidden" : "No bridges"
+        empty.stringValue = !model.query.isEmpty ? "No pages match" : model.scope == .waiting ? "Nothing waiting" : hidden > 0 ? "No bridges\n\(hidden) crossed hidden" : "No bridges"
         empty.isHidden = !roots.isEmpty
         outline.reloadData()
         var rows = IndexSet()
@@ -302,7 +302,7 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
     /// the same word on every row.
     func subtitle(for entry: BridgeEntry) -> String? {
         if Paths.inDrafts(entry.location), !entry.session.isEmpty, !entry.crossed { return "Sent to \(model.name(ofProject: entry.project))" }
-        guard model.scope == .waiting || model.scope == .all else { return nil }
+        guard model.scope == .waiting || model.scope == .all || model.scope == .earlier else { return nil }
         var parts = [model.name(ofProject: entry.project)].filter { !$0.isEmpty }
         if let why = model.unheard(entry) { parts.append(why) }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
@@ -318,11 +318,6 @@ final class SidebarController: NSViewController, NSOutlineViewDataSource, NSOutl
     func outlineView(_ outlineView: NSOutlineView, rowViewForItem item: Any) -> NSTableRowView? {
         if case .bridge = (item as? Node)?.kind { return BridgeRowView() }
         return nil
-    }
-
-    var titleEdge: CGFloat {
-        guard let scroll = outline.enclosingScrollView else { return 0 }
-        return scroll.convert(scroll.bounds, to: nil).minX + scroll.contentInsets.left + 21
     }
 
     func geometry() -> [String: JSONValue] {

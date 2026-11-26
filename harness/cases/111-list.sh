@@ -57,14 +57,9 @@ bridge --quit >/dev/null 2>&1; sleep 0.5; "$exe" >/dev/null 2>&1 & sleep 0.3; wa
 check_json "restored at launch, the selected row is in view" "$(bridge --state)" '[.selected == "'"$last"'", .sidebarGeometry.selectionVisible] | map(tostring) | join(",")' "true,true"
 
 bridge --do project "project:$CASE_DIR/kunde-a/website" >/dev/null; settle 0.3
-check_json "the list's title shows while there is room" "$(bridge --state)" '[.listHeader, .listHeaderFits] | map(tostring) | join(",")' "kunde-a/website,true"
 bridge --do sidebar >/dev/null; settle 0.5
 bridge --do resize "880 500" >/dev/null; settle 0.5
-check_json "with the sidebar collapsed it still has room to truncate" "$(bridge --state)" '.listHeaderFits' "true"
 shot narrow >/dev/null
 bridge --do listwidth 220 >/dev/null; settle 0.5
-check_json "at the list's narrowest it hides instead of collapsing to an ellipsis" "$(bridge --state)" '[.columnWidths[1], .listHeaderFits] | map(tostring) | join(",")' "220,false"
 shot narrowest >/dev/null
-bridge --do listwidth 400 >/dev/null; settle 0.5
-check_json "and returns with the room" "$(bridge --state)" '.listHeaderFits' "true"
 finish
